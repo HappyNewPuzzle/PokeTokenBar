@@ -8,15 +8,47 @@ public static class CodexCumulativeEpochAssigner
     {
         ArgumentNullException.ThrowIfNull(rollout);
 
-        var assignedEvents = new List<CodexEpochTokenEvent>(rollout.TokenEvents.Count);
+        return Assign(
+            rollout.FilePath,
+            rollout.RolloutMetadata,
+            rollout.TokenEvents,
+            static (_, tokenEvent) => tokenEvent.SessionId);
+    }
+
+    public static CodexEpochRollout ReassignOwnedEvents(CodexEpochRollout rollout)
+    {
+        ArgumentNullException.ThrowIfNull(rollout);
+
+        return Assign(
+            rollout.FilePath,
+            rollout.RolloutMetadata,
+            rollout.TokenEvents.Select(static tokenEvent => tokenEvent.TokenEvent),
+            (sourceRollout, tokenEvent) =>
+                CodexCanonicalUsageKeyFactory.ResolveOwnerSessionId(
+                    sourceRollout,
+                    tokenEvent));
+    }
+
+    private static CodexEpochRollout Assign(
+        string filePath,
+        CodexSessionMetaParseResult? rolloutMetadata,
+        IEnumerable<CodexRolloutTokenEvent> tokenEvents,
+        Func<CodexEpochRollout, CodexRolloutTokenEvent, string?> ownerSelector)
+    {
+        var sourceRollout = new CodexEpochRollout(
+            filePath,
+            rolloutMetadata,
+            Array.Empty<CodexEpochTokenEvent>());
+
+        var assignedEvents = new List<CodexEpochTokenEvent>();
         string? currentSessionId = null;
         CodexUsageVector? previousCumulative = null;
         var hasCurrentSession = false;
         var epoch = 0;
 
-        foreach (var tokenEvent in rollout.TokenEvents)
+        foreach (var tokenEvent in tokenEvents)
         {
-            var sessionId = tokenEvent.SessionId;
+            var sessionId = ownerSelector(sourceRollout, tokenEvent);
             if (sessionId is null)
             {
                 currentSessionId = null;
@@ -55,8 +87,8 @@ public static class CodexCumulativeEpochAssigner
         }
 
         return new CodexEpochRollout(
-            rollout.FilePath,
-            rollout.RolloutMetadata,
+            filePath,
+            rolloutMetadata,
             assignedEvents);
     }
 }

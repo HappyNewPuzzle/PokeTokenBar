@@ -29,7 +29,7 @@ public static class CodexCanonicalUsageKeyFactory
         return true;
     }
 
-    private static string? ResolveOwnerSessionId(
+    internal static string? ResolveOwnerSessionId(
         CodexEpochRollout rollout,
         CodexRolloutTokenEvent tokenEvent)
     {
