@@ -44,26 +44,199 @@ public sealed class CodexInMemoryForkResolverTests
     public void Resolve_DifferentSessionIdRollout_IsNotAParentCandidate()
     {
         var wrongParent = Rollout("wrong.jsonl", "other", null, Event(StateA));
-        var child = Rollout("child.jsonl", "child", "parent", Event(StateA));
+        var owned = Event(StateB, second: 3);
+        var child = Rollout("child.jsonl", "child", "parent", Event(StateA), owned);
 
         var childResult = ByPath(
             CodexInMemoryForkResolver.Resolve([wrongParent, child]),
             child.FilePath);
 
         Assert.Null(childResult.SelectedParent);
-        Assert.Same(child, childResult.ResolvedRollout);
+        Assert.Equal(1, childResult.ReplayCount);
+        Assert.Same(owned, Assert.Single(childResult.ResolvedRollout.TokenEvents));
     }
 
     [Fact]
-    public void Resolve_MissingParent_PreservesForkWithoutFallback()
+    public void Resolve_MissingParent_UsesTimestampFallbackForManualFork()
     {
-        var child = Rollout("child.jsonl", "child", "missing", Event(StateA), Event(StateB));
+        var owned = Event(StateB, second: 3);
+        var child = Rollout("child.jsonl", "child", "missing", Event(StateA), owned);
 
         var result = Assert.Single(CodexInMemoryForkResolver.Resolve([child]));
 
         Assert.Null(result.SelectedParent);
+        Assert.Equal(1, result.ReplayCount);
+        Assert.Same(owned, Assert.Single(result.ResolvedRollout.TokenEvents));
+    }
+
+    [Fact]
+    public void Resolve_MissingParentSubagent_PreservesRawUsageWithoutFallback()
+    {
+        var child = Rollout(
+            "subagent.jsonl",
+            "subagent",
+            "missing",
+            isSubagent: true,
+            Event(StateA),
+            Event(StateB));
+
+        var result = Assert.Single(CodexInMemoryForkResolver.Resolve([child]));
+
         Assert.Equal(0, result.ReplayCount);
+        Assert.Null(result.SelectedParent);
         Assert.Same(child, result.ResolvedRollout);
+        Assert.Equal(2, result.ResolvedRollout.TokenEvents.Count);
+    }
+
+    [Fact]
+    public void Resolve_ParentCandidateWithZeroPrefix_UsesFallbackForManualFork()
+    {
+        var parent = Rollout("parent.jsonl", "parent", null, Event(StateD));
+        var owned = Event(StateB, second: 3);
+        var child = Rollout("child.jsonl", "child", "parent", Event(StateA), owned);
+
+        var result = ByPath(
+            CodexInMemoryForkResolver.Resolve([parent, child]),
+            child.FilePath);
+
+        Assert.Equal(1, result.ReplayCount);
+        Assert.Null(result.SelectedParent);
+        Assert.Same(owned, Assert.Single(result.ResolvedRollout.TokenEvents));
+    }
+
+    [Fact]
+    public void Resolve_ParentCandidateWithZeroPrefix_SubagentPreservesRawUsage()
+    {
+        var parent = Rollout("parent.jsonl", "parent", null, Event(StateD));
+        var child = Rollout(
+            "subagent.jsonl",
+            "subagent",
+            "parent",
+            isSubagent: true,
+            Event(StateA),
+            Event(StateB));
+
+        var result = ByPath(
+            CodexInMemoryForkResolver.Resolve([parent, child]),
+            child.FilePath);
+
+        Assert.Equal(0, result.ReplayCount);
+        Assert.Null(result.SelectedParent);
+        Assert.Same(child, result.ResolvedRollout);
+    }
+
+    [Fact]
+    public void Resolve_PositiveStructuralMatch_TakesPriorityOverLongerTimestampBurst()
+    {
+        var parent = Rollout("parent.jsonl", "parent", null, Event(StateA));
+        var second = Event(StateB);
+        var third = Event(StateC);
+        var child = Rollout(
+            "child.jsonl",
+            "child",
+            "parent",
+            Event(StateA),
+            second,
+            third);
+
+        var result = ByPath(
+            CodexInMemoryForkResolver.Resolve([parent, child]),
+            child.FilePath);
+
+        Assert.Equal(1, result.ReplayCount);
+        Assert.Same(parent, result.SelectedParent);
+        Assert.Equal([second, third], result.ResolvedRollout.TokenEvents);
+    }
+
+    [Fact]
+    public void Resolve_MissingParentSingleEventManualFork_FallbackRemovesEvent()
+    {
+        var child = Rollout("child.jsonl", "child", "missing", Event(StateA));
+
+        var result = Assert.Single(CodexInMemoryForkResolver.Resolve([child]));
+
+        Assert.Equal(1, result.ReplayCount);
+        Assert.Null(result.SelectedParent);
+        Assert.Empty(result.ResolvedRollout.TokenEvents);
+    }
+
+    [Fact]
+    public void Resolve_FallbackResult_PreservesOriginalAndUsesOwnedSuffixAsHistory()
+    {
+        var owned = Event(StateB, second: 3);
+        var child = Rollout("child.jsonl", "child", "missing", Event(StateA), owned);
+
+        var result = Assert.Single(CodexInMemoryForkResolver.Resolve([child]));
+
+        Assert.Same(child, result.OriginalRollout);
+        Assert.NotSame(child, result.ResolvedRollout);
+        Assert.Equal(1, result.ReplayCount);
+        Assert.Null(result.SelectedParent);
+        Assert.Equal([owned], result.ResolvedRollout.TokenEvents);
+        Assert.Equal([owned], result.ResolvedHistory);
+        Assert.Same(owned, result.ResolvedHistory[0]);
+    }
+
+    [Fact]
+    public void Resolve_ForkOfFallbackParent_UsesOnlyFallbackOwnedHistory()
+    {
+        var unmatchedAncestor = Rollout("a.jsonl", "a", null, Event(StateD));
+        var bOwned = Event(StateB, second: 3);
+        var fallbackParent = Rollout(
+            "b.jsonl",
+            "b",
+            "a",
+            Event(StateA),
+            bOwned);
+        var cOwned = Event(StateC, second: 4);
+        var child = Rollout(
+            "c.jsonl",
+            "c",
+            "b",
+            Event(StateB),
+            cOwned);
+
+        var results = CodexInMemoryForkResolver.Resolve(
+            [child, fallbackParent, unmatchedAncestor]);
+        var parentResult = ByPath(results, fallbackParent.FilePath);
+        var childResult = ByPath(results, child.FilePath);
+
+        Assert.Equal(1, parentResult.ReplayCount);
+        Assert.Null(parentResult.SelectedParent);
+        Assert.Equal([bOwned], parentResult.ResolvedHistory);
+        Assert.Equal(1, childResult.ReplayCount);
+        Assert.Same(fallbackParent, childResult.SelectedParent);
+        Assert.Same(cOwned, Assert.Single(childResult.ResolvedRollout.TokenEvents));
+    }
+
+    [Fact]
+    public void Resolve_FallbackSibling_DoesNotAffectStructuralSibling()
+    {
+        var parent = Rollout("a.jsonl", "a", null, Event(StateD));
+        var fallbackOwned = Event(StateB, second: 3);
+        var fallbackSibling = Rollout(
+            "b.jsonl",
+            "b",
+            "a",
+            Event(StateA),
+            fallbackOwned);
+        var structuralOwned = Event(StateC, second: 3);
+        var structuralSibling = Rollout(
+            "c.jsonl",
+            "c",
+            "a",
+            Event(StateD),
+            structuralOwned);
+
+        var results = CodexInMemoryForkResolver.Resolve(
+            [structuralSibling, fallbackSibling, parent]);
+        var fallbackResult = ByPath(results, fallbackSibling.FilePath);
+        var structuralResult = ByPath(results, structuralSibling.FilePath);
+
+        Assert.Null(fallbackResult.SelectedParent);
+        Assert.Same(fallbackOwned, Assert.Single(fallbackResult.ResolvedRollout.TokenEvents));
+        Assert.Same(parent, structuralResult.SelectedParent);
+        Assert.Same(structuralOwned, Assert.Single(structuralResult.ResolvedRollout.TokenEvents));
     }
 
     [Fact]
@@ -276,7 +449,7 @@ public sealed class CodexInMemoryForkResolverTests
     }
 
     [Fact]
-    public void Resolve_Cycle_DoesNotRecurseForeverAndPreservesRawRollouts()
+    public void Resolve_Cycle_DoesNotRecurseForeverAndUsesFallback()
     {
         var rolloutA = Rollout("a.jsonl", "a", "b", Event(StateA));
         var rolloutB = Rollout("b.jsonl", "b", "a", Event(StateB));
@@ -285,22 +458,23 @@ public sealed class CodexInMemoryForkResolverTests
 
         Assert.All(results, result =>
         {
-            Assert.Equal(0, result.ReplayCount);
+            Assert.Equal(1, result.ReplayCount);
             Assert.Null(result.SelectedParent);
-            Assert.Same(result.OriginalRollout, result.ResolvedRollout);
+            Assert.Empty(result.ResolvedRollout.TokenEvents);
+            Assert.Empty(result.ResolvedHistory);
         });
     }
 
     [Fact]
-    public void Resolve_SelfReference_ExcludesSameFileAndPreservesRollout()
+    public void Resolve_SelfReference_ExcludesSameFileAndUsesFallback()
     {
         var rollout = Rollout("self.jsonl", "self", "self", Event(StateA));
 
         var result = Assert.Single(CodexInMemoryForkResolver.Resolve([rollout]));
 
-        Assert.Equal(0, result.ReplayCount);
+        Assert.Equal(1, result.ReplayCount);
         Assert.Null(result.SelectedParent);
-        Assert.Same(rollout, result.ResolvedRollout);
+        Assert.Empty(result.ResolvedRollout.TokenEvents);
     }
 
     [Fact]
@@ -317,14 +491,15 @@ public sealed class CodexInMemoryForkResolverTests
             "child",
             "parent",
             Event(StateA),
-            Event(StateB));
+            Event(StateB, second: 3));
 
         var result = ByPath(
             CodexInMemoryForkResolver.Resolve([parent, child]),
             child.FilePath);
 
-        Assert.Equal(0, result.ReplayCount);
+        Assert.Equal(1, result.ReplayCount);
         Assert.Null(result.SelectedParent);
+        Assert.Single(result.ResolvedRollout.TokenEvents);
     }
 
     [Fact]
@@ -336,14 +511,15 @@ public sealed class CodexInMemoryForkResolverTests
             "child",
             "parent",
             Event(StateA),
-            EventWithoutCumulative(second: 2));
+            EventWithoutCumulative(second: 3));
 
         var result = ByPath(
             CodexInMemoryForkResolver.Resolve([parent, child]),
             child.FilePath);
 
-        Assert.Equal(0, result.ReplayCount);
-        Assert.Same(child, result.ResolvedRollout);
+        Assert.Equal(1, result.ReplayCount);
+        Assert.Null(result.SelectedParent);
+        Assert.Single(result.ResolvedRollout.TokenEvents);
     }
 
     [Fact]

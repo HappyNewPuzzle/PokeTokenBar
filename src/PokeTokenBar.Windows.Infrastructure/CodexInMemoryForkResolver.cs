@@ -21,24 +21,23 @@ public static class CodexInMemoryForkResolver
                 StringComparer.Ordinal);
         var memo = new Dictionary<string, CodexInMemoryResolvedRollout>(StringComparer.Ordinal);
 
-        ResolutionOutcome ResolveOne(
+        CodexInMemoryResolvedRollout ResolveOne(
             CodexEpochRollout rollout,
             HashSet<string> visiting)
         {
             if (memo.TryGetValue(rollout.FilePath, out var cached))
             {
-                return new ResolutionOutcome(cached, IsCycleBlocked: false);
+                return cached;
             }
 
             if (!visiting.Add(rollout.FilePath))
             {
-                return new ResolutionOutcome(Unresolved(rollout), IsCycleBlocked: true);
+                return FallbackOrUnresolved(rollout);
             }
 
             try
             {
                 CandidateMatch? bestMatch = null;
-                var cycleBlockedCandidate = false;
                 var parentSessionId = rollout.RolloutMetadata?.ParentSessionId;
 
                 if (parentSessionId is not null
@@ -54,16 +53,10 @@ public static class CodexInMemoryForkResolver
                             continue;
                         }
 
-                        var parentOutcome = ResolveOne(candidate, visiting);
-                        if (parentOutcome.IsCycleBlocked)
+                        var parentResult = ResolveOne(candidate, visiting);
+                        var parentHistoryView = parentResult.ResolvedRollout with
                         {
-                            cycleBlockedCandidate = true;
-                            continue;
-                        }
-
-                        var parentHistoryView = parentOutcome.Result.ResolvedRollout with
-                        {
-                            TokenEvents = parentOutcome.Result.ResolvedHistory,
+                            TokenEvents = parentResult.ResolvedHistory,
                         };
                         var trimResult = CodexForkReplayTrimmer.Trim(
                             parentHistoryView,
@@ -79,7 +72,7 @@ public static class CodexInMemoryForkResolver
                         {
                             bestMatch = new CandidateMatch(
                                 candidate,
-                                parentOutcome.Result,
+                                parentResult,
                                 trimResult);
                         }
                     }
@@ -103,16 +96,11 @@ public static class CodexInMemoryForkResolver
                 }
                 else
                 {
-                    result = Unresolved(rollout);
+                    result = FallbackOrUnresolved(rollout);
                 }
 
-                var isCycleBlocked = bestMatch is null && cycleBlockedCandidate;
-                if (!isCycleBlocked)
-                {
-                    memo[rollout.FilePath] = result;
-                }
-
-                return new ResolutionOutcome(result, isCycleBlocked);
+                memo[rollout.FilePath] = result;
+                return result;
             }
             finally
             {
@@ -125,7 +113,7 @@ public static class CodexInMemoryForkResolver
         {
             results.Add(ResolveOne(
                 rollout,
-                new HashSet<string>(StringComparer.Ordinal)).Result);
+                new HashSet<string>(StringComparer.Ordinal)));
         }
 
         return results;
@@ -139,12 +127,26 @@ public static class CodexInMemoryForkResolver
             SelectedParent: null,
             ReplayCount: 0);
 
+    private static CodexInMemoryResolvedRollout FallbackOrUnresolved(
+        CodexEpochRollout rollout)
+    {
+        if (rollout.RolloutMetadata?.ParentSessionId is null)
+        {
+            return Unresolved(rollout);
+        }
+
+        var fallback = CodexForkReplayFallbackHeuristic.Trim(rollout);
+        return new CodexInMemoryResolvedRollout(
+            rollout,
+            fallback.TrimmedChild,
+            fallback.TrimmedChild.TokenEvents,
+            SelectedParent: null,
+            fallback.ReplayCount);
+    }
+
     private sealed record CandidateMatch(
         CodexEpochRollout ParentRollout,
         CodexInMemoryResolvedRollout ParentResult,
         CodexForkReplayTrimResult TrimResult);
 
-    private sealed record ResolutionOutcome(
-        CodexInMemoryResolvedRollout Result,
-        bool IsCycleBlocked);
 }
