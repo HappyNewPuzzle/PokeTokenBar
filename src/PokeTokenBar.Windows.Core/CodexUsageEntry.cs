@@ -7,5 +7,5 @@ public readonly record struct CodexUsageEntry(
     long CacheWriteTokens)
 {
     public long TotalTokens =>
-        InputTokens + OutputTokens + CacheReadTokens + CacheWriteTokens;
+        checked(InputTokens + OutputTokens + CacheReadTokens + CacheWriteTokens);
 }
