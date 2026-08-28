@@ -11,6 +11,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PokeTokenBar.Windows.Core",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PokeTokenBar.Windows.Infrastructure", "src\PokeTokenBar.Windows.Infrastructure\PokeTokenBar.Windows.Infrastructure.csproj", "{CF264F88-F0D3-4B25-B933-31AB893B539F}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "WindowsTests", "WindowsTests", "{916301BD-A9B5-410B-C1B1-A368CCEACF22}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PokeTokenBar.Windows.Tests", "WindowsTests\PokeTokenBar.Windows.Tests\PokeTokenBar.Windows.Tests.csproj", "{FE5111CA-71D3-4038-8082-9943F2AA6E34}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -57,6 +61,18 @@ Global
 		{CF264F88-F0D3-4B25-B933-31AB893B539F}.Release|x64.Build.0 = Release|Any CPU
 		{CF264F88-F0D3-4B25-B933-31AB893B539F}.Release|x86.ActiveCfg = Release|Any CPU
 		{CF264F88-F0D3-4B25-B933-31AB893B539F}.Release|x86.Build.0 = Release|Any CPU
+		{FE5111CA-71D3-4038-8082-9943F2AA6E34}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FE5111CA-71D3-4038-8082-9943F2AA6E34}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FE5111CA-71D3-4038-8082-9943F2AA6E34}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{FE5111CA-71D3-4038-8082-9943F2AA6E34}.Debug|x64.Build.0 = Debug|Any CPU
+		{FE5111CA-71D3-4038-8082-9943F2AA6E34}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{FE5111CA-71D3-4038-8082-9943F2AA6E34}.Debug|x86.Build.0 = Debug|Any CPU
+		{FE5111CA-71D3-4038-8082-9943F2AA6E34}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FE5111CA-71D3-4038-8082-9943F2AA6E34}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FE5111CA-71D3-4038-8082-9943F2AA6E34}.Release|x64.ActiveCfg = Release|Any CPU
+		{FE5111CA-71D3-4038-8082-9943F2AA6E34}.Release|x64.Build.0 = Release|Any CPU
+		{FE5111CA-71D3-4038-8082-9943F2AA6E34}.Release|x86.ActiveCfg = Release|Any CPU
+		{FE5111CA-71D3-4038-8082-9943F2AA6E34}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -65,5 +81,6 @@ Global
 		{2D4668C9-7775-4D85-AB16-34A75E2C0F5E} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{C39D6440-6815-4F14-A96B-82C0A29B316E} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{CF264F88-F0D3-4B25-B933-31AB893B539F} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{FE5111CA-71D3-4038-8082-9943F2AA6E34} = {916301BD-A9B5-410B-C1B1-A368CCEACF22}
 	EndGlobalSection
 EndGlobal
