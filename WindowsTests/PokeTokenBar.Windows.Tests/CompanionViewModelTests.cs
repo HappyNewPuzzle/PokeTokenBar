@@ -2,6 +2,7 @@ using System.Net;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using PokeTokenBar.Windows.App.Sprites;
+using PokeTokenBar.Windows.App.Lifecycle;
 using PokeTokenBar.Windows.App.ViewModels;
 using PokeTokenBar.Windows.Core;
 using PokeTokenBar.Windows.Infrastructure;
@@ -51,8 +52,60 @@ public sealed class CompanionViewModelTests
         Assert.Equal(2, fixture.ViewModel.TotalForms);
         Assert.True(fixture.ViewModel.IsFinalStage);
         Assert.NotNull(fixture.ViewModel.Sprite);
+        Assert.Same(fixture.ViewModel.Sprite, fixture.ViewModel.CompanionSprite);
         Assert.Equal([(2, false)], fixture.SpriteRequests);
         Assert.Equal(1, fixture.Api.LineCalls);
+    }
+
+    [Fact]
+    public async Task InitialCompanionControllerInitializesRestoredCompanionOnlyOnce()
+    {
+        var fixture = CreateFixture(StateWithActive(1, [1]), Line(1));
+        var controller = new InitialCompanionController(fixture.ViewModel);
+
+        await Task.WhenAll(controller.StartAsync(), controller.StartAsync());
+
+        Assert.True(controller.HasStarted);
+        Assert.Equal(1, fixture.Api.LineCalls);
+        Assert.Single(fixture.SpriteRequests);
+    }
+
+    [Fact]
+    public async Task InitialCompanionControllerDisposeCancelsPendingInitialization()
+    {
+        var started = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var fixture = CreateFixture(
+            StateWithActive(1, [1]),
+            Line(1),
+            spriteLoader: async (_, _, cancellationToken) =>
+            {
+                started.TrySetResult();
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+                return null;
+            });
+        var controller = new InitialCompanionController(fixture.ViewModel);
+        var initialization = controller.StartAsync();
+        await started.Task;
+
+        controller.Dispose();
+        controller.Dispose();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => initialization);
+        Assert.False(fixture.ViewModel.IsSpriteLoading);
+    }
+
+    [Fact]
+    public async Task SpriteLoadRaisesPropertyChangedForWpfBinding()
+    {
+        var fixture = CreateFixture(StateWithActive(1, [1]), Line(1));
+        var changes = new List<string?>();
+        fixture.ViewModel.PropertyChanged += (_, args) => changes.Add(args.PropertyName);
+
+        await fixture.ViewModel.InitializeAsync();
+
+        Assert.Contains(nameof(CompanionViewModel.Sprite), changes);
+        Assert.Contains(nameof(CompanionViewModel.IsSpriteLoading), changes);
     }
 
     [Fact]
@@ -103,6 +156,41 @@ public sealed class CompanionViewModelTests
         await fixture.ViewModel.InitializeAsync();
 
         Assert.Equal(expectedPersonality, fixture.ViewModel.Personality);
+    }
+
+    [Fact]
+    public async Task EggProgressMatchesSwiftFiveMillionTokenThreshold()
+    {
+        var fixture = CreateFixture(
+            new CompanionState
+            {
+                Language = AppLanguage.En,
+                EggUsage = 2_500_000,
+            });
+
+        await fixture.ViewModel.InitializeAsync();
+
+        Assert.Equal(0.5, fixture.ViewModel.Progress);
+        Assert.Equal("2.5M to hatch", fixture.ViewModel.ProgressText);
+        Assert.Null(fixture.ViewModel.StageText);
+    }
+
+    [Fact]
+    public async Task EvolutionProgressMatchesSwiftRarityAndStageThreshold()
+    {
+        var fixture = CreateFixture(
+            StateWithActive(
+                1,
+                [1, 2],
+                usedAtStage: 125_000_000,
+                language: AppLanguage.En),
+            Line(1, 2));
+
+        await fixture.ViewModel.InitializeAsync();
+
+        Assert.Equal("Stage 1 / 2", fixture.ViewModel.StageText);
+        Assert.Equal(0.5, fixture.ViewModel.Progress);
+        Assert.Equal("125M to next evolution", fixture.ViewModel.ProgressText);
     }
 
     [Fact]
@@ -218,6 +306,8 @@ public sealed class CompanionViewModelTests
         Assert.Equal("Ivysaur", fixture.ViewModel.DisplayName);
         Assert.Equal(PokemonNature.Calm, fixture.ViewModel.Nature);
         Assert.Equal([(2, false), (1, false)], fixture.SpriteRequests);
+        Assert.NotNull(fixture.ViewModel.CompanionSprite);
+        Assert.NotSame(fixture.ViewModel.Sprite, fixture.ViewModel.CompanionSprite);
     }
 
     [Fact]
@@ -232,6 +322,7 @@ public sealed class CompanionViewModelTests
         Assert.False(fixture.ViewModel.HasCompanion);
         Assert.Equal("Token Egg", fixture.ViewModel.DisplayName);
         Assert.Null(fixture.ViewModel.Sprite);
+        Assert.Null(fixture.ViewModel.CompanionSprite);
         Assert.Single(fixture.SpriteRequests);
         Assert.Equal(1, fixture.Persistence.DeleteCalls);
     }
@@ -354,6 +445,7 @@ public sealed class CompanionViewModelTests
         int baseId,
         IReadOnlyList<int> pathIds,
         int stageIndex = 0,
+        long usedAtStage = 0,
         bool shiny = false,
         PokemonNature nature = PokemonNature.Hardy,
         PokemonRarity rarity = PokemonRarity.Common,
@@ -367,6 +459,7 @@ public sealed class CompanionViewModelTests
                 PathIds = pathIds,
                 PlannedPathIds = pathIds,
                 StageIndex = stageIndex,
+                UsedAtStage = usedAtStage,
                 Rarity = rarity,
                 TotalForms = pathIds.Count,
                 IsShiny = shiny,

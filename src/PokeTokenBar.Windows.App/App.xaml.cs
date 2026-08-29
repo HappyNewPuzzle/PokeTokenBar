@@ -6,8 +6,10 @@ namespace PokeTokenBar.Windows.App;
 
 public partial class App : System.Windows.Application
 {
+    private ApplicationComposition? _composition;
     private SystemTrayController? _trayController;
     private InitialRefreshController? _initialRefresh;
+    private InitialCompanionController? _initialCompanion;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -15,7 +17,8 @@ public partial class App : System.Windows.Application
 
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-        var viewModel = AppComposition.CreateUsageViewModel();
+        _composition = AppComposition.CreateApplication();
+        var viewModel = _composition.ViewModel;
         var mainWindow = new MainWindow(viewModel);
         MainWindow = mainWindow;
 
@@ -24,7 +27,7 @@ public partial class App : System.Windows.Application
             _trayController = new SystemTrayController(
                 new NotifyIconTrayIcon(),
                 new WpfTrayWindow(mainWindow),
-                viewModel,
+                viewModel.Usage,
                 Shutdown);
         }
         catch (Exception)
@@ -33,13 +36,18 @@ public partial class App : System.Windows.Application
             mainWindow.Show();
         }
 
-        _initialRefresh = new InitialRefreshController(viewModel);
+        _initialRefresh = new InitialRefreshController(viewModel.Usage);
+        _initialCompanion = new InitialCompanionController(viewModel.Companion);
         _ = _initialRefresh.StartAsync();
+        _ = _initialCompanion.StartAsync();
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
         _trayController?.Dispose();
+        _initialCompanion?.Dispose();
+        (MainWindow as IDisposable)?.Dispose();
+        _composition?.Dispose();
         base.OnExit(e);
     }
 }

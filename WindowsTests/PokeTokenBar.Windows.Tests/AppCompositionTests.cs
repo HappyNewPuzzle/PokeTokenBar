@@ -1,4 +1,6 @@
 using System.Reflection;
+using System.Net;
+using System.Net.Http;
 using System.Text.RegularExpressions;
 using PokeTokenBar.Windows.App;
 using PokeTokenBar.Windows.App.Lifecycle;
@@ -24,30 +26,67 @@ public sealed partial class AppCompositionTests
     }
 
     [Fact]
+    public void CompanionComposition_UsesInjectedPersistenceAndSharedHttpClientWithoutIo()
+    {
+        var handler = new TrackingHttpHandler();
+        var httpClient = new HttpClient(handler);
+        var persistence = new FakeCompanionPersistence();
+
+        using var composition = AppComposition.CreateApplication(httpClient, persistence);
+
+        Assert.NotNull(composition.ViewModel.Usage);
+        Assert.NotNull(composition.ViewModel.Companion);
+        var companionStore = GetPrivateField<CompanionStore>(
+            composition.ViewModel.Companion,
+            "_store");
+        Assert.IsType<PokeApiClient>(GetPrivateField<IPokeApiClient>(companionStore, "_provider"));
+        Assert.Equal(1, persistence.LoadCalls);
+        Assert.Equal(0, handler.RequestCalls);
+    }
+
+    [Fact]
+    public void ApplicationComposition_DisposesSharedHttpClientExactlyOnce()
+    {
+        var handler = new TrackingHttpHandler();
+        var composition = AppComposition.CreateApplication(
+            new HttpClient(handler),
+            new FakeCompanionPersistence());
+
+        composition.Dispose();
+        composition.Dispose();
+
+        Assert.Equal(1, handler.DisposeCalls);
+    }
+
+    [Fact]
     public void AppStartup_IsAnExplicitCompositionRootWithoutStartupUri()
     {
         var appXaml = ReadRepositoryFile("src", "PokeTokenBar.Windows.App", "App.xaml");
         var appCode = ReadRepositoryFile("src", "PokeTokenBar.Windows.App", "App.xaml.cs");
 
         Assert.DoesNotContain("StartupUri", appXaml, StringComparison.Ordinal);
-        Assert.Contains("AppComposition.CreateUsageViewModel()", appCode, StringComparison.Ordinal);
+        Assert.Contains("AppComposition.CreateApplication()", appCode, StringComparison.Ordinal);
         Assert.Contains("new MainWindow(viewModel)", appCode, StringComparison.Ordinal);
         Assert.Contains("ShutdownMode.OnExplicitShutdown", appCode, StringComparison.Ordinal);
         Assert.Contains("new NotifyIconTrayIcon()", appCode, StringComparison.Ordinal);
         Assert.Contains("new SystemTrayController(", appCode, StringComparison.Ordinal);
-        Assert.Contains("new InitialRefreshController(viewModel)", appCode, StringComparison.Ordinal);
+        Assert.Contains("new InitialRefreshController(viewModel.Usage)", appCode, StringComparison.Ordinal);
+        Assert.Contains("new InitialCompanionController(viewModel.Companion)", appCode, StringComparison.Ordinal);
         Assert.Contains("_initialRefresh.StartAsync()", appCode, StringComparison.Ordinal);
+        Assert.Contains("_initialCompanion.StartAsync()", appCode, StringComparison.Ordinal);
+        Assert.Contains("_initialCompanion?.Dispose()", appCode, StringComparison.Ordinal);
+        Assert.Contains("_composition?.Dispose()", appCode, StringComparison.Ordinal);
         Assert.Contains("ShutdownMode.OnMainWindowClose", appCode, StringComparison.Ordinal);
         Assert.Contains("mainWindow.Show()", appCode, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void MainWindow_AssignsInjectedUsageViewModelAsDataContext()
+    public void MainWindow_AssignsInjectedMainViewModelAsDataContext()
     {
         var source = ReadRepositoryFile(
             "src", "PokeTokenBar.Windows.App", "MainWindow.xaml.cs");
 
-        Assert.Contains("MainWindow(UsageViewModel viewModel)", source, StringComparison.Ordinal);
+        Assert.Contains("MainWindow(MainViewModel viewModel)", source, StringComparison.Ordinal);
         Assert.Contains("DataContext = viewModel", source, StringComparison.Ordinal);
         Assert.DoesNotContain("LocalCodexUsageProvider", source, StringComparison.Ordinal);
         Assert.DoesNotContain("CodexLocalUsageService", source, StringComparison.Ordinal);
@@ -94,7 +133,7 @@ public sealed partial class AppCompositionTests
     }
 
     [Fact]
-    public void EveryMainWindowBindingPath_ExistsOnUsageViewModel()
+    public void EveryMainWindowBindingPath_ExistsOnRootViewModelGraph()
     {
         var xaml = ReadRepositoryFile(
             "src", "PokeTokenBar.Windows.App", "MainWindow.xaml");
@@ -105,8 +144,7 @@ public sealed partial class AppCompositionTests
             .ToArray();
 
         Assert.NotEmpty(bindingPaths);
-        Assert.All(bindingPaths, path =>
-            Assert.NotNull(typeof(UsageViewModel).GetProperty(path)));
+        Assert.All(bindingPaths, path => AssertBindingPath(typeof(MainViewModel), path));
     }
 
     [Fact]
@@ -132,8 +170,45 @@ public sealed partial class AppCompositionTests
         ];
 
         Assert.All(expected, property =>
-            Assert.Contains($"Binding {property}", xaml, StringComparison.Ordinal));
-        Assert.Contains("Command=\"{Binding RefreshCommand}\"", xaml, StringComparison.Ordinal);
+            Assert.Contains($"Binding Usage.{property}", xaml, StringComparison.Ordinal));
+        Assert.Contains("Command=\"{Binding Usage.RefreshCommand}\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainWindow_ContainsCompanionStateAndSpriteBindings()
+    {
+        var xaml = ReadRepositoryFile(
+            "src", "PokeTokenBar.Windows.App", "MainWindow.xaml");
+
+        string[] expected =
+        [
+            "DisplayName",
+            "CompanionSprite",
+            "CurrentIsShiny",
+            "RarityText",
+            "Personality",
+            "StageText",
+            "Progress",
+            "ProgressText",
+            "StatusText",
+            "IsHatching",
+            "HatchingText",
+        ];
+
+        Assert.All(expected, property =>
+            Assert.Contains($"Binding Companion.{property}", xaml, StringComparison.Ordinal));
+        Assert.Contains("AnimatedSpritePresenter", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"🥚\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MainWindow_DoesNotAddManualHatchOrResetActionsAbsentFromSwiftHeader()
+    {
+        var xaml = ReadRepositoryFile(
+            "src", "PokeTokenBar.Windows.App", "MainWindow.xaml");
+
+        Assert.DoesNotContain("HatchRandom", xaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("ResetCommand", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -146,7 +221,7 @@ public sealed partial class AppCompositionTests
         Assert.All(bindings, match =>
         {
             var path = match.Groups[1].Value;
-            if (path is nameof(UsageViewModel.SelectedProviderId) or nameof(UsageViewModel.RefreshCommand))
+            if (path is "Usage.SelectedProviderId" or "Usage.RefreshCommand")
             {
                 return;
             }
@@ -223,6 +298,20 @@ public sealed partial class AppCompositionTests
         return Assert.IsAssignableFrom<T>(field?.GetValue(instance));
     }
 
+    private static void AssertBindingPath(Type rootType, string path)
+    {
+        var current = rootType;
+        foreach (var segment in path.Split('.'))
+        {
+            var property = current.GetProperty(segment) ??
+                current.GetInterfaces()
+                    .Select(type => type.GetProperty(segment))
+                    .FirstOrDefault(candidate => candidate is not null);
+            Assert.True(property is not null, $"{current.Name} does not expose binding segment '{segment}' from '{path}'.");
+            current = property!.PropertyType;
+        }
+    }
+
     private static string ReadRepositoryFile(params string[] relativeParts)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -250,10 +339,10 @@ public sealed partial class AppCompositionTests
             total,
             0);
 
-    [GeneratedRegex(@"\{Binding\s+([A-Za-z][A-Za-z0-9]*)")]
+    [GeneratedRegex(@"\{Binding\s+([A-Za-z][A-Za-z0-9.]*)")]
     private static partial Regex BindingPathRegex();
 
-    [GeneratedRegex(@"\{Binding\s+([A-Za-z][A-Za-z0-9]*)[^}]*\}")]
+    [GeneratedRegex(@"\{Binding\s+([A-Za-z][A-Za-z0-9.]*)[^}]*\}")]
     private static partial Regex FullBindingRegex();
 
     private sealed class TestUsageProvider(
@@ -280,4 +369,42 @@ public sealed partial class AppCompositionTests
     }
 
     private sealed class TestException(string message) : Exception(message);
+
+    private sealed class FakeCompanionPersistence : ICompanionPersistence
+    {
+        public int LoadCalls { get; private set; }
+
+        public CompanionState? Load()
+        {
+            LoadCalls++;
+            return null;
+        }
+
+        public void Save(CompanionState state) { }
+        public void Delete() { }
+    }
+
+    private sealed class TrackingHttpHandler : HttpMessageHandler
+    {
+        public int RequestCalls { get; private set; }
+        public int DisposeCalls { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            RequestCalls++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                DisposeCalls++;
+            }
+
+            base.Dispose(disposing);
+        }
+    }
 }

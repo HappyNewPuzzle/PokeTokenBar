@@ -8,14 +8,20 @@ namespace PokeTokenBar.Windows.App.ViewModels;
 
 public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
 {
+    private const long EggHatchThreshold = 5_000_000;
     private readonly CompanionStore _store;
     private readonly Func<int, bool, CancellationToken, Task<PokemonSpriteAsset?>> _loadSprite;
     private readonly IPokemonSpriteDecoder _spriteDecoder;
     private CancellationTokenSource? _spriteLoadCancellation;
+    private CancellationTokenSource? _companionSpriteLoadCancellation;
     private long _spriteGeneration;
+    private long _companionSpriteGeneration;
     private bool _hasAttemptedSprite;
     private int? _attemptedPokemonId;
     private bool _attemptedShiny;
+    private bool _hasAttemptedCompanionSprite;
+    private int? _attemptedCompanionPokemonId;
+    private bool _attemptedCompanionShiny;
     private bool _isEgg;
     private bool _hasCompanion;
     private bool _isHatching;
@@ -24,6 +30,7 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
     private int? _pokemonId;
     private string _displayName = "Token Egg";
     private bool _isShiny;
+    private bool _currentIsShiny;
     private PokemonNature? _nature;
     private PokemonRarity? _rarity;
     private int? _stageIndex;
@@ -32,6 +39,7 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
     private CompanionStateKind _displayState;
     private AppLanguage _language;
     private PokemonSpritePresentation? _sprite;
+    private PokemonSpritePresentation? _companionSprite;
 
     public CompanionViewModel(
         CompanionStore store,
@@ -105,6 +113,12 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
         private set => SetField(ref _isShiny, value);
     }
 
+    public bool CurrentIsShiny
+    {
+        get => _currentIsShiny;
+        private set => SetField(ref _currentIsShiny, value);
+    }
+
     public PokemonNature? Nature
     {
         get => _nature;
@@ -120,6 +134,50 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
     public string? Personality => Nature is PokemonNature nature
         ? PokemonNatureDisplayNames.GetName(nature, Language)
         : null;
+
+    public string? RarityText => Rarity is PokemonRarity rarity
+        ? CompanionDisplayTexts.Rarity(rarity, Language)
+        : null;
+
+    public string? StageText => StageIndex is int stageIndex && TotalForms is int totalForms
+        ? CompanionDisplayTexts.Stage(stageIndex + 1, totalForms, IsFinalStage, Language)
+        : null;
+
+    public double Progress
+    {
+        get
+        {
+            if (_store.State.Active is not MonState active)
+            {
+                return Math.Clamp((double)_store.State.EggUsage / EggHatchThreshold, 0, 1);
+            }
+
+            var threshold = PhaseThreshold(active);
+            return threshold == 0
+                ? 0
+                : Math.Clamp((double)active.UsedAtStage / threshold, 0, 1);
+        }
+    }
+
+    public string ProgressText
+    {
+        get
+        {
+            var active = _store.State.Active;
+            var remaining = active is null
+                ? Math.Max(0, EggHatchThreshold - _store.State.EggUsage)
+                : Math.Max(0, PhaseThreshold(active) - active.UsedAtStage);
+            return CompanionDisplayTexts.Progress(
+                active is null,
+                IsFinalStage,
+                remaining,
+                Language);
+        }
+    }
+
+    public string StatusText => CompanionDisplayTexts.Status(DisplayState, Language);
+
+    public string HatchingText => CompanionDisplayTexts.Hatching(Language);
 
     public PokemonRarity? Rarity
     {
@@ -169,6 +227,12 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
         private set => SetField(ref _sprite, value);
     }
 
+    public PokemonSpritePresentation? CompanionSprite
+    {
+        get => _companionSprite;
+        private set => SetField(ref _companionSprite, value);
+    }
+
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         if (_store.State.Active is not null && _store.CurrentLine is null)
@@ -178,6 +242,7 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
 
         ApplyStoreState();
         await EnsureSpriteAsync(cancellationToken);
+        await EnsureCompanionSpriteAsync(cancellationToken);
     }
 
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
@@ -189,6 +254,7 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
 
         ApplyStoreState();
         await EnsureSpriteAsync(cancellationToken);
+        await EnsureCompanionSpriteAsync(cancellationToken);
     }
 
     public async Task<bool> HatchRandomAsync(CancellationToken cancellationToken = default) =>
@@ -220,10 +286,14 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
     public void Reset()
     {
         CancelSpriteLoad();
+        CancelCompanionSpriteLoad();
         _store.Reset();
         _hasAttemptedSprite = false;
         _attemptedPokemonId = null;
         Sprite = null;
+        _hasAttemptedCompanionSprite = false;
+        _attemptedCompanionPokemonId = null;
+        CompanionSprite = null;
         IsSpriteLoading = false;
         ApplyStoreState();
     }
@@ -231,6 +301,7 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
     public void Dispose()
     {
         CancelSpriteLoad();
+        CancelCompanionSpriteLoad();
         GC.SuppressFinalize(this);
     }
 
@@ -253,6 +324,7 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
         if (success)
         {
             await EnsureSpriteAsync(cancellationToken);
+            await EnsureCompanionSpriteAsync(cancellationToken);
         }
 
         return success;
@@ -335,6 +407,92 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    private async Task EnsureCompanionSpriteAsync(CancellationToken callerCancellationToken)
+    {
+        var id = ActivePokemonId;
+        var shiny = CurrentIsShiny;
+        if (id is null)
+        {
+            CancelCompanionSpriteLoad();
+            _companionSpriteGeneration++;
+            _hasAttemptedCompanionSprite = false;
+            _attemptedCompanionPokemonId = null;
+            CompanionSprite = null;
+            return;
+        }
+
+        if (id == PokemonId && shiny == IsShiny)
+        {
+            CancelCompanionSpriteLoad();
+            _companionSpriteGeneration++;
+            _hasAttemptedCompanionSprite = true;
+            _attemptedCompanionPokemonId = id;
+            _attemptedCompanionShiny = shiny;
+            CompanionSprite = Sprite;
+            return;
+        }
+
+        if (_hasAttemptedCompanionSprite &&
+            _attemptedCompanionPokemonId == id &&
+            _attemptedCompanionShiny == shiny)
+        {
+            return;
+        }
+
+        CancelCompanionSpriteLoad();
+        var cancellation = CancellationTokenSource.CreateLinkedTokenSource(callerCancellationToken);
+        _companionSpriteLoadCancellation = cancellation;
+        var generation = ++_companionSpriteGeneration;
+        _hasAttemptedCompanionSprite = true;
+        _attemptedCompanionPokemonId = id;
+        _attemptedCompanionShiny = shiny;
+        IsSpriteLoading = true;
+
+        try
+        {
+            var asset = await _loadSprite(id.Value, shiny, cancellation.Token);
+            var presentation = asset is null ? null : _spriteDecoder.Decode(asset);
+            if (generation != _companionSpriteGeneration || cancellation.IsCancellationRequested)
+            {
+                return;
+            }
+
+            CompanionSprite = presentation;
+        }
+        catch (OperationCanceledException) when (!callerCancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (OperationCanceledException)
+        {
+            if (generation == _companionSpriteGeneration)
+            {
+                _hasAttemptedCompanionSprite = false;
+            }
+
+            throw;
+        }
+        catch (Exception)
+        {
+            if (generation == _companionSpriteGeneration)
+            {
+                CompanionSprite = null;
+            }
+        }
+        finally
+        {
+            if (generation == _companionSpriteGeneration)
+            {
+                IsSpriteLoading = false;
+                if (ReferenceEquals(_companionSpriteLoadCancellation, cancellation))
+                {
+                    _companionSpriteLoadCancellation = null;
+                }
+            }
+
+            cancellation.Dispose();
+        }
+    }
+
     private void ApplyStoreState()
     {
         var active = _store.State.Active;
@@ -344,6 +502,7 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
         PokemonId = subject.SpeciesId;
         HasCompanion = subject.SpeciesId is not null;
         IsShiny = subject.IsShiny;
+        CurrentIsShiny = _store.CurrentIsShiny;
         DisplayState = _store.DisplayState;
         Language = _store.State.Language;
 
@@ -356,12 +515,36 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
         DisplayName = active is null || _store.CurrentLine is null
             ? "Token Egg"
             : _store.CurrentLine.LocalizedName(active.CurrentId, Language);
+
+        OnPropertyChanged(nameof(RarityText));
+        OnPropertyChanged(nameof(StageText));
+        OnPropertyChanged(nameof(Progress));
+        OnPropertyChanged(nameof(ProgressText));
+        OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(HatchingText));
     }
 
     private bool IsCurrentFinalStage(MonState active)
     {
         var node = _store.CurrentLine?.Tree.Find(active.CurrentId);
         return node?.Children.Count == 0;
+    }
+
+    private static long PhaseThreshold(MonState active)
+    {
+        var graduationTotal = active.Rarity switch
+        {
+            PokemonRarity.Common => 750_000_000L,
+            PokemonRarity.Uncommon => 1_875_000_000L,
+            PokemonRarity.Rare => 3_000_000_000L,
+            PokemonRarity.Legendary => 6_000_000_000L,
+            _ => 750_000_000L,
+        };
+        var forms = Math.Max(1, active.TotalForms);
+        var denominator = forms * (forms + 1) / 2d;
+        return (long)Math.Round(
+            graduationTotal * (active.StageIndex + 1) / denominator,
+            MidpointRounding.AwayFromZero);
     }
 
     private void CancelSpriteLoad()
@@ -373,6 +556,12 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
         }
 
         previous.Cancel();
+    }
+
+    private void CancelCompanionSpriteLoad()
+    {
+        var previous = Interlocked.Exchange(ref _companionSpriteLoadCancellation, null);
+        previous?.Cancel();
     }
 
     private static Func<int, bool, CancellationToken, Task<PokemonSpriteAsset?>> CreateSpriteLoader(

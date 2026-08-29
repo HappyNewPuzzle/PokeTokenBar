@@ -3,11 +3,30 @@ using PokeTokenBar.Windows.App.ViewModels;
 
 namespace PokeTokenBar.Windows.App;
 
-public partial class MainWindow : Window
+public partial class MainWindow : Window, IDisposable
 {
-    public MainWindow(UsageViewModel viewModel)
+    private bool _disposed;
+
+    public MainWindow(MainViewModel viewModel)
     {
         InitializeComponent();
         DataContext = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        CompanionSprite.Dispose();
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        Dispose();
+        base.OnClosed(e);
     }
 }
