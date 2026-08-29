@@ -1,4 +1,5 @@
 using System.Globalization;
+using PokeTokenBar.Windows.Core;
 
 namespace PokeTokenBar.Windows.Infrastructure;
 
@@ -19,24 +20,69 @@ public static class CodexLocalUsageService
         DateTimeOffset now,
         TimeZoneInfo timeZone,
         DayOfWeek firstDayOfWeek) =>
-        Load(
+        LoadSnapshot(
             CodexSessionLocator.GetDefaultRoots(),
             now,
             timeZone,
-            firstDayOfWeek);
+            firstDayOfWeek).UsagePeriods;
 
     public static CodexUsagePeriods LoadFromRoots(
         IEnumerable<string> roots,
         DateTimeOffset now,
         TimeZoneInfo timeZone,
         DayOfWeek firstDayOfWeek) =>
-        Load(roots, now, timeZone, firstDayOfWeek);
+        LoadSnapshot(roots, now, timeZone, firstDayOfWeek).UsagePeriods;
 
-    private static CodexUsagePeriods Load(
+    internal static CodexLocalUsageSnapshot LoadDefaultSnapshot(
+        DateTimeOffset now,
+        TimeZoneInfo timeZone,
+        DayOfWeek firstDayOfWeek) =>
+        LoadSnapshot(
+            CodexSessionLocator.GetDefaultRoots(),
+            now,
+            timeZone,
+            firstDayOfWeek);
+
+    internal static CodexLocalUsageSnapshot LoadDefaultDailySnapshot(
+        DateTimeOffset now,
+        TimeZoneInfo timeZone,
+        DayOfWeek firstDayOfWeek) =>
+        LoadSnapshot(
+            CodexSessionLocator.GetDefaultRoots(),
+            now,
+            timeZone,
+            firstDayOfWeek,
+            modifiedSince: StartOfLocalDay(
+                DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, timeZone).DateTime),
+                timeZone));
+
+    internal static CodexLocalUsageSnapshot LoadSnapshotFromRoots(
         IEnumerable<string> roots,
         DateTimeOffset now,
         TimeZoneInfo timeZone,
-        DayOfWeek firstDayOfWeek)
+        DayOfWeek firstDayOfWeek) =>
+        LoadSnapshot(roots, now, timeZone, firstDayOfWeek);
+
+    internal static CodexLocalUsageSnapshot LoadDailySnapshotFromRoots(
+        IEnumerable<string> roots,
+        DateTimeOffset now,
+        TimeZoneInfo timeZone,
+        DayOfWeek firstDayOfWeek) =>
+        LoadSnapshot(
+            roots,
+            now,
+            timeZone,
+            firstDayOfWeek,
+            modifiedSince: StartOfLocalDay(
+                DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, timeZone).DateTime),
+                timeZone));
+
+    private static CodexLocalUsageSnapshot LoadSnapshot(
+        IEnumerable<string> roots,
+        DateTimeOffset now,
+        TimeZoneInfo timeZone,
+        DayOfWeek firstDayOfWeek,
+        DateTimeOffset? modifiedSince = null)
     {
         ArgumentNullException.ThrowIfNull(roots);
         ArgumentNullException.ThrowIfNull(timeZone);
@@ -46,17 +92,31 @@ public static class CodexLocalUsageService
             throw new ArgumentOutOfRangeException(nameof(firstDayOfWeek));
         }
 
-        var modifiedSince = CalculateModifiedSince(now, timeZone, firstDayOfWeek);
+        var scanStart = modifiedSince
+            ?? CalculateModifiedSince(now, timeZone, firstDayOfWeek);
         var pipelineResult = CodexLocalRolloutPipeline.LoadFromRoots(
             roots,
-            modifiedSince);
+            scanStart);
         var canonicalEvents = CodexCanonicalPrimaryFinalizer.CreateCanonicalEvents(
             pipelineResult);
-        return CodexUsagePeriodAggregator.Calculate(
+        var usagePeriods = CodexUsagePeriodAggregator.Calculate(
             canonicalEvents,
             now,
             timeZone,
             firstDayOfWeek);
+        var recentStart = now - RecentWindow;
+        DateTimeOffset? firstRecentTimestamp = null;
+        foreach (var canonicalEvent in canonicalEvents)
+        {
+            var timestamp = canonicalEvent.TokenEvent.TokenEvent.TokenCount.Timestamp;
+            if (timestamp >= recentStart
+                && (firstRecentTimestamp is null || timestamp < firstRecentTimestamp.Value))
+            {
+                firstRecentTimestamp = timestamp;
+            }
+        }
+
+        return new CodexLocalUsageSnapshot(usagePeriods, firstRecentTimestamp);
     }
 
     private static DateTimeOffset CalculateModifiedSince(

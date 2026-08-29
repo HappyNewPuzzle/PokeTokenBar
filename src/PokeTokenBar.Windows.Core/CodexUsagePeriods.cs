@@ -1,6 +1,4 @@
-using PokeTokenBar.Windows.Core;
-
-namespace PokeTokenBar.Windows.Infrastructure;
+namespace PokeTokenBar.Windows.Core;
 
 public sealed record CodexUsagePeriods(
     CodexUsageEntry Today,
