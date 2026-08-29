@@ -32,7 +32,13 @@ public sealed partial class AppCompositionTests
         Assert.DoesNotContain("StartupUri", appXaml, StringComparison.Ordinal);
         Assert.Contains("AppComposition.CreateUsageViewModel()", appCode, StringComparison.Ordinal);
         Assert.Contains("new MainWindow(viewModel)", appCode, StringComparison.Ordinal);
-        Assert.Contains("MainWindow.Show()", appCode, StringComparison.Ordinal);
+        Assert.Contains("ShutdownMode.OnExplicitShutdown", appCode, StringComparison.Ordinal);
+        Assert.Contains("new NotifyIconTrayIcon()", appCode, StringComparison.Ordinal);
+        Assert.Contains("new SystemTrayController(", appCode, StringComparison.Ordinal);
+        Assert.Contains("new InitialRefreshController(viewModel)", appCode, StringComparison.Ordinal);
+        Assert.Contains("_initialRefresh.StartAsync()", appCode, StringComparison.Ordinal);
+        Assert.Contains("ShutdownMode.OnMainWindowClose", appCode, StringComparison.Ordinal);
+        Assert.Contains("mainWindow.Show()", appCode, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -45,6 +51,7 @@ public sealed partial class AppCompositionTests
         Assert.Contains("DataContext = viewModel", source, StringComparison.Ordinal);
         Assert.DoesNotContain("LocalCodexUsageProvider", source, StringComparison.Ordinal);
         Assert.DoesNotContain("CodexLocalUsageService", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("InitialRefreshController", source, StringComparison.Ordinal);
     }
 
     [Fact]
