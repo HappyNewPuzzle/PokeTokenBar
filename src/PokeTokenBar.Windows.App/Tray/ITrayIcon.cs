@@ -2,6 +2,8 @@ namespace PokeTokenBar.Windows.App.Tray;
 
 internal interface ITrayIcon : IDisposable
 {
+    event EventHandler? ToggleRequested;
+
     event EventHandler? OpenRequested;
 
     event EventHandler? RefreshRequested;

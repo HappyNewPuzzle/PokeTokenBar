@@ -27,11 +27,13 @@ internal sealed class NotifyIconTrayIcon : ITrayIcon
             ContextMenuStrip = _menu,
         };
 
-        _notifyIcon.MouseClick += OnMouseClick;
+        _notifyIcon.MouseDown += OnMouseDown;
         _openItem.Click += OnOpenClicked;
         _refreshItem.Click += OnRefreshClicked;
         _exitItem.Click += OnExitClicked;
     }
+
+    public event EventHandler? ToggleRequested;
 
     public event EventHandler? OpenRequested;
 
@@ -54,7 +56,7 @@ internal sealed class NotifyIconTrayIcon : ITrayIcon
 
         _disposed = true;
         _notifyIcon.Visible = false;
-        _notifyIcon.MouseClick -= OnMouseClick;
+        _notifyIcon.MouseDown -= OnMouseDown;
         _openItem.Click -= OnOpenClicked;
         _refreshItem.Click -= OnRefreshClicked;
         _exitItem.Click -= OnExitClicked;
@@ -62,11 +64,11 @@ internal sealed class NotifyIconTrayIcon : ITrayIcon
         _menu.Dispose();
     }
 
-    private void OnMouseClick(object? sender, Forms.MouseEventArgs e)
+    private void OnMouseDown(object? sender, Forms.MouseEventArgs e)
     {
         if (e.Button == Forms.MouseButtons.Left)
         {
-            OpenRequested?.Invoke(this, EventArgs.Empty);
+            ToggleRequested?.Invoke(this, EventArgs.Empty);
         }
     }
 

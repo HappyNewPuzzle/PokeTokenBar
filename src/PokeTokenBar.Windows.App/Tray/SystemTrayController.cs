@@ -23,10 +23,12 @@ internal sealed class SystemTrayController : IDisposable
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         _shutdown = shutdown ?? throw new ArgumentNullException(nameof(shutdown));
 
+        _trayIcon.ToggleRequested += OnToggleRequested;
         _trayIcon.OpenRequested += OnOpenRequested;
         _trayIcon.RefreshRequested += OnRefreshRequested;
         _trayIcon.ExitRequested += OnExitRequested;
         _window.Closing += OnWindowClosing;
+        _window.Deactivated += OnWindowDeactivated;
         _trayIcon.Visible = true;
     }
 
@@ -41,10 +43,21 @@ internal sealed class SystemTrayController : IDisposable
 
         if (!_window.IsVisible)
         {
-            _window.Show();
+            _window.ShowNearTray();
         }
 
         _window.Activate();
+    }
+
+    public void ToggleWindow()
+    {
+        if (_window.IsVisible)
+        {
+            _window.Hide();
+            return;
+        }
+
+        ShowWindow();
     }
 
     public void Refresh() => _ = _viewModel.RefreshCommand.ExecuteAsync();
@@ -70,10 +83,12 @@ internal sealed class SystemTrayController : IDisposable
         }
 
         _disposed = true;
+        _trayIcon.ToggleRequested -= OnToggleRequested;
         _trayIcon.OpenRequested -= OnOpenRequested;
         _trayIcon.RefreshRequested -= OnRefreshRequested;
         _trayIcon.ExitRequested -= OnExitRequested;
         _window.Closing -= OnWindowClosing;
+        _window.Deactivated -= OnWindowDeactivated;
         _trayIcon.Visible = false;
         _trayIcon.Dispose();
     }
@@ -88,6 +103,16 @@ internal sealed class SystemTrayController : IDisposable
         e.Cancel = true;
         _window.Hide();
     }
+
+    private void OnWindowDeactivated(object? sender, EventArgs e)
+    {
+        if (!_isExiting)
+        {
+            _window.Hide();
+        }
+    }
+
+    private void OnToggleRequested(object? sender, EventArgs e) => ToggleWindow();
 
     private void OnOpenRequested(object? sender, EventArgs e) => ShowWindow();
 

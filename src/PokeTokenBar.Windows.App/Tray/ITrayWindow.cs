@@ -6,11 +6,13 @@ internal interface ITrayWindow
 {
     event CancelEventHandler? Closing;
 
+    event EventHandler? Deactivated;
+
     bool IsVisible { get; }
 
     bool IsMinimized { get; }
 
-    void Show();
+    void ShowNearTray();
 
     void Hide();
 

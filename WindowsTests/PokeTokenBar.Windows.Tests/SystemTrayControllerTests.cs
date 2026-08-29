@@ -17,22 +17,68 @@ public sealed class SystemTrayControllerTests
 
         Assert.True(tray.Visible);
         Assert.False(window.IsVisible);
-        Assert.Equal(0, window.ShowCalls);
+        Assert.Equal(0, window.ShowNearTrayCalls);
     }
 
     [Fact]
-    public void OpenRequest_ShowsAndActivatesTheSameWindow()
+    public void FirstToggleRequest_ShowsPositionsAndActivatesTheSameWindow()
     {
         var tray = new FakeTrayIcon();
         var window = new FakeTrayWindow();
         using var controller = CreateController(tray, window);
 
-        tray.RequestOpen();
+        tray.RequestToggle();
+
+        Assert.True(window.IsVisible);
+        Assert.Equal(1, window.ShowNearTrayCalls);
+        Assert.Equal(1, window.ActivateCalls);
+    }
+
+    [Fact]
+    public void SecondToggleRequest_HidesVisibleWindow()
+    {
+        var tray = new FakeTrayIcon();
+        var window = new FakeTrayWindow();
+        using var controller = CreateController(tray, window);
+
+        tray.RequestToggle();
+        tray.RequestToggle();
+
+        Assert.False(window.IsVisible);
+        Assert.Equal(1, window.ShowNearTrayCalls);
+        Assert.Equal(1, window.HideCalls);
+        Assert.Equal(1, window.ActivateCalls);
+    }
+
+    [Fact]
+    public void OpenMenuRequest_DoesNotToggleAnAlreadyVisibleWindow()
+    {
+        var tray = new FakeTrayIcon();
+        var window = new FakeTrayWindow { IsVisible = true };
+        using var controller = CreateController(tray, window);
+
         tray.RequestOpen();
 
         Assert.True(window.IsVisible);
-        Assert.Equal(1, window.ShowCalls);
-        Assert.Equal(2, window.ActivateCalls);
+        Assert.Equal(0, window.ShowNearTrayCalls);
+        Assert.Equal(0, window.HideCalls);
+        Assert.Equal(1, window.ActivateCalls);
+    }
+
+    [Fact]
+    public void ToggleRequest_DoesNotImplicitlyRefreshUsage()
+    {
+        var provider = new TestUsageProvider();
+        var tray = new FakeTrayIcon();
+        using var controller = new SystemTrayController(
+            tray,
+            new FakeTrayWindow(),
+            new UsageViewModel(new UsageStore([provider])),
+            () => { });
+
+        tray.RequestToggle();
+
+        Assert.Equal(0, provider.DailyCalls);
     }
 
     [Fact]
@@ -50,8 +96,24 @@ public sealed class SystemTrayControllerTests
 
         Assert.False(window.IsMinimized);
         Assert.Equal(1, window.RestoreCalls);
-        Assert.Equal(0, window.ShowCalls);
+        Assert.Equal(0, window.ShowNearTrayCalls);
         Assert.Equal(1, window.ActivateCalls);
+    }
+
+    [Fact]
+    public void WindowDeactivation_HidesTransientPopupWithoutShutdown()
+    {
+        var tray = new FakeTrayIcon();
+        var window = new FakeTrayWindow { IsVisible = true };
+        var shutdownCalls = 0;
+        using var controller = CreateController(tray, window, () => shutdownCalls++);
+
+        window.RequestDeactivation();
+
+        Assert.False(window.IsVisible);
+        Assert.Equal(1, window.HideCalls);
+        Assert.Equal(0, shutdownCalls);
+        Assert.True(tray.Visible);
     }
 
     [Fact]
@@ -82,11 +144,13 @@ public sealed class SystemTrayControllerTests
 
         tray.RequestExit();
         controller.Exit();
+        window.RequestDeactivation();
 
         Assert.True(controller.IsExiting);
         Assert.False(tray.Visible);
         Assert.Equal(1, tray.DisposeCalls);
         Assert.Equal(1, window.CloseCalls);
+        Assert.Equal(0, window.HideCalls);
         Assert.Equal(1, shutdownCalls);
     }
 
@@ -105,7 +169,7 @@ public sealed class SystemTrayControllerTests
 
         Assert.Equal(1, tray.DisposeCalls);
         Assert.False(tray.Visible);
-        Assert.Equal(0, window.ShowCalls);
+        Assert.Equal(0, window.ShowNearTrayCalls);
         Assert.Equal(0, window.CloseCalls);
     }
 
@@ -196,6 +260,7 @@ public sealed class SystemTrayControllerTests
 
     private sealed class FakeTrayIcon : ITrayIcon
     {
+        public event EventHandler? ToggleRequested;
         public event EventHandler? OpenRequested;
         public event EventHandler? RefreshRequested;
         public event EventHandler? ExitRequested;
@@ -203,6 +268,7 @@ public sealed class SystemTrayControllerTests
         public bool Visible { get; set; }
         public int DisposeCalls { get; private set; }
 
+        public void RequestToggle() => ToggleRequested?.Invoke(this, EventArgs.Empty);
         public void RequestOpen() => OpenRequested?.Invoke(this, EventArgs.Empty);
         public void RequestRefresh() => RefreshRequested?.Invoke(this, EventArgs.Empty);
         public void RequestExit() => ExitRequested?.Invoke(this, EventArgs.Empty);
@@ -213,18 +279,19 @@ public sealed class SystemTrayControllerTests
     private sealed class FakeTrayWindow : ITrayWindow
     {
         public event CancelEventHandler? Closing;
+        public event EventHandler? Deactivated;
 
         public bool IsVisible { get; set; }
         public bool IsMinimized { get; set; }
-        public int ShowCalls { get; private set; }
+        public int ShowNearTrayCalls { get; private set; }
         public int HideCalls { get; private set; }
         public int RestoreCalls { get; private set; }
         public int ActivateCalls { get; private set; }
         public int CloseCalls { get; private set; }
 
-        public void Show()
+        public void ShowNearTray()
         {
-            ShowCalls++;
+            ShowNearTrayCalls++;
             IsVisible = true;
         }
 
@@ -241,6 +308,9 @@ public sealed class SystemTrayControllerTests
         }
 
         public void Activate() => ActivateCalls++;
+
+        public void RequestDeactivation() =>
+            Deactivated?.Invoke(this, EventArgs.Empty);
 
         public void Close()
         {

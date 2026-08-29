@@ -55,6 +55,45 @@ public sealed partial class AppCompositionTests
     }
 
     [Fact]
+    public void MainWindow_IsConfiguredAsACompactTransientToolWindow()
+    {
+        var xaml = ReadRepositoryFile(
+            "src", "PokeTokenBar.Windows.App", "MainWindow.xaml");
+
+        Assert.Contains("ShowInTaskbar=\"False\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("WindowStartupLocation=\"Manual\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("ResizeMode=\"NoResize\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("WindowStyle=\"ToolWindow\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Topmost=\"True\"", xaml, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NotifyIcon_KeepsLeftClickToggleAndOpenRefreshExitContextMenu()
+    {
+        var source = ReadRepositoryFile(
+            "src", "PokeTokenBar.Windows.App", "Tray", "NotifyIconTrayIcon.cs");
+
+        Assert.Contains("Forms.MouseButtons.Left", source, StringComparison.Ordinal);
+        Assert.Contains("ToggleRequested?.Invoke", source, StringComparison.Ordinal);
+        Assert.Contains("new Forms.ContextMenuStrip()", source, StringComparison.Ordinal);
+        Assert.Contains("ToolStripMenuItem(\"Open\")", source, StringComparison.Ordinal);
+        Assert.Contains("ToolStripMenuItem(\"Refresh\")", source, StringComparison.Ordinal);
+        Assert.Contains("ToolStripMenuItem(\"Exit\")", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WpfTrayWindow_UsesScreenWorkingAreaAndDpiConversion()
+    {
+        var source = ReadRepositoryFile(
+            "src", "PokeTokenBar.Windows.App", "Tray", "WpfTrayWindow.cs");
+
+        Assert.Contains("Forms.Screen.FromPoint(cursor)", source, StringComparison.Ordinal);
+        Assert.Contains("screen.WorkingArea", source, StringComparison.Ordinal);
+        Assert.Contains("VisualTreeHelper.GetDpi(_window)", source, StringComparison.Ordinal);
+        Assert.Contains("PopupPositioner.Calculate(", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void EveryMainWindowBindingPath_ExistsOnUsageViewModel()
     {
         var xaml = ReadRepositoryFile(
