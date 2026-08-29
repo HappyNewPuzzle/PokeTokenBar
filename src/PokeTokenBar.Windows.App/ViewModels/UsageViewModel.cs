@@ -79,7 +79,13 @@ public sealed class UsageViewModel : INotifyPropertyChanged
     public string? SelectedProviderId
     {
         get => _selectedProviderId;
-        private set => SetField(ref _selectedProviderId, value);
+        set
+        {
+            if (value != _selectedProviderId)
+            {
+                PreferredProviderId = value;
+            }
+        }
     }
 
     public string? ProviderName
@@ -418,7 +424,7 @@ public sealed class UsageViewModel : INotifyPropertyChanged
     {
         Providers = new ReadOnlyCollection<ProviderSnapshot>(_store.Snapshots.ToArray());
         var selected = _store.Snapshot(PreferredProviderId);
-        SelectedProviderId = selected?.ProviderId;
+        SetField(ref _selectedProviderId, selected?.ProviderId, nameof(SelectedProviderId));
         ProviderName = selected?.DisplayName;
         TodayTokens = selected?.Today?.TotalTokens;
         InputTokens = selected?.Today?.InputTokens;

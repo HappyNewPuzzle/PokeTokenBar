@@ -1,12 +1,184 @@
-﻿<Window x:Class="PokeTokenBar.Windows.App.MainWindow"
+<Window x:Class="PokeTokenBar.Windows.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:PokeTokenBar.Windows.App"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        Title="PokeTokenBar"
+        Width="620"
+        Height="680"
+        MinWidth="520"
+        MinHeight="560"
+        WindowStartupLocation="CenterScreen">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <Grid Margin="28">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
-    </Grid>
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel>
+                    <TextBlock Text="PokeTokenBar"
+                               FontSize="24"
+                               FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding ProviderName, Mode=OneWay, TargetNullValue=No usage data}"
+                               Margin="0,6,0,0"
+                               FontSize="16"
+                               Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                    <TextBlock Margin="0,4,0,0"
+                               Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}">
+                        <Run Text="Last updated: " />
+                        <Run Text="{Binding LastUpdatedText, Mode=OneWay, TargetNullValue=—}" />
+                    </TextBlock>
+                </StackPanel>
+
+                <Button Grid.Column="1"
+                        MinWidth="104"
+                        Height="34"
+                        Padding="14,4"
+                        VerticalAlignment="Top"
+                        Command="{Binding RefreshCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Setter Property="Content" Value="Refresh" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsRefreshing, Mode=OneWay}" Value="True">
+                                    <Setter Property="Content" Value="Refreshing…" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </Grid>
+
+            <ComboBox Grid.Row="1"
+                      Margin="0,20,0,0"
+                      ItemsSource="{Binding Providers, Mode=OneWay}"
+                      DisplayMemberPath="DisplayName"
+                      SelectedValuePath="ProviderId"
+                      SelectedValue="{Binding SelectedProviderId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                <ComboBox.Style>
+                    <Style TargetType="ComboBox">
+                        <Setter Property="Visibility" Value="Visible" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Providers.Count, Mode=OneWay}" Value="0">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Providers.Count, Mode=OneWay}" Value="1">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ComboBox.Style>
+            </ComboBox>
+
+            <Border Grid.Row="2"
+                    Margin="0,20,0,0"
+                    Padding="20"
+                    BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                <StackPanel>
+                    <TextBlock Text="Today" FontSize="14" FontWeight="SemiBold" />
+                    <StackPanel Margin="0,8,0,0" Orientation="Horizontal">
+                        <TextBlock Text="{Binding TodayTokensText, Mode=OneWay, TargetNullValue=—}"
+                                   FontSize="34"
+                                   FontWeight="Bold" />
+                        <TextBlock Margin="12,12,0,0"
+                                   Text="{Binding TodayTokensGroupedText, Mode=OneWay}"
+                                   Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                        <TextBlock Margin="12,12,0,0"
+                                   Text="{Binding TodayCostText, Mode=OneWay}"
+                                   Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                    </StackPanel>
+
+                    <Grid Margin="0,18,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Input" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                            <TextBlock Margin="0,4,0,0" Text="{Binding InputTokensText, Mode=OneWay, TargetNullValue=—}" FontWeight="SemiBold" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Output" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                            <TextBlock Margin="0,4,0,0" Text="{Binding OutputTokensText, Mode=OneWay, TargetNullValue=—}" FontWeight="SemiBold" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="Cache write" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                            <TextBlock Margin="0,4,0,0" Text="{Binding CacheWriteTokensText, Mode=OneWay, TargetNullValue=—}" FontWeight="SemiBold" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="3">
+                            <TextBlock Text="Cache read" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                            <TextBlock Margin="0,4,0,0" Text="{Binding CacheReadTokensText, Mode=OneWay, TargetNullValue=—}" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="3"
+                    Margin="0,16,0,0"
+                    Padding="20"
+                    BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                <StackPanel>
+                    <TextBlock Text="Usage periods" FontSize="14" FontWeight="SemiBold" />
+                    <Grid Margin="0,14,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="Recent 5 hours" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                            <TextBlock Margin="0,4,0,0" Text="{Binding RecentFiveHourTokensText, Mode=OneWay, TargetNullValue=—}" FontSize="18" FontWeight="SemiBold" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="This week" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                            <TextBlock Margin="0,4,0,0" Text="{Binding WeekTokensText, Mode=OneWay, TargetNullValue=—}" FontSize="18" FontWeight="SemiBold" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="This month" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                            <TextBlock Margin="0,4,0,0" Text="{Binding MonthTokensText, Mode=OneWay, TargetNullValue=—}" FontSize="18" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="4"
+                    Margin="0,16,0,0"
+                    Padding="12"
+                    Background="#20D97706"
+                    BorderBrush="#FFD97706"
+                    BorderThickness="1"
+                    CornerRadius="6">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Visibility" Value="Visible" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding ErrorMessage, Mode=OneWay}" Value="{x:Null}">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <TextBlock Text="{Binding ErrorMessage, Mode=OneWay}"
+                           Foreground="#FF9A4D00"
+                           TextWrapping="Wrap" />
+            </Border>
+        </Grid>
+    </ScrollViewer>
 </Window>

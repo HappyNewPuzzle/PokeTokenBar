@@ -1,23 +1,23 @@
-﻿using System.Text;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+using PokeTokenBar.Windows.App.Lifecycle;
+using PokeTokenBar.Windows.App.ViewModels;
 
 namespace PokeTokenBar.Windows.App;
 
-/// <summary>
-/// Interaction logic for MainWindow.xaml
-/// </summary>
 public partial class MainWindow : Window
 {
-    public MainWindow()
+    private readonly InitialRefreshController _initialRefresh;
+
+    public MainWindow(UsageViewModel viewModel)
     {
         InitializeComponent();
+        DataContext = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+        _initialRefresh = new InitialRefreshController(viewModel);
+        Loaded += MainWindow_Loaded;
+    }
+
+    private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        await _initialRefresh.StartAsync();
     }
 }
