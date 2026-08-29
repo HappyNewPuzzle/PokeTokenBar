@@ -8,13 +8,19 @@ public sealed class ApplicationComposition : IDisposable
     private readonly HttpClient _httpClient;
     private bool _disposed;
 
-    internal ApplicationComposition(MainViewModel viewModel, HttpClient httpClient)
+    internal ApplicationComposition(
+        MainViewModel viewModel,
+        FloatingPetViewModel floatingPet,
+        HttpClient httpClient)
     {
         ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+        FloatingPet = floatingPet ?? throw new ArgumentNullException(nameof(floatingPet));
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
     }
 
     public MainViewModel ViewModel { get; }
+
+    public FloatingPetViewModel FloatingPet { get; }
 
     public void Dispose()
     {
@@ -24,6 +30,7 @@ public sealed class ApplicationComposition : IDisposable
         }
 
         _disposed = true;
+        FloatingPet.Dispose();
         ViewModel.Dispose();
         _httpClient.Dispose();
     }

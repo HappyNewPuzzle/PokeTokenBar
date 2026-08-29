@@ -36,6 +36,7 @@ public sealed partial class AppCompositionTests
 
         Assert.NotNull(composition.ViewModel.Usage);
         Assert.NotNull(composition.ViewModel.Companion);
+        Assert.NotNull(composition.FloatingPet);
         var companionStore = GetPrivateField<CompanionStore>(
             composition.ViewModel.Companion,
             "_store");
@@ -72,9 +73,12 @@ public sealed partial class AppCompositionTests
         Assert.Contains("new SystemTrayController(", appCode, StringComparison.Ordinal);
         Assert.Contains("new InitialRefreshController(viewModel.Usage)", appCode, StringComparison.Ordinal);
         Assert.Contains("new InitialCompanionController(viewModel.Companion)", appCode, StringComparison.Ordinal);
+        Assert.Contains("new FloatingPokemonWindow(_composition.FloatingPet)", appCode, StringComparison.Ordinal);
+        Assert.Contains("_floatingPet.Start()", appCode, StringComparison.Ordinal);
         Assert.Contains("_initialRefresh.StartAsync()", appCode, StringComparison.Ordinal);
         Assert.Contains("_initialCompanion.StartAsync()", appCode, StringComparison.Ordinal);
         Assert.Contains("_initialCompanion?.Dispose()", appCode, StringComparison.Ordinal);
+        Assert.Contains("_floatingPet?.Dispose()", appCode, StringComparison.Ordinal);
         Assert.Contains("_composition?.Dispose()", appCode, StringComparison.Ordinal);
         Assert.Contains("ShutdownMode.OnMainWindowClose", appCode, StringComparison.Ordinal);
         Assert.Contains("mainWindow.Show()", appCode, StringComparison.Ordinal);

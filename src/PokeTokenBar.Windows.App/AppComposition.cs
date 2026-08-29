@@ -37,8 +37,10 @@ public static class AppComposition
             companionStore,
             spriteLoader,
             new WpfPokemonSpriteDecoder());
+        var floatingPet = new FloatingPetViewModel(companion);
         return new ApplicationComposition(
             new MainViewModel(usage, companion),
+            floatingPet,
             httpClient);
     }
 

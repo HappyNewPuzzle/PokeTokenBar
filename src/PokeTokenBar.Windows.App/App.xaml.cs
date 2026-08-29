@@ -1,4 +1,5 @@
 using System.Windows;
+using PokeTokenBar.Windows.App.FloatingPet;
 using PokeTokenBar.Windows.App.Lifecycle;
 using PokeTokenBar.Windows.App.Tray;
 
@@ -8,6 +9,7 @@ public partial class App : System.Windows.Application
 {
     private ApplicationComposition? _composition;
     private SystemTrayController? _trayController;
+    private FloatingPetController? _floatingPet;
     private InitialRefreshController? _initialRefresh;
     private InitialCompanionController? _initialCompanion;
 
@@ -21,6 +23,10 @@ public partial class App : System.Windows.Application
         var viewModel = _composition.ViewModel;
         var mainWindow = new MainWindow(viewModel);
         MainWindow = mainWindow;
+
+        _floatingPet = new FloatingPetController(
+            new FloatingPokemonWindow(_composition.FloatingPet));
+        _floatingPet.Start();
 
         try
         {
@@ -45,6 +51,7 @@ public partial class App : System.Windows.Application
     protected override void OnExit(ExitEventArgs e)
     {
         _trayController?.Dispose();
+        _floatingPet?.Dispose();
         _initialCompanion?.Dispose();
         (MainWindow as IDisposable)?.Dispose();
         _composition?.Dispose();
