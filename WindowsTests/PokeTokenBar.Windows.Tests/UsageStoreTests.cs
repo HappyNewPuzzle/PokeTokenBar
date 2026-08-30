@@ -382,13 +382,33 @@ public sealed class UsageStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task PeriodsWithoutActiveBlock_DoNotCreateCarrierSnapshot()
+    public async Task MonthWithoutDailyOrActiveBlock_CreatesCarrierSnapshot()
     {
         var enrichment = new ProviderEnrichment(
             ActiveBlock: null,
             BlocksOK: true,
-            WeekTotal: Period(2),
+            WeekTotal: Period(0),
             MonthTotal: Period(3),
+            PeriodsOK: true);
+        var store = Store(Provider("one", daily: null, enrichment: enrichment));
+
+        await store.RefreshAsync();
+
+        var snapshot = Assert.Single(store.Snapshots);
+        Assert.Null(snapshot.Today);
+        Assert.Null(snapshot.ActiveBlock);
+        Assert.Equal(0, snapshot.WeekTotal?.TotalTokens);
+        Assert.Equal(3, snapshot.MonthTotal?.TotalTokens);
+    }
+
+    [Fact]
+    public async Task ZeroPeriodsWithoutDailyOrActiveBlock_RemainsEmpty()
+    {
+        var enrichment = new ProviderEnrichment(
+            ActiveBlock: null,
+            BlocksOK: true,
+            WeekTotal: Period(0),
+            MonthTotal: Period(0),
             PeriodsOK: true);
         var store = Store(Provider("one", daily: null, enrichment: enrichment));
 

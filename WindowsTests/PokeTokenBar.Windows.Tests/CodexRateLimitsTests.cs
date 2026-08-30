@@ -277,6 +277,26 @@ public sealed class CodexRateLimitsTests : IDisposable
         Assert.Null(unavailable.WeeklyLimitText);
     }
 
+    [Fact]
+    public async Task ViewModel_ShowsOfficialLimitsWhenLocalUsageIsEmpty()
+    {
+        var official = new FakeRateLimitsProvider(
+            Status(82, 61, Now.AddHours(1)));
+        var store = new UsageStore(
+            [new FakeUsageProvider(daily: null)],
+            new FixedTimeProvider(Now),
+            official);
+        var viewModel = new UsageViewModel(store, timeProvider: new FixedTimeProvider(Now));
+
+        await viewModel.RefreshAsync();
+
+        Assert.Equal("codex", viewModel.SelectedProviderId);
+        Assert.Null(viewModel.TodayTokens);
+        Assert.True(viewModel.HasCodexRateLimits);
+        Assert.Equal("82%", viewModel.FiveHourLimitText);
+        Assert.Equal("61%", viewModel.WeeklyLimitText);
+    }
+
     private CodexExecutableResolver IsolatedResolver(string baseDirectory) =>
         new(
             path: Path.Combine(_temporaryDirectory, "no-path"),

@@ -355,6 +355,29 @@ public sealed class UsageStore
         {
             // Official limits are best effort. Preserve the previous successful value.
         }
+
+        lock (_stateLock)
+        {
+            if (_codexRateLimits?.HasVisibleLimit != true ||
+                _snapshots.Any(static snapshot => snapshot.ProviderId == "codex"))
+            {
+                return;
+            }
+
+            var provider = _providers.FirstOrDefault(static provider => provider.Id == "codex");
+            if (provider is not null)
+            {
+                _snapshots = Array.AsReadOnly(_snapshots.Append(new ProviderSnapshot(
+                    provider.Id,
+                    provider.DisplayName,
+                    Today: null,
+                    ActiveBlock: null,
+                    WeekTotal: null,
+                    MonthTotal: null,
+                    Now(),
+                    provider.ReportsCost)).ToArray());
+            }
+        }
     }
 
     private void CommitDailyPhase(
@@ -394,7 +417,11 @@ public sealed class UsageStore
                     var hasActiveBlock =
                         outcome.Enrichment.BlocksOK &&
                         outcome.Enrichment.ActiveBlock is not null;
-                    if (hasActiveBlock)
+                    var hasPeriodUsage =
+                        outcome.Enrichment.PeriodsOK &&
+                        ((outcome.Enrichment.WeekTotal?.TotalTokens ?? 0) > 0 ||
+                         (outcome.Enrichment.MonthTotal?.TotalTokens ?? 0) > 0);
+                    if (hasActiveBlock || hasPeriodUsage)
                     {
                         var provider = _providers.FirstOrDefault(candidate =>
                             candidate.Id == outcome.Id);
