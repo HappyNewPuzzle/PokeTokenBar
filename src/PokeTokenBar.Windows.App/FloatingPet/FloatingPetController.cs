@@ -9,6 +9,7 @@ internal sealed class FloatingPetController : IDisposable
     private readonly SettingsViewModel _settings;
     private readonly Action _openPopup;
     private bool _started;
+    private bool _displayAwake = true;
     private bool _disposed;
 
     public FloatingPetController(
@@ -39,6 +40,17 @@ internal sealed class FloatingPetController : IDisposable
         SyncVisibility();
     }
 
+    public void SetDisplayAwake(bool awake)
+    {
+        if (_disposed || _displayAwake == awake)
+        {
+            return;
+        }
+
+        _displayAwake = awake;
+        SyncVisibility();
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -63,7 +75,7 @@ internal sealed class FloatingPetController : IDisposable
             return;
         }
 
-        if (_settings.IsFloatingPetEnabled)
+        if (_settings.IsFloatingPetEnabled && _displayAwake)
         {
             if (!_window.IsVisible)
             {

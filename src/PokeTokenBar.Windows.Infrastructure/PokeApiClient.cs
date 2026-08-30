@@ -15,15 +15,26 @@ public sealed class PokeApiClient : IPokeApiClient
 
     private readonly HttpClient _httpClient;
     private readonly TimeSpan _requestTimeout;
+    private readonly string _baseIndexCachePath;
+    private readonly TimeProvider _timeProvider;
     private readonly object _cacheLock = new();
     private readonly Dictionary<int, SpeciesDto> _speciesCache = [];
     private readonly Dictionary<int, EvoLine> _lineCache = [];
     private IReadOnlyList<BaseSpecies>? _baseIndexCache;
+    private Task<IReadOnlyList<BaseSpecies>>? _baseIndexRefreshTask;
 
-    public PokeApiClient(HttpClient httpClient, TimeSpan? requestTimeout = null)
+    private static readonly TimeSpan BaseIndexFreshness = TimeSpan.FromDays(30);
+
+    public PokeApiClient(
+        HttpClient httpClient,
+        TimeSpan? requestTimeout = null,
+        string? baseIndexCachePath = null,
+        TimeProvider? timeProvider = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _requestTimeout = requestTimeout ?? TimeSpan.FromSeconds(15);
+        _baseIndexCachePath = baseIndexCachePath ?? GetDefaultBaseIndexCachePath();
+        _timeProvider = timeProvider ?? TimeProvider.System;
         if (_requestTimeout <= TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(nameof(requestTimeout));
@@ -88,6 +99,121 @@ public sealed class PokeApiClient : IPokeApiClient
             }
         }
 
+        var disk = await TryReadBaseIndexCacheAsync(cancellationToken).ConfigureAwait(false);
+        if (disk is not null)
+        {
+            lock (_cacheLock)
+            {
+                _baseIndexCache = disk.Entries;
+            }
+
+            if (_timeProvider.GetUtcNow() - disk.FetchedAt >= BaseIndexFreshness)
+            {
+                StartBackgroundBaseIndexRefresh();
+            }
+
+            return disk.Entries;
+        }
+
+        return await GetOrStartBaseIndexRefreshAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private Task<IReadOnlyList<BaseSpecies>> GetOrStartBaseIndexRefreshAsync(
+        CancellationToken cancellationToken)
+    {
+        lock (_cacheLock)
+        {
+            if (_baseIndexRefreshTask is null)
+            {
+                _baseIndexRefreshTask = Task.Run(
+                    () => FetchAndCacheBaseIndexAsync(cancellationToken),
+                    CancellationToken.None);
+                _ = ClearCompletedBaseIndexRefreshAsync(_baseIndexRefreshTask);
+            }
+
+            return _baseIndexRefreshTask;
+        }
+    }
+
+    private void StartBackgroundBaseIndexRefresh()
+    {
+        Task<IReadOnlyList<BaseSpecies>> refresh;
+        lock (_cacheLock)
+        {
+            if (_baseIndexRefreshTask is null)
+            {
+                _baseIndexRefreshTask = Task.Run(
+                    () => FetchAndCacheBaseIndexAsync(CancellationToken.None),
+                    CancellationToken.None);
+                _ = ClearCompletedBaseIndexRefreshAsync(_baseIndexRefreshTask);
+            }
+
+            refresh = _baseIndexRefreshTask;
+        }
+
+        _ = ObserveBackgroundRefreshAsync(refresh);
+    }
+
+    private async Task ClearCompletedBaseIndexRefreshAsync(Task<IReadOnlyList<BaseSpecies>> refresh)
+    {
+        try
+        {
+            await refresh.ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+        }
+        finally
+        {
+            lock (_cacheLock)
+            {
+                if (ReferenceEquals(_baseIndexRefreshTask, refresh))
+                {
+                    _baseIndexRefreshTask = null;
+                }
+            }
+        }
+    }
+
+    private static async Task ObserveBackgroundRefreshAsync(Task<IReadOnlyList<BaseSpecies>> refresh)
+    {
+        try
+        {
+            await refresh.ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // A stale snapshot remains usable. A background cache refresh must not crash the app.
+        }
+    }
+
+    private async Task<IReadOnlyList<BaseSpecies>> FetchAndCacheBaseIndexAsync(
+        CancellationToken cancellationToken)
+    {
+        var entries = await FetchBaseIndexAsync(cancellationToken).ConfigureAwait(false);
+        lock (_cacheLock)
+        {
+            _baseIndexCache = entries;
+        }
+
+        try
+        {
+            await WriteBaseIndexCacheAsync(
+                    new BaseIndexSnapshot(_timeProvider.GetUtcNow(), entries),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            // The network result is still valid in memory even if the optional disk cache cannot be written.
+        }
+
+        return entries;
+    }
+
+    private async Task<IReadOnlyList<BaseSpecies>> FetchBaseIndexAsync(
+        CancellationToken cancellationToken)
+    {
         var query =
             $"{{ pokemonspecies(where: {{evolves_from_species_id: {{_is_null: true}}, id: {{_lte: {PokemonAssets.LastAnimatedSpeciesId}, _neq: {PokemonOdds.DittoSpeciesId}}}}}, order_by: {{id: asc}}) {{ id capture_rate }} }}";
         var body = JsonSerializer.SerializeToUtf8Bytes(new Dictionary<string, string> { ["query"] = query });
@@ -117,13 +243,80 @@ public sealed class PokeApiClient : IPokeApiClient
             throw new InvalidDataException("PokeAPI returned an empty base-species index.");
         }
 
-        lock (_cacheLock)
-        {
-            _baseIndexCache = entries;
-        }
-
         return entries;
     }
+
+    private async Task<BaseIndexSnapshot?> TryReadBaseIndexCacheAsync(
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var stream = new FileStream(
+                _baseIndexCachePath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                4096,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            var snapshot = await JsonSerializer.DeserializeAsync<BaseIndexSnapshot>(
+                    stream,
+                    JsonOptions,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return snapshot is { Entries.Count: > 0 } ? snapshot : null;
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return null;
+        }
+    }
+
+    private async Task WriteBaseIndexCacheAsync(
+        BaseIndexSnapshot snapshot,
+        CancellationToken cancellationToken)
+    {
+        var directory = Path.GetDirectoryName(_baseIndexCachePath);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        var temporaryPath = _baseIndexCachePath + ".tmp-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            await using (var stream = new FileStream(
+                             temporaryPath,
+                             FileMode.CreateNew,
+                             FileAccess.Write,
+                             FileShare.None,
+                             4096,
+                             FileOptions.Asynchronous | FileOptions.WriteThrough))
+            {
+                await JsonSerializer.SerializeAsync(stream, snapshot, JsonOptions, cancellationToken)
+                    .ConfigureAwait(false);
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            File.Move(temporaryPath, _baseIndexCachePath, overwrite: true);
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(temporaryPath);
+            }
+            catch (IOException)
+            {
+            }
+        }
+    }
+
+    private static string GetDefaultBaseIndexCachePath() =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "PokeTokenBar",
+            "base-index.json");
 
     public async Task<BaseSpecies?> GetBaseSpeciesAsync(
         int id,
@@ -310,4 +503,8 @@ public sealed class PokeApiClient : IPokeApiClient
         [JsonPropertyName("capture_rate")]
         public required int CaptureRate { get; init; }
     }
+
+    private sealed record BaseIndexSnapshot(
+        DateTimeOffset FetchedAt,
+        IReadOnlyList<BaseSpecies> Entries);
 }

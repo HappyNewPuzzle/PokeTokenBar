@@ -12,6 +12,7 @@ public partial class App : System.Windows.Application
     private FloatingPetController? _floatingPet;
     private InitialRefreshController? _initialRefresh;
     private InitialCompanionController? _initialCompanion;
+    private PowerLifecycleController? _powerLifecycle;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -55,6 +56,20 @@ public partial class App : System.Windows.Application
             });
         _floatingPet.Start();
 
+        try
+        {
+            _powerLifecycle = new PowerLifecycleController(
+                new WindowsPowerModeEventSource(),
+                viewModel.Usage.RefreshAsync,
+                viewModel.Companion.RefreshAsync,
+                _floatingPet.SetDisplayAwake,
+                action => Dispatcher.BeginInvoke(action));
+        }
+        catch (Exception)
+        {
+            // Power notifications are an optional lifecycle optimization; the tray app remains usable.
+        }
+
         _initialRefresh = new InitialRefreshController(viewModel.Usage);
         _initialCompanion = new InitialCompanionController(viewModel.Companion);
         _ = _initialRefresh.StartAsync();
@@ -63,6 +78,7 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _powerLifecycle?.Dispose();
         _trayController?.Dispose();
         _floatingPet?.Dispose();
         _initialCompanion?.Dispose();

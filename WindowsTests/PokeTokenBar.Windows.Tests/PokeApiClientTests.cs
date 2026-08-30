@@ -5,8 +5,14 @@ using PokeTokenBar.Windows.Infrastructure;
 
 namespace PokeTokenBar.Windows.Tests;
 
-public sealed class PokeApiClientTests
+public sealed class PokeApiClientTests : IDisposable
 {
+    private static readonly DateTimeOffset Now = new(2026, 8, 30, 0, 0, 0, TimeSpan.Zero);
+    private readonly string _temporaryDirectory = Path.Combine(
+        Path.GetTempPath(),
+        "PokeTokenBar.Tests",
+        Guid.NewGuid().ToString("N"));
+
     [Fact]
     public async Task GetLine_UsesSpeciesIdAndTrustedEvolutionEndpoint()
     {
@@ -84,6 +90,107 @@ public sealed class PokeApiClientTests
         Assert.Equal("https://graphql.pokeapi.co/v1beta2", request.Uri);
         Assert.Contains("_lte: 649", request.Body);
         Assert.Contains("_neq: 132", request.Body);
+    }
+
+    [Fact]
+    public async Task BaseIndex_FreshDiskCacheReturnsWithoutNetwork()
+    {
+        await WriteSnapshotAsync(Now - TimeSpan.FromDays(29), [new BaseSpecies(7, 45)]);
+        var handler = new StubHandler(_ => throw new InvalidOperationException("Network must not be used."));
+
+        var result = await CacheClient(handler).GetBaseSpeciesIndexAsync();
+
+        Assert.Equal([new BaseSpecies(7, 45)], result);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task BaseIndex_NoCacheFetchesPersistsAndRoundTrips()
+    {
+        var handler = new StubHandler(_ => Json(
+            """{"data":{"pokemonspecies":[{"id":6,"capture_rate":45}]}}"""));
+
+        var fetched = await CacheClient(handler).GetBaseSpeciesIndexAsync();
+        var offline = new StubHandler(_ => throw new InvalidOperationException("Fresh disk cache expected."));
+        var roundTripped = await CacheClient(offline).GetBaseSpeciesIndexAsync();
+
+        Assert.Equal([new BaseSpecies(6, 45)], fetched);
+        Assert.Equal(fetched, roundTripped);
+        Assert.Single(handler.Requests);
+        Assert.Empty(offline.Requests);
+        Assert.Empty(Directory.EnumerateFiles(_temporaryDirectory, "*.tmp-*"));
+    }
+
+    [Fact]
+    public async Task BaseIndex_StaleCacheReturnsImmediatelyAndRebuildsInBackground()
+    {
+        await WriteSnapshotAsync(Now - TimeSpan.FromDays(30), [new BaseSpecies(7, 45)]);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var requestStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new StubHandler(async (_, cancellationToken) =>
+        {
+            requestStarted.TrySetResult();
+            await release.Task.WaitAsync(cancellationToken);
+            return Json("""{"data":{"pokemonspecies":[{"id":8,"capture_rate":90}]}}""");
+        });
+
+        var result = await CacheClient(handler).GetBaseSpeciesIndexAsync();
+
+        Assert.Equal([new BaseSpecies(7, 45)], result);
+        await requestStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        release.SetResult();
+        await WaitUntilAsync(async () => (await ReadSnapshotEntriesAsync()) == 8);
+    }
+
+    [Fact]
+    public async Task BaseIndex_FailedBackgroundRebuildKeepsStaleSnapshot()
+    {
+        await WriteSnapshotAsync(Now - TimeSpan.FromDays(31), [new BaseSpecies(7, 45)]);
+        var original = await File.ReadAllTextAsync(CachePath);
+        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable));
+
+        var result = await CacheClient(handler).GetBaseSpeciesIndexAsync();
+        await WaitUntilAsync(() => Task.FromResult(handler.Requests.Count == 1));
+
+        Assert.Equal([new BaseSpecies(7, 45)], result);
+        Assert.Equal(original, await File.ReadAllTextAsync(CachePath));
+    }
+
+    [Fact]
+    public async Task BaseIndex_CorruptCacheFallsBackToNetworkAndReplacesIt()
+    {
+        Directory.CreateDirectory(_temporaryDirectory);
+        await File.WriteAllTextAsync(CachePath, "{bad");
+        var handler = new StubHandler(_ => Json(
+            """{"data":{"pokemonspecies":[{"id":9,"capture_rate":120}]}}"""));
+
+        var result = await CacheClient(handler).GetBaseSpeciesIndexAsync();
+
+        Assert.Equal([new BaseSpecies(9, 120)], result);
+        Assert.Equal(9, await ReadSnapshotEntriesAsync());
+    }
+
+    [Fact]
+    public async Task BaseIndex_ConcurrentStaleReadsStartOnlyOneRebuild()
+    {
+        await WriteSnapshotAsync(Now - TimeSpan.FromDays(31), [new BaseSpecies(7, 45)]);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var handler = new StubHandler(async (_, cancellationToken) =>
+        {
+            await release.Task.WaitAsync(cancellationToken);
+            return Json("""{"data":{"pokemonspecies":[{"id":8,"capture_rate":90}]}}""");
+        });
+        var client = CacheClient(handler);
+
+        await Task.WhenAll(
+            client.GetBaseSpeciesIndexAsync(),
+            client.GetBaseSpeciesIndexAsync(),
+            client.GetBaseSpeciesIndexAsync());
+        await WaitUntilAsync(() => Task.FromResult(handler.Requests.Count == 1));
+        release.SetResult();
+        await WaitUntilAsync(async () => (await ReadSnapshotEntriesAsync()) == 8);
+
+        Assert.Single(handler.Requests);
     }
 
     [Fact]
@@ -165,8 +272,52 @@ public sealed class PokeApiClientTests
             Assert.DoesNotContain("/pokemon/", request.Uri, StringComparison.Ordinal));
     }
 
-    private static PokeApiClient Client(StubHandler handler) =>
-        new(new HttpClient(handler), TimeSpan.FromSeconds(5));
+    public void Dispose()
+    {
+        if (Directory.Exists(_temporaryDirectory))
+        {
+            Directory.Delete(_temporaryDirectory, recursive: true);
+        }
+    }
+
+    private string CachePath => Path.Combine(_temporaryDirectory, "base-index.json");
+
+    private PokeApiClient Client(StubHandler handler) =>
+        new(new HttpClient(handler), TimeSpan.FromSeconds(5), CachePath, new FixedTimeProvider(Now));
+
+    private PokeApiClient CacheClient(StubHandler handler) => Client(handler);
+
+    private async Task WriteSnapshotAsync(DateTimeOffset fetchedAt, BaseSpecies[] entries)
+    {
+        Directory.CreateDirectory(_temporaryDirectory);
+        await File.WriteAllTextAsync(
+            CachePath,
+            System.Text.Json.JsonSerializer.Serialize(new { FetchedAt = fetchedAt, Entries = entries }));
+    }
+
+    private async Task<int?> ReadSnapshotEntriesAsync()
+    {
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(await File.ReadAllTextAsync(CachePath));
+            return document.RootElement.GetProperty("Entries")[0].GetProperty("Id").GetInt32();
+        }
+        catch (Exception exception) when (exception is IOException or System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static async Task WaitUntilAsync(Func<Task<bool>> condition)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(3);
+        while (!await condition() && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(20);
+        }
+
+        Assert.True(await condition());
+    }
 
     private static StubHandler HandlerForBulbasaurLine() =>
         new(request => request.RequestUri!.AbsolutePath switch
@@ -257,4 +408,9 @@ public sealed class PokeApiClientTests
     }
 
     private sealed record CapturedRequest(HttpMethod Method, string Uri, string? Body);
+
+    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
 }

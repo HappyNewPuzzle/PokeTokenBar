@@ -29,6 +29,22 @@ public sealed class FloatingPetControllerTests
     }
 
     [Fact]
+    public void DisplaySleepHidesEnabledPetAndWakeRestoresSavedPosition()
+    {
+        var position = new FloatingPetPosition(120, 240);
+        var window = new FakeWindow();
+        using var controller = CreateController(window, new AppSettings(true, position, false));
+        controller.Start();
+
+        controller.SetDisplayAwake(false);
+        controller.SetDisplayAwake(true);
+
+        Assert.True(window.IsVisible);
+        Assert.Equal(2, window.ShowCalls);
+        Assert.Equal(position, window.LastPosition);
+    }
+
+    [Fact]
     public void SettingChangesImmediatelyShowAndHideSameWindow()
     {
         var window = new FakeWindow();
