@@ -71,6 +71,20 @@ public sealed partial class AppCompositionTests
     }
 
     [Fact]
+    public void SingleInstanceGuard_AcquiresOnceAndCanReacquireAfterDispose()
+    {
+        var name = $@"Local\PokeTokenBar.Tests.{Guid.NewGuid():N}";
+        var first = Assert.IsType<SingleInstanceGuard>(SingleInstanceGuard.TryAcquire(name));
+
+        Assert.Null(SingleInstanceGuard.TryAcquire(name));
+
+        first.Dispose();
+        first.Dispose();
+        using var reacquired = Assert.IsType<SingleInstanceGuard>(
+            SingleInstanceGuard.TryAcquire(name));
+    }
+
+    [Fact]
     public void AppStartup_IsAnExplicitCompositionRootWithoutStartupUri()
     {
         var appXaml = ReadRepositoryFile("src", "PokeTokenBar.Windows.App", "App.xaml");
@@ -93,6 +107,11 @@ public sealed partial class AppCompositionTests
         Assert.Contains("_composition?.Dispose()", appCode, StringComparison.Ordinal);
         Assert.Contains("ShutdownMode.OnMainWindowClose", appCode, StringComparison.Ordinal);
         Assert.Contains("mainWindow.Show()", appCode, StringComparison.Ordinal);
+        Assert.Contains("if (_singleInstance is null)", appCode, StringComparison.Ordinal);
+        var guardIndex = appCode.IndexOf("SingleInstanceGuard.TryAcquire()", StringComparison.Ordinal);
+        Assert.True(guardIndex >= 0);
+        Assert.True(
+            guardIndex < appCode.IndexOf("AppComposition.CreateApplication()", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -184,12 +203,12 @@ public sealed partial class AppCompositionTests
             "ErrorMessage",
             "HasCodexRateLimits",
             "HasFiveHourLimit",
-            "FiveHourLimitPercent",
-            "FiveHourLimitText",
+            "FiveHourRemainingPercent",
+            "FiveHourRemainingText",
             "FiveHourResetText",
             "HasWeeklyLimit",
-            "WeeklyLimitPercent",
-            "WeeklyLimitText",
+            "WeeklyRemainingPercent",
+            "WeeklyRemainingText",
             "WeeklyResetText",
         ];
 
@@ -199,6 +218,10 @@ public sealed partial class AppCompositionTests
         Assert.Contains("Binding Settings.IsFloatingPetEnabled", xaml, StringComparison.Ordinal);
         Assert.Contains("Binding Settings.IsLaunchAtStartupEnabled", xaml, StringComparison.Ordinal);
         Assert.Contains("Binding Settings.ResetFloatingPetPositionCommand", xaml, StringComparison.Ordinal);
+        Assert.Contains("Value=\"{Binding Usage.FiveHourRemainingPercent", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding Usage.FiveHourRemainingText", xaml, StringComparison.Ordinal);
+        Assert.Contains("Value=\"{Binding Usage.WeeklyRemainingPercent", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding Usage.WeeklyRemainingText", xaml, StringComparison.Ordinal);
     }
 
     [Fact]

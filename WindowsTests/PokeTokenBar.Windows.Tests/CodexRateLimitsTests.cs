@@ -252,7 +252,7 @@ public sealed class CodexRateLimitsTests : IDisposable
     public async Task ViewModel_MapsOfficialLimitsAndHidesUnavailableData()
     {
         var official = new FakeRateLimitsProvider(
-            Status(82, 61, Now.AddHours(1).AddMinutes(24)));
+            Status(0, 14, Now.AddHours(1).AddMinutes(24)));
         var store = new UsageStore(
             [new FakeUsageProvider(Daily(130))],
             new FixedTimeProvider(Now),
@@ -262,19 +262,19 @@ public sealed class CodexRateLimitsTests : IDisposable
         await viewModel.RefreshAsync();
 
         Assert.True(viewModel.HasCodexRateLimits);
-        Assert.Equal(82, viewModel.FiveHourLimitPercent);
-        Assert.Equal("82%", viewModel.FiveHourLimitText);
+        Assert.Equal(100, viewModel.FiveHourRemainingPercent);
+        Assert.Equal("100% remaining", viewModel.FiveHourRemainingText);
         Assert.Equal("Resets in 1h 24m", viewModel.FiveHourResetText);
-        Assert.Equal(61, viewModel.WeeklyLimitPercent);
-        Assert.Equal("61%", viewModel.WeeklyLimitText);
+        Assert.Equal(86, viewModel.WeeklyRemainingPercent);
+        Assert.Equal("86% remaining", viewModel.WeeklyRemainingText);
 
         var unavailable = new UsageViewModel(
             new UsageStore([new FakeUsageProvider(Daily(1))]),
             timeProvider: new FixedTimeProvider(Now));
         await unavailable.RefreshAsync();
         Assert.False(unavailable.HasCodexRateLimits);
-        Assert.Null(unavailable.FiveHourLimitText);
-        Assert.Null(unavailable.WeeklyLimitText);
+        Assert.Null(unavailable.FiveHourRemainingText);
+        Assert.Null(unavailable.WeeklyRemainingText);
     }
 
     [Fact]
@@ -293,8 +293,26 @@ public sealed class CodexRateLimitsTests : IDisposable
         Assert.Equal("codex", viewModel.SelectedProviderId);
         Assert.Null(viewModel.TodayTokens);
         Assert.True(viewModel.HasCodexRateLimits);
-        Assert.Equal("82%", viewModel.FiveHourLimitText);
-        Assert.Equal("61%", viewModel.WeeklyLimitText);
+        Assert.Equal("18% remaining", viewModel.FiveHourRemainingText);
+        Assert.Equal("39% remaining", viewModel.WeeklyRemainingText);
+    }
+
+    [Theory]
+    [InlineData(100, 0)]
+    [InlineData(-10, 100)]
+    [InlineData(110, 0)]
+    public async Task ViewModel_ClampsRemainingPercentage(int used, int expected)
+    {
+        var store = new UsageStore(
+            [new FakeUsageProvider(Daily(1))],
+            new FixedTimeProvider(Now),
+            new FakeRateLimitsProvider(Status(used, used, Now.AddHours(1))));
+        var viewModel = new UsageViewModel(store, timeProvider: new FixedTimeProvider(Now));
+
+        await viewModel.RefreshAsync();
+
+        Assert.Equal(expected, viewModel.FiveHourRemainingPercent);
+        Assert.Equal(expected, viewModel.WeeklyRemainingPercent);
     }
 
     private CodexExecutableResolver IsolatedResolver(string baseDirectory) =>

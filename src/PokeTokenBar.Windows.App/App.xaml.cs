@@ -7,6 +7,7 @@ namespace PokeTokenBar.Windows.App;
 
 public partial class App : System.Windows.Application
 {
+    private SingleInstanceGuard? _singleInstance;
     private ApplicationComposition? _composition;
     private SystemTrayController? _trayController;
     private FloatingPetController? _floatingPet;
@@ -16,6 +17,13 @@ public partial class App : System.Windows.Application
 
     protected override void OnStartup(StartupEventArgs e)
     {
+        _singleInstance = SingleInstanceGuard.TryAcquire();
+        if (_singleInstance is null)
+        {
+            Shutdown();
+            return;
+        }
+
         base.OnStartup(e);
 
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
@@ -84,6 +92,7 @@ public partial class App : System.Windows.Application
         _initialCompanion?.Dispose();
         (MainWindow as IDisposable)?.Dispose();
         _composition?.Dispose();
+        _singleInstance?.Dispose();
         base.OnExit(e);
     }
 }

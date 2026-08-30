@@ -300,14 +300,14 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="5-hour session" />
                             <TextBlock Grid.Column="1"
-                                       Text="{Binding Usage.FiveHourLimitText, Mode=OneWay}"
+                                       Text="{Binding Usage.FiveHourRemainingText, Mode=OneWay}"
                                        FontWeight="SemiBold" />
                         </Grid>
                         <ProgressBar Margin="0,6,0,0"
                                      Height="6"
                                      Minimum="0"
                                      Maximum="100"
-                                     Value="{Binding Usage.FiveHourLimitPercent, Mode=OneWay}" />
+                                     Value="{Binding Usage.FiveHourRemainingPercent, Mode=OneWay}" />
                         <TextBlock Margin="0,4,0,0"
                                    Text="{Binding Usage.FiveHourResetText, Mode=OneWay}"
                                    FontSize="11"
@@ -332,14 +332,14 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="Weekly" />
                             <TextBlock Grid.Column="1"
-                                       Text="{Binding Usage.WeeklyLimitText, Mode=OneWay}"
+                                       Text="{Binding Usage.WeeklyRemainingText, Mode=OneWay}"
                                        FontWeight="SemiBold" />
                         </Grid>
                         <ProgressBar Margin="0,6,0,0"
                                      Height="6"
                                      Minimum="0"
                                      Maximum="100"
-                                     Value="{Binding Usage.WeeklyLimitPercent, Mode=OneWay}" />
+                                     Value="{Binding Usage.WeeklyRemainingPercent, Mode=OneWay}" />
                         <TextBlock Margin="0,4,0,0"
                                    Text="{Binding Usage.WeeklyResetText, Mode=OneWay}"
                                    FontSize="11"

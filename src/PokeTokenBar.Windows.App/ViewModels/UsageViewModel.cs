@@ -40,12 +40,12 @@ public sealed class UsageViewModel : INotifyPropertyChanged
     private string? _lastUpdatedText;
     private bool _hasCodexRateLimits;
     private bool _hasFiveHourLimit;
-    private int _fiveHourLimitPercent;
-    private string? _fiveHourLimitText;
+    private int _fiveHourRemainingPercent;
+    private string? _fiveHourRemainingText;
     private string? _fiveHourResetText;
     private bool _hasWeeklyLimit;
-    private int _weeklyLimitPercent;
-    private string? _weeklyLimitText;
+    private int _weeklyRemainingPercent;
+    private string? _weeklyRemainingText;
     private string? _weeklyResetText;
 
     public UsageViewModel(
@@ -407,16 +407,16 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         private set => SetField(ref _hasFiveHourLimit, value);
     }
 
-    public int FiveHourLimitPercent
+    public int FiveHourRemainingPercent
     {
-        get => _fiveHourLimitPercent;
-        private set => SetField(ref _fiveHourLimitPercent, value);
+        get => _fiveHourRemainingPercent;
+        private set => SetField(ref _fiveHourRemainingPercent, value);
     }
 
-    public string? FiveHourLimitText
+    public string? FiveHourRemainingText
     {
-        get => _fiveHourLimitText;
-        private set => SetField(ref _fiveHourLimitText, value);
+        get => _fiveHourRemainingText;
+        private set => SetField(ref _fiveHourRemainingText, value);
     }
 
     public string? FiveHourResetText
@@ -431,16 +431,16 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         private set => SetField(ref _hasWeeklyLimit, value);
     }
 
-    public int WeeklyLimitPercent
+    public int WeeklyRemainingPercent
     {
-        get => _weeklyLimitPercent;
-        private set => SetField(ref _weeklyLimitPercent, value);
+        get => _weeklyRemainingPercent;
+        private set => SetField(ref _weeklyRemainingPercent, value);
     }
 
-    public string? WeeklyLimitText
+    public string? WeeklyRemainingText
     {
-        get => _weeklyLimitText;
-        private set => SetField(ref _weeklyLimitText, value);
+        get => _weeklyRemainingText;
+        private set => SetField(ref _weeklyRemainingText, value);
     }
 
     public string? WeeklyResetText
@@ -526,16 +526,19 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         var secondary = snapshot?.Secondary;
 
         HasFiveHourLimit = primary is not null;
-        FiveHourLimitPercent = Math.Clamp(primary?.UsedPercent ?? 0, 0, 100);
-        FiveHourLimitText = primary is null ? null : $"{primary.UsedPercent}%";
+        FiveHourRemainingPercent = RemainingPercent(primary?.UsedPercent);
+        FiveHourRemainingText = primary is null ? null : $"{FiveHourRemainingPercent}% remaining";
         FiveHourResetText = FormatReset(primary?.ResetsAt);
 
         HasWeeklyLimit = secondary is not null;
-        WeeklyLimitPercent = Math.Clamp(secondary?.UsedPercent ?? 0, 0, 100);
-        WeeklyLimitText = secondary is null ? null : $"{secondary.UsedPercent}%";
+        WeeklyRemainingPercent = RemainingPercent(secondary?.UsedPercent);
+        WeeklyRemainingText = secondary is null ? null : $"{WeeklyRemainingPercent}% remaining";
         WeeklyResetText = FormatReset(secondary?.ResetsAt);
         HasCodexRateLimits = HasFiveHourLimit || HasWeeklyLimit;
     }
+
+    private static int RemainingPercent(int? usedPercent) =>
+        100 - Math.Clamp(usedPercent ?? 100, 0, 100);
 
     private string? FormatReset(DateTimeOffset? timestamp)
     {
