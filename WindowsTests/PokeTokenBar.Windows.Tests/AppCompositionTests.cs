@@ -13,7 +13,7 @@ namespace PokeTokenBar.Windows.Tests;
 public sealed partial class AppCompositionTests
 {
     [Fact]
-    public void ProductionComposition_CreatesLocalCodexStoreAndUsageViewModel()
+    public void ProductionComposition_RegistersCodexAndClaudeWithOfficialLimits()
     {
         var viewModel = AppComposition.CreateUsageViewModel();
         var store = GetPrivateField<UsageStore>(viewModel, "_store");
@@ -21,11 +21,17 @@ public sealed partial class AppCompositionTests
         var rateLimitsProvider = GetPrivateField<ICodexRateLimitsProvider>(
             store,
             "_codexRateLimitsProvider");
+        var claudeRateLimitsProvider = GetPrivateField<IClaudeRateLimitsProvider>(
+            store,
+            "_claudeRateLimitsProvider");
 
-        var provider = Assert.Single(providers);
-        Assert.IsType<LocalCodexUsageProvider>(provider);
-        Assert.Equal("codex", provider.Id);
+        Assert.Collection(
+            providers,
+            provider => Assert.IsType<LocalCodexUsageProvider>(provider),
+            provider => Assert.IsType<LocalClaudeUsageProvider>(provider));
+        Assert.Equal(["codex", "claude_code"], providers.Select(provider => provider.Id));
         Assert.IsType<CodexRateLimitsProvider>(rateLimitsProvider);
+        Assert.IsType<ClaudeRateLimitsProvider>(claudeRateLimitsProvider);
         Assert.Empty(viewModel.Providers);
     }
 
@@ -216,6 +222,7 @@ public sealed partial class AppCompositionTests
             "WeeklyRemainingPercent",
             "WeeklyRemainingText",
             "WeeklyResetText",
+            "OfficialLimitsMetadataText",
         ];
 
         Assert.All(expected, property =>

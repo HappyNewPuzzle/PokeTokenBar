@@ -281,6 +281,10 @@
                 </Border.Style>
                 <StackPanel>
                     <TextBlock Text="Limits (official)" FontSize="14" FontWeight="SemiBold" />
+                    <TextBlock Margin="0,4,0,0"
+                               Text="{Binding Usage.OfficialLimitsMetadataText, Mode=OneWay}"
+                               FontSize="11"
+                               Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
 
                     <StackPanel Margin="0,14,0,0">
                         <StackPanel.Style>

@@ -9,6 +9,7 @@ public sealed class UsageStore
     private readonly IReadOnlyList<(string Id, string DisplayName)> _registeredProviders;
     private readonly TimeProvider _timeProvider;
     private readonly ICodexRateLimitsProvider? _codexRateLimitsProvider;
+    private readonly IClaudeRateLimitsProvider? _claudeRateLimitsProvider;
     private readonly object _stateLock = new();
 
     private IReadOnlyList<ProviderSnapshot> _snapshots = Array.Empty<ProviderSnapshot>();
@@ -18,11 +19,14 @@ public sealed class UsageStore
     private bool _refreshPending;
     private CodexRateLimitStatus? _codexRateLimits;
     private DateTimeOffset? _codexRateLimitsUpdatedAt;
+    private ClaudeRateLimitStatus? _claudeRateLimits;
+    private DateTimeOffset? _claudeRateLimitsUpdatedAt;
 
     public UsageStore(
         IEnumerable<IUsageProvider> providers,
         TimeProvider? timeProvider = null,
-        ICodexRateLimitsProvider? codexRateLimitsProvider = null)
+        ICodexRateLimitsProvider? codexRateLimitsProvider = null,
+        IClaudeRateLimitsProvider? claudeRateLimitsProvider = null)
     {
         ArgumentNullException.ThrowIfNull(providers);
 
@@ -39,6 +43,7 @@ public sealed class UsageStore
                 .ToArray());
         _timeProvider = timeProvider ?? TimeProvider.System;
         _codexRateLimitsProvider = codexRateLimitsProvider;
+        _claudeRateLimitsProvider = claudeRateLimitsProvider;
     }
 
     public IReadOnlyList<ProviderSnapshot> Snapshots
@@ -323,7 +328,9 @@ public sealed class UsageStore
 
         cancellationToken.ThrowIfCancellationRequested();
         CommitEnrichmentPhase(enrichmentOutcomes);
-        await RefreshCodexRateLimitsAsync(cancellationToken).ConfigureAwait(false);
+        await Task.WhenAll(
+            RefreshCodexRateLimitsAsync(cancellationToken),
+            RefreshClaudeRateLimitsAsync(cancellationToken)).ConfigureAwait(false);
     }
 
     private async Task RefreshCodexRateLimitsAsync(CancellationToken cancellationToken)
@@ -356,15 +363,56 @@ public sealed class UsageStore
             // Official limits are best effort. Preserve the previous successful value.
         }
 
+        EnsureProviderSnapshotForOfficialLimits(
+            "codex",
+            _codexRateLimits?.HasVisibleLimit == true);
+    }
+
+    private async Task RefreshClaudeRateLimitsAsync(CancellationToken cancellationToken)
+    {
+        if (_claudeRateLimitsProvider is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var limits = await _claudeRateLimitsProvider
+                .FetchAsync(cancellationToken)
+                .ConfigureAwait(false);
+            lock (_stateLock)
+            {
+                _claudeRateLimits = limits;
+                if (limits is not null)
+                {
+                    _claudeRateLimitsUpdatedAt = Now();
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // Claude OAuth limits are best effort; local usage remains available.
+        }
+
+        EnsureProviderSnapshotForOfficialLimits(
+            "claude_code",
+            _claudeRateLimits?.HasVisibleLimit == true);
+    }
+
+    private void EnsureProviderSnapshotForOfficialLimits(string providerId, bool hasVisibleLimit)
+    {
         lock (_stateLock)
         {
-            if (_codexRateLimits?.HasVisibleLimit != true ||
-                _snapshots.Any(static snapshot => snapshot.ProviderId == "codex"))
+            if (!hasVisibleLimit || _snapshots.Any(snapshot => snapshot.ProviderId == providerId))
             {
                 return;
             }
 
-            var provider = _providers.FirstOrDefault(static provider => provider.Id == "codex");
+            var provider = _providers.FirstOrDefault(provider => provider.Id == providerId);
             if (provider is not null)
             {
                 _snapshots = Array.AsReadOnly(_snapshots.Append(new ProviderSnapshot(
@@ -376,6 +424,41 @@ public sealed class UsageStore
                     MonthTotal: null,
                     Now(),
                     provider.ReportsCost)).ToArray());
+            }
+        }
+    }
+
+    public ClaudeRateLimitStatus? ClaudeRateLimits
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _claudeRateLimits;
+            }
+        }
+    }
+
+    public DateTimeOffset? ClaudeRateLimitsUpdatedAt
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _claudeRateLimitsUpdatedAt;
+            }
+        }
+    }
+
+    public bool ClaudeRateLimitsStale
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _claudeRateLimits is not null &&
+                    _claudeRateLimitsUpdatedAt is DateTimeOffset updatedAt &&
+                    Now() - updatedAt > TimeSpan.FromMinutes(15);
             }
         }
     }

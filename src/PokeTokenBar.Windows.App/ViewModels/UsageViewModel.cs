@@ -48,6 +48,7 @@ public sealed class UsageViewModel : INotifyPropertyChanged
     private int _weeklyRemainingPercent;
     private string? _weeklyRemainingText;
     private string? _weeklyResetText;
+    private string? _officialLimitsMetadataText;
 
     public UsageViewModel(
         UsageStore store,
@@ -460,6 +461,12 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         private set => SetField(ref _weeklyResetText, value);
     }
 
+    public string? OfficialLimitsMetadataText
+    {
+        get => _officialLimitsMetadataText;
+        private set => SetField(ref _officialLimitsMetadataText, value);
+    }
+
     public Task RefreshAsync(CancellationToken cancellationToken = default) =>
         RefreshAsync(scheduleEmptyRetry: true, cancellationToken);
 
@@ -541,27 +548,56 @@ public sealed class UsageViewModel : INotifyPropertyChanged
 
     private void ApplyOfficialLimits(string? selectedProviderId)
     {
-        var status = selectedProviderId == "codex" ? _store.CodexRateLimits : null;
-        var snapshot = status?.RateLimits.HasVisibleLimit == true
-            ? status.RateLimits
-            : status?.VisibleSnapshots.FirstOrDefault();
-        var primary = snapshot?.Primary;
-        var secondary = snapshot?.Secondary;
+        double? primaryUsed = null;
+        double? secondaryUsed = null;
+        DateTimeOffset? primaryReset = null;
+        DateTimeOffset? secondaryReset = null;
+        OfficialLimitsMetadataText = null;
 
-        HasFiveHourLimit = primary is not null;
-        FiveHourRemainingPercent = RemainingPercent(primary?.UsedPercent);
-        FiveHourRemainingText = primary is null ? null : $"{FiveHourRemainingPercent}% remaining";
-        FiveHourResetText = FormatReset(primary?.ResetsAt);
+        if (selectedProviderId == "codex")
+        {
+            var status = _store.CodexRateLimits;
+            var snapshot = status?.RateLimits.HasVisibleLimit == true
+                ? status.RateLimits
+                : status?.VisibleSnapshots.FirstOrDefault();
+            primaryUsed = snapshot?.Primary?.UsedPercent;
+            secondaryUsed = snapshot?.Secondary?.UsedPercent;
+            primaryReset = snapshot?.Primary?.ResetsAt;
+            secondaryReset = snapshot?.Secondary?.ResetsAt;
+        }
+        else if (selectedProviderId == "claude_code")
+        {
+            var status = _store.ClaudeRateLimits;
+            primaryUsed = status?.FiveHour?.UsedPercent;
+            secondaryUsed = status?.SevenDay?.UsedPercent;
+            primaryReset = status?.FiveHour?.ResetsAt;
+            secondaryReset = status?.SevenDay?.ResetsAt;
+            OfficialLimitsMetadataText = string.Join(
+                " · ",
+                new[] { status?.PlanDisplay, status?.AccountDisplay }
+                    .Where(static value => !string.IsNullOrWhiteSpace(value))!);
+            if (OfficialLimitsMetadataText.Length == 0)
+            {
+                OfficialLimitsMetadataText = null;
+            }
+        }
 
-        HasWeeklyLimit = secondary is not null;
-        WeeklyRemainingPercent = RemainingPercent(secondary?.UsedPercent);
-        WeeklyRemainingText = secondary is null ? null : $"{WeeklyRemainingPercent}% remaining";
-        WeeklyResetText = FormatReset(secondary?.ResetsAt);
+        HasFiveHourLimit = primaryUsed is not null;
+        FiveHourRemainingPercent = RemainingPercent(primaryUsed);
+        FiveHourRemainingText = primaryUsed is null ? null : $"{FiveHourRemainingPercent}% remaining";
+        FiveHourResetText = FormatReset(primaryReset);
+
+        HasWeeklyLimit = secondaryUsed is not null;
+        WeeklyRemainingPercent = RemainingPercent(secondaryUsed);
+        WeeklyRemainingText = secondaryUsed is null ? null : $"{WeeklyRemainingPercent}% remaining";
+        WeeklyResetText = FormatReset(secondaryReset);
         HasCodexRateLimits = HasFiveHourLimit || HasWeeklyLimit;
     }
 
-    private static int RemainingPercent(int? usedPercent) =>
-        100 - Math.Clamp(usedPercent ?? 100, 0, 100);
+    private static int RemainingPercent(double? usedPercent) =>
+        100 - (int)Math.Round(
+            Math.Clamp(usedPercent ?? 100, 0, 100),
+            MidpointRounding.AwayFromZero);
 
     private string? FormatReset(DateTimeOffset? timestamp)
     {

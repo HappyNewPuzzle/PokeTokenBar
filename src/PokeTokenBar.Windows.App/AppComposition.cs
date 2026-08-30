@@ -69,11 +69,17 @@ public static class AppComposition
 
     public static UsageViewModel CreateUsageViewModel()
     {
-        IUsageProvider provider = new LocalCodexUsageProvider();
-        ICodexRateLimitsProvider rateLimitsProvider = new CodexRateLimitsProvider();
+        IUsageProvider[] providers =
+        [
+            new LocalCodexUsageProvider(),
+            new LocalClaudeUsageProvider(),
+        ];
+        ICodexRateLimitsProvider codexRateLimitsProvider = new CodexRateLimitsProvider();
+        IClaudeRateLimitsProvider claudeRateLimitsProvider = new ClaudeRateLimitsProvider();
         var store = new UsageStore(
-            [provider],
-            codexRateLimitsProvider: rateLimitsProvider);
+            providers,
+            codexRateLimitsProvider: codexRateLimitsProvider,
+            claudeRateLimitsProvider: claudeRateLimitsProvider);
         return new UsageViewModel(store);
     }
 }
