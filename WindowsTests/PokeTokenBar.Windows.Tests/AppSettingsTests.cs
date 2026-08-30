@@ -87,6 +87,19 @@ public sealed class AppSettingsTests : IDisposable
     }
 
     [Fact]
+    public void AutoStartLaunchCommandQuotesPublishedExePathContainingSpaces()
+    {
+        var releaseDirectory = Path.Combine(_directory, "Published App");
+        Directory.CreateDirectory(releaseDirectory);
+        var executable = Path.Combine(releaseDirectory, "PokeTokenBar.exe");
+        File.WriteAllBytes(executable, []);
+
+        var command = WindowsAutoStartService.CreateLaunchCommand(executable);
+
+        Assert.Equal($"\"{Path.GetFullPath(executable)}\"", command);
+    }
+
+    [Fact]
     public void SettingsViewModelMapsPersistenceAndRevertsRegistryFailure()
     {
         var persistence = new FakePersistence(

@@ -169,6 +169,17 @@ swift test                   # unit tests
 ./scripts/build-app.sh       # release → PokeTokenBar.app → /Applications
 ```
 
+### Windows port
+
+The in-progress Windows port lives on the `windows-port` branch and runs as a system-tray app. It requires Windows x64 and the .NET 10 SDK when building from source.
+
+```powershell
+dotnet run --project src/PokeTokenBar.Windows.App/PokeTokenBar.Windows.App.csproj
+dotnet publish src/PokeTokenBar.Windows.App/PokeTokenBar.Windows.App.csproj -c Release -r win-x64 --self-contained true -o artifacts/publish/win-x64
+```
+
+The self-contained publish does not require a separately installed .NET runtime. Settings and companion/cache data are stored under `%LOCALAPPDATA%\PokeTokenBar`; Codex usage is read from `%USERPROFILE%\.codex\sessions` and `%USERPROFILE%\.codex\archived_sessions`. The main window starts hidden—use the tray icon to open it.
+
 ## Data sources
 
 | Source | Used for | Notes |
