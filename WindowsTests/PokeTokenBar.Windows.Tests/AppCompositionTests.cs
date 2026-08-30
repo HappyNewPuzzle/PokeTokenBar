@@ -36,10 +36,15 @@ public sealed partial class AppCompositionTests
         var httpClient = new HttpClient(handler);
         var persistence = new FakeCompanionPersistence();
 
-        using var composition = AppComposition.CreateApplication(httpClient, persistence);
+        using var composition = AppComposition.CreateApplication(
+            httpClient,
+            persistence,
+            new FakeSettingsPersistence(),
+            new FakeAutoStartService());
 
         Assert.NotNull(composition.ViewModel.Usage);
         Assert.NotNull(composition.ViewModel.Companion);
+        Assert.NotNull(composition.ViewModel.Settings);
         Assert.NotNull(composition.FloatingPet);
         var companionStore = GetPrivateField<CompanionStore>(
             composition.ViewModel.Companion,
@@ -55,7 +60,9 @@ public sealed partial class AppCompositionTests
         var handler = new TrackingHttpHandler();
         var composition = AppComposition.CreateApplication(
             new HttpClient(handler),
-            new FakeCompanionPersistence());
+            new FakeCompanionPersistence(),
+            new FakeSettingsPersistence(),
+            new FakeAutoStartService());
 
         composition.Dispose();
         composition.Dispose();
@@ -189,6 +196,9 @@ public sealed partial class AppCompositionTests
         Assert.All(expected, property =>
             Assert.Contains($"Binding Usage.{property}", xaml, StringComparison.Ordinal));
         Assert.Contains("Command=\"{Binding Usage.RefreshCommand}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Binding Settings.IsFloatingPetEnabled", xaml, StringComparison.Ordinal);
+        Assert.Contains("Binding Settings.IsLaunchAtStartupEnabled", xaml, StringComparison.Ordinal);
+        Assert.Contains("Binding Settings.ResetFloatingPetPositionCommand", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -238,7 +248,11 @@ public sealed partial class AppCompositionTests
         Assert.All(bindings, match =>
         {
             var path = match.Groups[1].Value;
-            if (path is "Usage.SelectedProviderId" or "Usage.RefreshCommand")
+            if (path is "Usage.SelectedProviderId" or
+                "Usage.RefreshCommand" or
+                "Settings.IsFloatingPetEnabled" or
+                "Settings.IsLaunchAtStartupEnabled" or
+                "Settings.ResetFloatingPetPositionCommand")
             {
                 return;
             }
@@ -399,6 +413,19 @@ public sealed partial class AppCompositionTests
 
         public void Save(CompanionState state) { }
         public void Delete() { }
+    }
+
+    private sealed class FakeSettingsPersistence : IAppSettingsPersistence
+    {
+        public AppSettings? Load() => null;
+        public void Save(AppSettings settings) { }
+    }
+
+    private sealed class FakeAutoStartService : IAutoStartService
+    {
+        public bool IsAvailable => true;
+        public bool IsEnabled { get; private set; }
+        public void SetEnabled(bool enabled) => IsEnabled = enabled;
     }
 
     private sealed class TrackingHttpHandler : HttpMessageHandler

@@ -13,7 +13,11 @@ public static class AppComposition
         var httpClient = new HttpClient();
         try
         {
-            return CreateApplication(httpClient, new JsonCompanionPersistence());
+            return CreateApplication(
+                httpClient,
+                new JsonCompanionPersistence(),
+                new JsonAppSettingsPersistence(),
+                new WindowsAutoStartService());
         }
         catch
         {
@@ -24,10 +28,14 @@ public static class AppComposition
 
     internal static ApplicationComposition CreateApplication(
         HttpClient httpClient,
-        ICompanionPersistence persistence)
+        ICompanionPersistence persistence,
+        IAppSettingsPersistence settingsPersistence,
+        IAutoStartService autoStartService)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(persistence);
+        ArgumentNullException.ThrowIfNull(settingsPersistence);
+        ArgumentNullException.ThrowIfNull(autoStartService);
 
         var usage = CreateUsageViewModel();
         var api = new PokeApiClient(httpClient);
@@ -38,8 +46,9 @@ public static class AppComposition
             spriteLoader,
             new WpfPokemonSpriteDecoder());
         var floatingPet = new FloatingPetViewModel(companion);
+        var settings = new SettingsViewModel(settingsPersistence, autoStartService);
         return new ApplicationComposition(
-            new MainViewModel(usage, companion),
+            new MainViewModel(usage, companion, settings),
             floatingPet,
             httpClient);
     }

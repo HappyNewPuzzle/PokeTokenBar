@@ -62,4 +62,24 @@ public sealed class FloatingPetPositionerTests
         Assert.Equal(404, placement.Left);
         Assert.Equal(404, placement.Top);
     }
+
+    [Fact]
+    public void SavedPositionIsClampedInsideItsExistingMonitor()
+    {
+        var area = new Rect(-1280, 0, 1280, 1040);
+        var placement = FloatingPetPositioner.Restore(
+            [area], new Point(-40, 1000), new Size(96, 96), area);
+        Assert.Equal(-96, placement.Left);
+        Assert.Equal(944, placement.Top);
+    }
+
+    [Fact]
+    public void PositionOutsideAllMonitorsFallsBackToCurrentMonitorDefault()
+    {
+        var primary = new Rect(0, 0, 1920, 1040);
+        var placement = FloatingPetPositioner.Restore(
+            [primary], new Point(9000, 9000), new Size(96, 96), primary);
+        Assert.Equal(1800, placement.Left);
+        Assert.Equal(920, placement.Top);
+    }
 }

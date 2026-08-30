@@ -53,10 +53,12 @@ public sealed class FloatingPokemonWindowContractTests
         var code = ReadRepositoryFile(
             "src", "PokeTokenBar.Windows.App", "FloatingPet", "FloatingPokemonWindow.xaml.cs");
 
-        Assert.Contains("Forms.Screen.FromPoint(cursor)", code, StringComparison.Ordinal);
+        Assert.Contains("Forms.Screen.FromPoint(Forms.Cursor.Position)", code, StringComparison.Ordinal);
         Assert.Contains("screen.WorkingArea", code, StringComparison.Ordinal);
         Assert.Contains("VisualTreeHelper.GetDpi(this)", code, StringComparison.Ordinal);
         Assert.Contains("FloatingPetPositioner.Calculate(", code, StringComparison.Ordinal);
+        Assert.Contains("FloatingPetPositioner.Restore(", code, StringComparison.Ordinal);
+        Assert.Contains("FloatingPetPositioner.Clamp(", code, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -66,10 +68,24 @@ public sealed class FloatingPokemonWindowContractTests
             "src", "PokeTokenBar.Windows.App", "App.xaml.cs");
 
         Assert.Contains("new FloatingPokemonWindow(_composition.FloatingPet)", code, StringComparison.Ordinal);
+        Assert.Contains("viewModel.Settings", code, StringComparison.Ordinal);
         Assert.Contains("_floatingPet.Start()", code, StringComparison.Ordinal);
         Assert.Contains("_floatingPet?.Dispose()", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("_floatingPet.Hide", code, StringComparison.Ordinal);
-        Assert.DoesNotContain("_floatingPet.Toggle", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WindowSeparatesFourDipClickFromDragAndProvidesSwiftContextActions()
+    {
+        var code = ReadRepositoryFile(
+            "src", "PokeTokenBar.Windows.App", "FloatingPet", "FloatingPokemonWindow.xaml.cs");
+
+        Assert.Contains("ClickThreshold = 4", code, StringComparison.Ordinal);
+        Assert.Contains("OnMouseLeftButtonDown", code, StringComparison.Ordinal);
+        Assert.Contains("OnMouseMove", code, StringComparison.Ordinal);
+        Assert.Contains("OnMouseLeftButtonUp", code, StringComparison.Ordinal);
+        Assert.Contains("CommitPosition()", code, StringComparison.Ordinal);
+        Assert.Contains("Open Token Bar", code, StringComparison.Ordinal);
+        Assert.Contains("Hide Floating Pokémon", code, StringComparison.Ordinal);
     }
 
     [Fact]

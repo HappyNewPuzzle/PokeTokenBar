@@ -4,15 +4,21 @@ public sealed class MainViewModel : IDisposable
 {
     private bool _disposed;
 
-    public MainViewModel(UsageViewModel usage, CompanionViewModel companion)
+    public MainViewModel(
+        UsageViewModel usage,
+        CompanionViewModel companion,
+        SettingsViewModel settings)
     {
         Usage = usage ?? throw new ArgumentNullException(nameof(usage));
         Companion = companion ?? throw new ArgumentNullException(nameof(companion));
+        Settings = settings ?? throw new ArgumentNullException(nameof(settings));
     }
 
     public UsageViewModel Usage { get; }
 
     public CompanionViewModel Companion { get; }
+
+    public SettingsViewModel Settings { get; }
 
     public void Dispose()
     {

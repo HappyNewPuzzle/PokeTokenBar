@@ -24,6 +24,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <Border Grid.Row="0"
@@ -348,6 +349,45 @@
             </Border>
 
             <Border Grid.Row="6"
+                    Margin="0,16,0,0"
+                    Padding="20"
+                    BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                <StackPanel>
+                    <TextBlock Text="Settings" FontSize="14" FontWeight="SemiBold" />
+                    <CheckBox Margin="0,14,0,0"
+                              Content="Show Floating Pokémon"
+                              IsChecked="{Binding Settings.IsFloatingPetEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <CheckBox Margin="0,10,0,0"
+                              Content="Launch at startup"
+                              IsChecked="{Binding Settings.IsLaunchAtStartupEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              IsEnabled="{Binding Settings.IsLaunchAtStartupAvailable, Mode=OneWay}" />
+                    <Button Margin="0,12,0,0"
+                            HorizontalAlignment="Left"
+                            Padding="12,5"
+                            Content="Reset Floating Position"
+                            Command="{Binding Settings.ResetFloatingPetPositionCommand}" />
+                    <TextBlock Margin="0,8,0,0"
+                               Text="{Binding Settings.ErrorMessage, Mode=OneWay}"
+                               Foreground="#FFC62828"
+                               FontSize="11"
+                               TextWrapping="Wrap">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Settings.ErrorMessage, Mode=OneWay}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Row="7"
                     Margin="0,16,0,0"
                     Padding="12"
                     Background="#20D97706"

@@ -1,5 +1,6 @@
 using System.Windows;
 using Size = System.Windows.Size;
+using Point = System.Windows.Point;
 
 namespace PokeTokenBar.Windows.App.FloatingPet;
 
@@ -29,6 +30,52 @@ internal static class FloatingPetPositioner
         return new FloatingPetPlacement(
             Math.Clamp(left, workingArea.Left, Math.Max(workingArea.Left, workingArea.Right - width)),
             Math.Clamp(top, workingArea.Top, Math.Max(workingArea.Top, workingArea.Bottom - height)),
+            width,
+            height);
+    }
+
+    public static FloatingPetPlacement Restore(
+        IReadOnlyList<Rect> workingAreas,
+        Point desiredOrigin,
+        Size preferredSize,
+        Rect fallbackWorkingArea,
+        double margin = DefaultMargin)
+    {
+        var desired = new Rect(desiredOrigin, preferredSize);
+        Rect? matchingArea = null;
+        foreach (var area in workingAreas)
+        {
+            if (area.IntersectsWith(desired))
+            {
+                matchingArea = area;
+                break;
+            }
+        }
+
+        if (matchingArea is not Rect availableArea)
+        {
+            return Calculate(fallbackWorkingArea, preferredSize, margin);
+        }
+
+        return Clamp(availableArea, desiredOrigin, preferredSize);
+    }
+
+    public static FloatingPetPlacement Clamp(
+        Rect workingArea,
+        Point desiredOrigin,
+        Size preferredSize)
+    {
+        var width = Math.Min(Math.Max(0, preferredSize.Width), workingArea.Width);
+        var height = Math.Min(Math.Max(0, preferredSize.Height), workingArea.Height);
+        return new FloatingPetPlacement(
+            Math.Clamp(
+                desiredOrigin.X,
+                workingArea.Left,
+                Math.Max(workingArea.Left, workingArea.Right - width)),
+            Math.Clamp(
+                desiredOrigin.Y,
+                workingArea.Top,
+                Math.Max(workingArea.Top, workingArea.Bottom - height)),
             width,
             height);
     }

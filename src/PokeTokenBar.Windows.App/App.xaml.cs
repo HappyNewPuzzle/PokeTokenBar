@@ -24,10 +24,6 @@ public partial class App : System.Windows.Application
         var mainWindow = new MainWindow(viewModel);
         MainWindow = mainWindow;
 
-        _floatingPet = new FloatingPetController(
-            new FloatingPokemonWindow(_composition.FloatingPet));
-        _floatingPet.Start();
-
         try
         {
             _trayController = new SystemTrayController(
@@ -41,6 +37,23 @@ public partial class App : System.Windows.Application
             ShutdownMode = ShutdownMode.OnMainWindowClose;
             mainWindow.Show();
         }
+
+        _floatingPet = new FloatingPetController(
+            new FloatingPokemonWindow(_composition.FloatingPet),
+            viewModel.Settings,
+            () =>
+            {
+                if (_trayController is not null)
+                {
+                    _trayController.ShowWindow();
+                }
+                else
+                {
+                    mainWindow.Show();
+                    mainWindow.Activate();
+                }
+            });
+        _floatingPet.Start();
 
         _initialRefresh = new InitialRefreshController(viewModel.Usage);
         _initialCompanion = new InitialCompanionController(viewModel.Companion);
