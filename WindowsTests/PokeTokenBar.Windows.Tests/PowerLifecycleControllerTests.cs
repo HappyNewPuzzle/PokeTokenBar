@@ -11,12 +11,15 @@ public sealed class PowerLifecycleControllerTests
         var displayStates = new List<bool>();
         var usageCalls = 0;
         var companionCalls = 0;
+        var pollingStates = new List<string>();
         using var controller = new PowerLifecycleController(
             events,
             _ => { usageCalls++; return Task.CompletedTask; },
             _ => { companionCalls++; return Task.CompletedTask; },
             displayStates.Add,
-            action => action());
+            action => action(),
+            () => pollingStates.Add("paused"),
+            () => pollingStates.Add("resumed"));
 
         events.Suspend();
         events.Resume();
@@ -25,6 +28,7 @@ public sealed class PowerLifecycleControllerTests
         Assert.Equal([false, true], displayStates);
         Assert.Equal(1, usageCalls);
         Assert.Equal(1, companionCalls);
+        Assert.Equal(["paused", "resumed"], pollingStates);
     }
 
     [Fact]
@@ -41,6 +45,30 @@ public sealed class PowerLifecycleControllerTests
         await controller.RecoveryTask;
 
         Assert.Equal(2, calls);
+    }
+
+    [Fact]
+    public async Task RepeatedResumeRestoresPollingOnlyOnce()
+    {
+        var events = new FakePowerEvents();
+        var pauses = 0;
+        var resumes = 0;
+        using var controller = new PowerLifecycleController(
+            events,
+            _ => Task.CompletedTask,
+            _ => Task.CompletedTask,
+            _ => { },
+            action => action(),
+            () => pauses++,
+            () => resumes++);
+
+        events.Suspend();
+        events.Resume();
+        events.Resume();
+        await controller.RecoveryTask;
+
+        Assert.Equal(1, pauses);
+        Assert.Equal(1, resumes);
     }
 
     [Fact]

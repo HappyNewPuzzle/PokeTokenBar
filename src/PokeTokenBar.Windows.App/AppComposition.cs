@@ -1,4 +1,5 @@
 using System.Net.Http;
+using PokeTokenBar.Windows.App.Lifecycle;
 using PokeTokenBar.Windows.App.ViewModels;
 using PokeTokenBar.Windows.App.Sprites;
 using PokeTokenBar.Windows.Core;
@@ -17,7 +18,9 @@ public static class AppComposition
                 httpClient,
                 new JsonCompanionPersistence(),
                 new JsonAppSettingsPersistence(),
-                new WindowsAutoStartService());
+                new WindowsAutoStartService(),
+                operation => System.Windows.Application.Current.Dispatcher
+                    .InvokeAsync(operation).Task.Unwrap());
         }
         catch
         {
@@ -30,7 +33,8 @@ public static class AppComposition
         HttpClient httpClient,
         ICompanionPersistence persistence,
         IAppSettingsPersistence settingsPersistence,
-        IAutoStartService autoStartService)
+        IAutoStartService autoStartService,
+        Func<Func<Task>, Task>? usageRefreshDispatcher = null)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(persistence);
@@ -47,9 +51,14 @@ public static class AppComposition
             new WpfPokemonSpriteDecoder());
         var floatingPet = new FloatingPetViewModel(companion);
         var settings = new SettingsViewModel(settingsPersistence, autoStartService);
+        var usagePolling = new UsagePollingController(
+            usage,
+            settings,
+            dispatchAsync: usageRefreshDispatcher);
         return new ApplicationComposition(
             new MainViewModel(usage, companion, settings),
             floatingPet,
+            usagePolling,
             httpClient);
     }
 

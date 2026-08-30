@@ -7,6 +7,8 @@ internal sealed class PowerLifecycleController : IDisposable
     private readonly Func<CancellationToken, Task> _refreshCompanion;
     private readonly Action<bool> _setDisplayAwake;
     private readonly Action<Action> _dispatch;
+    private readonly Action _pausePolling;
+    private readonly Action _resumePolling;
     private readonly object _sync = new();
     private CancellationTokenSource? _recoveryCancellation;
     private Task _recoveryTask = Task.CompletedTask;
@@ -18,13 +20,17 @@ internal sealed class PowerLifecycleController : IDisposable
         Func<CancellationToken, Task> refreshUsage,
         Func<CancellationToken, Task> refreshCompanion,
         Action<bool> setDisplayAwake,
-        Action<Action> dispatch)
+        Action<Action> dispatch,
+        Action? pausePolling = null,
+        Action? resumePolling = null)
     {
         _events = events ?? throw new ArgumentNullException(nameof(events));
         _refreshUsage = refreshUsage ?? throw new ArgumentNullException(nameof(refreshUsage));
         _refreshCompanion = refreshCompanion ?? throw new ArgumentNullException(nameof(refreshCompanion));
         _setDisplayAwake = setDisplayAwake ?? throw new ArgumentNullException(nameof(setDisplayAwake));
         _dispatch = dispatch ?? throw new ArgumentNullException(nameof(dispatch));
+        _pausePolling = pausePolling ?? (() => { });
+        _resumePolling = resumePolling ?? (() => { });
         _events.Suspending += OnSuspending;
         _events.Resumed += OnResumed;
     }
@@ -83,6 +89,7 @@ internal sealed class PowerLifecycleController : IDisposable
 
         cancellation?.Cancel();
         cancellation?.Dispose();
+        _pausePolling();
         _setDisplayAwake(false);
     }
 
@@ -127,13 +134,20 @@ internal sealed class PowerLifecycleController : IDisposable
         }
         finally
         {
+            var resumePolling = false;
             lock (_sync)
             {
                 if (ReferenceEquals(_recoveryCancellation, cancellation))
                 {
                     _recoveryCancellation = null;
                     cancellation.Dispose();
+                    resumePolling = !_disposed && !_suspended;
                 }
+            }
+
+            if (resumePolling)
+            {
+                _resumePolling();
             }
         }
     }

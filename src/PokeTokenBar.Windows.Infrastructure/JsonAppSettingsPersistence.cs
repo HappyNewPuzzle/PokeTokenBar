@@ -86,8 +86,9 @@ public sealed class JsonAppSettingsPersistence : IAppSettingsPersistence
     }
 
     private static bool IsValid(AppSettings settings) =>
-        settings.FloatingPetPosition is not { } position ||
-        (double.IsFinite(position.Left) && double.IsFinite(position.Top));
+        Enum.IsDefined(settings.RefreshInterval) &&
+        (settings.FloatingPetPosition is not { } position ||
+         (double.IsFinite(position.Left) && double.IsFinite(position.Top)));
 
     private void BackupCorruptFile()
     {

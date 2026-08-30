@@ -24,6 +24,7 @@ public sealed class AppSettingsTests : IDisposable
         Assert.False(AppSettings.Default.FloatingPetEnabled);
         Assert.Null(AppSettings.Default.FloatingPetPosition);
         Assert.False(AppSettings.Default.LaunchAtStartup);
+        Assert.Equal(RefreshIntervalMode.TwoMinutes, AppSettings.Default.RefreshInterval);
     }
 
     [Fact]
@@ -34,12 +35,27 @@ public sealed class AppSettingsTests : IDisposable
         var settings = new AppSettings(
             true,
             new FloatingPetPosition(-120.5, 480.25),
-            true);
+            true,
+            RefreshIntervalMode.FiveMinutes);
 
         persistence.Save(settings);
 
         Assert.Equal(settings, persistence.Load());
         Assert.Empty(Directory.GetFiles(_directory, "*.tmp"));
+    }
+
+    [Fact]
+    public void OldSettingsWithoutRefreshIntervalUseMacOsDefault()
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "settings.json");
+        File.WriteAllText(path, """
+            {"floatingPetEnabled":true,"launchAtStartup":false}
+            """);
+
+        var loaded = new JsonAppSettingsPersistence(path).Load();
+
+        Assert.Equal(RefreshIntervalMode.TwoMinutes, loaded?.RefreshInterval);
     }
 
     [Fact]
@@ -116,6 +132,21 @@ public sealed class AppSettingsTests : IDisposable
         Assert.False(viewModel.IsLaunchAtStartupEnabled);
         Assert.Equal("registry denied", viewModel.ErrorMessage);
         Assert.False(persistence.LastSaved?.LaunchAtStartup ?? true);
+    }
+
+    [Fact]
+    public void RefreshIntervalSelectionPersistsAndRaisesRescheduleSignal()
+    {
+        var persistence = new FakePersistence(AppSettings.Default);
+        var viewModel = new SettingsViewModel(persistence, new FakeAutoStart());
+        RefreshIntervalMode? changed = null;
+        viewModel.RefreshIntervalChanged += value => changed = value;
+
+        viewModel.SelectedRefreshInterval = RefreshIntervalMode.FifteenMinutes;
+
+        Assert.Equal(RefreshIntervalMode.FifteenMinutes, changed);
+        Assert.Equal(RefreshIntervalMode.FifteenMinutes, persistence.LastSaved?.RefreshInterval);
+        Assert.Equal(5, viewModel.RefreshIntervalOptions.Count);
     }
 
     private sealed class FakeRunKey : IUserRunKey

@@ -7,11 +7,23 @@ namespace PokeTokenBar.Windows.App.ViewModels;
 
 public sealed class SettingsViewModel : INotifyPropertyChanged
 {
+    public sealed record RefreshIntervalOption(RefreshIntervalMode Value, string Label);
+
+    private static readonly IReadOnlyList<RefreshIntervalOption> IntervalOptions =
+    [
+        new(RefreshIntervalMode.Manual, "Manual"),
+        new(RefreshIntervalMode.OneMinute, "1 minute"),
+        new(RefreshIntervalMode.TwoMinutes, "2 minutes"),
+        new(RefreshIntervalMode.FiveMinutes, "5 minutes"),
+        new(RefreshIntervalMode.FifteenMinutes, "15 minutes"),
+    ];
+
     private readonly IAppSettingsPersistence _persistence;
     private readonly IAutoStartService _autoStart;
     private AppSettings _settings;
     private bool _isFloatingPetEnabled;
     private bool _isLaunchAtStartupEnabled;
+    private RefreshIntervalMode _selectedRefreshInterval;
     private string? _errorMessage;
 
     public SettingsViewModel(
@@ -22,6 +34,7 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
         _autoStart = autoStartService ?? throw new ArgumentNullException(nameof(autoStartService));
         _settings = LoadSettings();
         _isFloatingPetEnabled = _settings.FloatingPetEnabled;
+        _selectedRefreshInterval = _settings.RefreshInterval;
         _isLaunchAtStartupEnabled = ReadAutoStartState();
         _settings = _settings with { LaunchAtStartup = _isLaunchAtStartupEnabled };
         ResetFloatingPetPositionCommand = new AsyncCommand(_ =>
@@ -34,6 +47,31 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     internal event EventHandler? FloatingPetPositionResetRequested;
+
+    internal event Action<RefreshIntervalMode>? RefreshIntervalChanged;
+
+    public IReadOnlyList<RefreshIntervalOption> RefreshIntervalOptions => IntervalOptions;
+
+    public RefreshIntervalMode SelectedRefreshInterval
+    {
+        get => _selectedRefreshInterval;
+        set
+        {
+            if (!Enum.IsDefined(value))
+            {
+                throw new ArgumentOutOfRangeException(nameof(value));
+            }
+
+            if (!SetField(ref _selectedRefreshInterval, value))
+            {
+                return;
+            }
+
+            _settings = _settings with { RefreshInterval = value };
+            SaveSettings();
+            RefreshIntervalChanged?.Invoke(value);
+        }
+    }
 
     public bool IsFloatingPetEnabled
     {

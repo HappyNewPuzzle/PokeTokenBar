@@ -65,6 +65,8 @@ public sealed class UsageViewModel : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
+    internal event EventHandler<RefreshCompletedEventArgs>? RefreshCompleted;
+
     public AsyncCommand RefreshCommand { get; }
 
     public IReadOnlyList<ProviderSnapshot> Providers
@@ -449,7 +451,12 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         private set => SetField(ref _weeklyResetText, value);
     }
 
-    public async Task RefreshAsync(CancellationToken cancellationToken = default)
+    public Task RefreshAsync(CancellationToken cancellationToken = default) =>
+        RefreshAsync(scheduleEmptyRetry: true, cancellationToken);
+
+    internal async Task RefreshAsync(
+        bool scheduleEmptyRetry,
+        CancellationToken cancellationToken = default)
     {
         if (IsRefreshing)
         {
@@ -458,12 +465,14 @@ public sealed class UsageViewModel : INotifyPropertyChanged
 
         IsRefreshing = true;
         Exception? refreshError = null;
+        var cancelled = false;
         try
         {
             await _store.RefreshAsync(cancellationToken);
         }
         catch (OperationCanceledException)
         {
+            cancelled = true;
             throw;
         }
         catch (Exception exception)
@@ -480,6 +489,9 @@ public sealed class UsageViewModel : INotifyPropertyChanged
             }
 
             IsRefreshing = false;
+            RefreshCompleted?.Invoke(
+                this,
+                new RefreshCompletedEventArgs(scheduleEmptyRetry && !cancelled && refreshError is null));
         }
     }
 
@@ -622,4 +634,9 @@ public sealed class UsageViewModel : INotifyPropertyChanged
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+}
+
+internal sealed class RefreshCompletedEventArgs(bool scheduleEmptyRetry) : EventArgs
+{
+    public bool ScheduleEmptyRetry { get; } = scheduleEmptyRetry;
 }

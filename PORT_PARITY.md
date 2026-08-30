@@ -26,31 +26,29 @@ Estimates are implementation effort after dependencies are available: **S** (up 
 
 ## 2. Executive Summary
 
-The Windows port is a credible Codex-focused tray application, but it is not yet a full port of the current macOS product. Its strongest areas are Codex local parsing, period aggregation, official Codex limits, single-instance startup, tray/popup mechanics, floating-window mechanics, basic persistence, and sleep/resume handling. The largest parity boundary is architectural rather than cosmetic: macOS registers twelve local providers and drives a complete companion/economy loop from usage, while Windows registers only Codex and does not connect usage to companion progression.
+The Windows port is a credible Codex-focused tray application, but it is not yet a full port of the current macOS product. Its strongest areas are Codex local parsing, period aggregation, official Codex limits, configurable background polling, single-instance startup, tray/popup mechanics, floating-window mechanics, basic persistence, and sleep/resume handling. The largest parity boundary is architectural rather than cosmetic: macOS registers twelve local providers and drives a complete companion/economy loop from usage, while Windows registers only Codex and does not connect usage to companion progression.
 
 The full matrix in section 18 contains **93 atomic feature rows**:
 
 | Status | Count | Share |
 |---|---:|---:|
-| COMPLETE | 19 | 20% |
-| PARTIAL | 14 | 15% |
-| MISSING | 50 | 54% |
-| WINDOWS EQUIVALENT | 9 | 10% |
-| MAC-ONLY / N/A | 1 | 1% |
+| COMPLETE | 23 | 24.7% |
+| PARTIAL | 13 | 14.0% |
+| MISSING | 47 | 50.5% |
+| WINDOWS EQUIVALENT | 9 | 9.7% |
+| MAC-ONLY / N/A | 1 | 1.1% |
 
 These counts deliberately do not award parity merely because a model type or dormant method exists. A feature must be reachable from the production composition and UI.
 
 ### P0 findings
 
-1. **Recurring usage refresh is missing.** Windows performs startup/manual/resume refreshes, but has no macOS-equivalent polling schedule. A long-running tray process can silently become stale.
-2. **Eleven production usage providers are missing.** Windows registers only Codex; Claude Code, Gemini, Antigravity, OpenCode, Hermes, Cursor, Grok, Copilot, Kiro, Pi, and omp are absent.
-3. **The companion is not driven by usage.** Windows has models, persistence, sprite loading, and manual hatch methods, but `AppComposition` does not connect `UsageStore` to `CompanionStore`; evolution, graduation, reward, and dex progression do not occur.
+1. **Eleven production usage providers are missing.** Windows registers only Codex; Claude Code, Gemini, Antigravity, OpenCode, Hermes, Cursor, Grok, Copilot, Kiro, Pi, and omp are absent.
+2. **The companion is not driven by usage.** Windows has models, persistence, sprite loading, and manual hatch methods, but `AppComposition` does not connect `UsageStore` to `CompanionStore`; evolution, graduation, reward, and dex progression do not occur.
 
 ## 3. Critical Missing Features
 
 | Priority | Gap | macOS behavior | Windows state | Size | Dependencies | Principal files |
 |---|---|---|---|---|---|---|
-| P0 | Recurring refresh | `UsageStore.reschedule` and `handleEmptyUsageRetry` keep data current using the selected interval. | `InitialRefreshController` refreshes at startup and `PowerLifecycleController` refreshes after resume; no timer exists. | M | Settings interval and lifecycle-safe cancellation | macOS `Core/UsageStore.swift`; Windows `Core/UsageStore.cs`, `App/Lifecycle/InitialRefreshController.cs`, `App.xaml.cs` |
 | P0 | Multi-provider coverage | `UsageStore.init` registers 12 providers with common period enrichment. | `AppComposition.CreateUsageViewModel` registers only `LocalCodexUsageProvider`. | XL | Provider-by-provider parsers, roots/auth, fixtures, selector integration | macOS `Core/UsageStore.swift`, `Core/LocalUsageProvider.swift`, `Core/LocalAdditionalUsageProvider.swift`; Windows `App/AppComposition.cs` |
 | P0 | Usage-driven companion loop | `PokeTokenBarApp.updateCompanion` passes provider daily totals/month/burn/limits into `CompanionStore.update`; deltas hatch, evolve, graduate, reward, and update the dex. | Companion and usage view models are composed independently. `CompanionStore` exposes restore/manual hatch/representative selection only. | XL | Stable refresh event, provider ledger semantics, persistence migration | macOS `PokeTokenBarApp.swift`, `Core/CompanionStore.swift`; Windows `AppComposition.cs`, `Core/CompanionStore.cs` |
 | P1 | Companion product UI | Home shows progression and celebrations; Shop, Bag, Collection, catch log, dex details, and representative selection are reachable. | Popup shows a read-only companion header; no Shop/Bag/Collection navigation. | L | Companion loop and economy actions | macOS `CompanionView.swift`, `ShopView.swift`, `BagView.swift`, `PopoverView.swift`; Windows `MainWindow.xaml` |
@@ -86,7 +84,7 @@ The Windows Codex data path is one of the most complete parts of the port. `Usag
 
 Remaining gaps:
 
-- macOS supports configured polling intervals and empty-result retry; Windows does not poll.
+- Windows `UsagePollingController` matches the macOS Manual/1/2/5/15-minute schedule, defaults to two minutes, retries a truly empty successful refresh once after 20 seconds, and preserves `UsageStore` refresh coalescing.
 - macOS exposes used/remaining display preference, warning thresholds, burn-rate forecast, provider status checks, and configurable menu-bar summaries; Windows does not.
 - macOS Codex UI can represent multiple buckets, plan metadata, credits/spend controls, and warnings. Windows parses richer app-server data, but `UsageViewModel.ApplyOfficialLimits` selects only primary/secondary rows.
 - Claude OAuth and Antigravity official quota integrations are absent on Windows.
@@ -120,13 +118,14 @@ macOS additionally animates the representative in the `NSStatusItem` and can sho
 
 ## 10. Settings
 
-Windows persists and exposes only:
+Windows persists and exposes:
 
 - launch at startup (`HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run`),
 - floating pet enabled,
-- floating position and reset.
+- floating position and reset,
+- refresh interval (Manual, 1, 2, 5, or 15 minutes).
 
-`JsonAppSettingsPersistence` stores the app settings in LocalAppData. The macOS settings surface additionally covers language, representative, refresh interval, animation quality, used/remaining mode, menu content, floating size/bubbles, notification categories, warning thresholds, status checks, update behavior, save transfer, Keychain access, token refresh, and custom scan roots. Those omissions should be implemented only alongside the behavior they configure.
+`JsonAppSettingsPersistence` stores the app settings in LocalAppData and safely defaults older files to the macOS two-minute interval. The macOS settings surface additionally covers language, representative, animation quality, used/remaining mode, menu content, floating size/bubbles, notification categories, warning thresholds, status checks, update behavior, save transfer, Keychain access, token refresh, and custom scan roots. Those omissions should be implemented only alongside the behavior they configure.
 
 ## 11. Notifications
 
@@ -138,9 +137,9 @@ macOS localizes the application and Pokémon data for Korean, English, Japanese,
 
 ## 13. Lifecycle / Background
 
-Both applications start as background/tray apps, enforce one instance, and respond to sleep/resume. Windows checks `SingleInstanceGuard.TryAcquire` before `AppComposition.Create`, so a second process does not create tray, windows, refresh, or power subscriptions. `WindowsPowerModeEventSource` maps system power events, and shutdown disposal is explicit.
+Both applications start as background/tray apps, enforce one instance, and respond to sleep/resume. Windows checks `SingleInstanceGuard.TryAcquire` before `AppComposition.Create`, so a second process does not create tray, windows, refresh, or power subscriptions. `UsagePollingController` uses `TimeProvider.CreateTimer`, pauses polling and cancels a pending empty retry on suspend, then restores one schedule after the wake refresh. `WindowsPowerModeEventSource` maps system power events, and shutdown disposal is explicit.
 
-macOS additionally schedules normal and empty-result refresh timers, pauses polling/animation while asleep, supports launch-agent keep-alive, and includes logging/crash reporting. Windows has startup/manual/resume refresh and sleep behavior, but no recurring timer, automatic restart, or equivalent diagnostics pipeline.
+macOS additionally supports launch-agent keep-alive and includes logging/crash reporting. Windows now has startup/manual/timed/resume refresh and equivalent polling sleep behavior, but no automatic restart or equivalent diagnostics pipeline.
 
 ## 14. Persistence / Cache
 
@@ -177,14 +176,13 @@ Windows has strong tests around Codex parsing and aggregation, including rollout
 The most important missing behavior tests correspond to missing production features:
 
 1. No production tests for the eleven absent providers or their custom-root/auth variants.
-2. No polling schedule, interval-change, suspend/resume timer, or empty-result retry tests.
-3. No end-to-end `UsageStore` → companion ledger → evolution/graduation/dex tests.
-4. No reward, purchase, item-use, premium egg, Shiny Charm, Mint, Rare Candy, or Ditto lifecycle tests.
-5. No Shop/Bag/Collection navigation and mutation tests.
-6. No notification opt-in, threshold, deduplication, re-arm, or event tests.
-7. No full UI localization/language-switch tests.
-8. No update checking, release selection, update UX, or save export/import tests.
-9. No warning/burn forecast/provider-status behavior tests.
+2. No end-to-end `UsageStore` → companion ledger → evolution/graduation/dex tests.
+3. No reward, purchase, item-use, premium egg, Shiny Charm, Mint, Rare Candy, or Ditto lifecycle tests.
+4. No Shop/Bag/Collection navigation and mutation tests.
+5. No notification opt-in, threshold, deduplication, re-arm, or event tests.
+6. No full UI localization/language-switch tests.
+7. No update checking, release selection, update UX, or save export/import tests.
+8. No warning/burn forecast/provider-status behavior tests.
 
 The macOS suite contains dedicated coverage for these areas, including `CompanionTests`, `RareCandyTests`, `PremiumEggTests`, `ShopTests`, `DittoTests`, `SaveTransferTests`, provider-specific suites, `CustomRootsTests`, `LocalUsageCacheTests`, and `SingleInstanceTests`. Test-count parity alone would be misleading; Windows should add tests only as each missing production slice is ported.
 
@@ -215,8 +213,8 @@ Counts in section 2 are calculated from this table only.
 | Usage | Cost display | Displayed for cost-reporting providers | Core/UI shape exists, but shipped Codex reports no cost | PARTIAL | `PopoverView.usageSection` | `UsageViewModel.cs`; `MainWindow.xaml` | P1 | S |
 | Usage | Refresh coalescing | Concurrent requests share refresh | Concurrent requests share refresh | COMPLETE | `UsageStore.refresh` | `UsageStore.RefreshAsync` | P0 | — |
 | Usage | Stale snapshot preservation | Keeps usable prior data on failure | Keeps daily/period/official prior data | COMPLETE | `UsageStore` refresh phases | `UsageStore.cs` | P0 | — |
-| Usage | Recurring polling | Configurable timer refresh | No recurring timer | MISSING | `UsageStore.reschedule` | `InitialRefreshController.cs` | P0 | M |
-| Usage | Empty-result retry | Short retry when scan returns empty | No retry scheduler | MISSING | `UsageStore.handleEmptyUsageRetry` | `UsageStore.cs` | P1 | S |
+| Usage | Recurring polling | Configurable timer refresh | Native timer with Manual/1/2/5/15-minute schedules | COMPLETE | `UsageStore.reschedule` | `UsagePollingController.cs` | P0 | — |
+| Usage | Empty-result retry | One 20-second retry after successful empty scan | Same; errors, month-only, and official-only are not empty | COMPLETE | `UsageStore.handleEmptyUsageRetry` | `UsagePollingController.EvaluateEmptyRetry` | P1 | — |
 | Usage | Custom scan roots | Per-provider configured roots | Codex conventional profile discovery only | MISSING | `CustomRoots`; persisted `UsageStore` settings | `CodexSessionLocator.cs` | P1 | M |
 | Usage | Burn forecast | Computes burn tier/forecast | No production calculation/UI | MISSING | `UsageStore` burn fields | `UsageViewModel.cs` | P2 | M |
 | Usage | Provider status checks | Optional provider health/status | No production status layer | MISSING | `UsageStore` status checks | absent | P2 | M |
@@ -263,7 +261,7 @@ Counts in section 2 are calculated from this table only.
 | Popup | Collection/dex tab | Collection, dex, catch log, representative | Absent | MISSING | `CompanionView.swift`; `PopoverView` | absent | P1 | L |
 | Settings | Launch at login | Native login service | HKCU Run entry | WINDOWS EQUIVALENT | settings login service | `WindowsAutoStartService.cs` | P0 | — |
 | Settings | Floating enabled/position reset | Toggle/reset | Toggle/reset | COMPLETE | `SettingsView` | `SettingsViewModel.cs`; `MainWindow.xaml` | P0 | — |
-| Settings | Refresh interval | Manual/1/2/5/15 minute choices | No setting or polling | MISSING | `AppSettings.refreshInterval` | `AppSettings.cs` | P0 | M |
+| Settings | Refresh interval | Manual/1/2/5/15 minute choices | Same choices, persisted and immediately rescheduled | COMPLETE | `UsageStore.refreshInterval` | `RefreshIntervalMode`; `SettingsViewModel.SelectedRefreshInterval`; `MainWindow.xaml` | P0 | — |
 | Settings | Language | Six-language selector | No app-language selector | MISSING | `SettingsView`; `Localization.swift` | `MainWindow.xaml` | P1 | M |
 | Settings | Limit used/remaining mode | User choice | Fixed remaining display | PARTIAL | `AppSettings.limitDisplayMode` | `UsageViewModel.ApplyOfficialLimits` | P2 | S |
 | Settings | Floating/animation options | Size, quality, bubble preferences | Enabled only | PARTIAL | `SettingsView` | `SettingsViewModel.cs` | P2 | M |
@@ -275,7 +273,7 @@ Counts in section 2 are calculated from this table only.
 | Notifications | Companion events | Hatch/evolve/graduate notifications | Absent | MISSING | `PokeTokenBarApp` | absent | P1 | M |
 | Lifecycle | Start hidden/background | Accessory tray app | WPF tray app starts hidden | WINDOWS EQUIVALENT | `PokeTokenBarApp` | `App.xaml.cs` | P0 | — |
 | Lifecycle | Single instance | Prevents duplicate lifecycle | User-SID named mutex before composition | WINDOWS EQUIVALENT | `SingleInstanceController` | `SingleInstanceGuard.cs`; `App.OnStartup` | P0 | — |
-| Lifecycle | Sleep/resume | Pauses work and refreshes after wake | Hides/pauses pet and refreshes after resume | PARTIAL | app sleep handlers | `PowerLifecycleController.cs` | P0 | S |
+| Lifecycle | Sleep/resume | Pauses polling/work and refreshes after wake | Pauses polling/retry, preserves pet behavior, refreshes, then restores one schedule | COMPLETE | app sleep handlers | `PowerLifecycleController.cs`; `UsagePollingController.cs` | P0 | — |
 | Lifecycle | Clean shutdown | Releases app resources | Disposes tray/windows/events/mutex | COMPLETE | app termination | `App.xaml.cs` | P0 | — |
 | Lifecycle | Crash diagnostics/keep-alive | Logging/crash reporting and launch-agent behavior | No equivalent diagnostics or restart | MISSING | app/logging/launch-agent code | absent | P2 | L |
 | Persistence | App settings | `UserDefaults` | LocalAppData JSON | WINDOWS EQUIVALENT | `UsageStore.init` and persisted properties | `JsonAppSettingsPersistence.cs` | P0 | — |
@@ -292,7 +290,7 @@ Counts in section 2 are calculated from this table only.
 
 ### Phase A — Runtime correctness and provider foundation
 
-Add lifecycle-safe recurring polling first, including interval persistence and empty-result retry. Then port providers in dependency/value order: Claude Code (with Windows credential strategy and official limits), Gemini, Antigravity, Cursor, then the remaining local-only providers. Reuse the existing `IUsageProvider`/`UsageStore`/selector contract and add no speculative provider framework.
+With lifecycle-safe polling, interval persistence, and empty-result retry complete, port providers in dependency/value order: Claude Code (with Windows credential strategy and official limits), Gemini, Antigravity, Cursor, then the remaining local-only providers. Reuse the existing `IUsageProvider`/`UsageStore`/selector contract and add no speculative provider framework.
 
 **Exit criteria:** long-running usage stays current; provider registration is data-driven enough for the implemented set; each provider has local fixtures and period tests; failures preserve stale data.
 

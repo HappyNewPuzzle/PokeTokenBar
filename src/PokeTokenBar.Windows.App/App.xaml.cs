@@ -71,7 +71,9 @@ public partial class App : System.Windows.Application
                 viewModel.Usage.RefreshAsync,
                 viewModel.Companion.RefreshAsync,
                 _floatingPet.SetDisplayAwake,
-                action => Dispatcher.BeginInvoke(action));
+                action => Dispatcher.BeginInvoke(action),
+                _composition.UsagePolling.Pause,
+                _composition.UsagePolling.Resume);
         }
         catch (Exception)
         {
@@ -81,6 +83,7 @@ public partial class App : System.Windows.Application
         _initialRefresh = new InitialRefreshController(viewModel.Usage);
         _initialCompanion = new InitialCompanionController(viewModel.Companion);
         _ = _initialRefresh.StartAsync();
+        _composition.UsagePolling.Start();
         _ = _initialCompanion.StartAsync();
     }
 

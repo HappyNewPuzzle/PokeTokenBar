@@ -101,6 +101,7 @@ public sealed partial class AppCompositionTests
         Assert.Contains("new FloatingPokemonWindow(_composition.FloatingPet)", appCode, StringComparison.Ordinal);
         Assert.Contains("_floatingPet.Start()", appCode, StringComparison.Ordinal);
         Assert.Contains("_initialRefresh.StartAsync()", appCode, StringComparison.Ordinal);
+        Assert.Contains("_composition.UsagePolling.Start()", appCode, StringComparison.Ordinal);
         Assert.Contains("_initialCompanion.StartAsync()", appCode, StringComparison.Ordinal);
         Assert.Contains("_initialCompanion?.Dispose()", appCode, StringComparison.Ordinal);
         Assert.Contains("_floatingPet?.Dispose()", appCode, StringComparison.Ordinal);
@@ -218,6 +219,8 @@ public sealed partial class AppCompositionTests
         Assert.Contains("Binding Settings.IsFloatingPetEnabled", xaml, StringComparison.Ordinal);
         Assert.Contains("Binding Settings.IsLaunchAtStartupEnabled", xaml, StringComparison.Ordinal);
         Assert.Contains("Binding Settings.ResetFloatingPetPositionCommand", xaml, StringComparison.Ordinal);
+        Assert.Contains("Binding Settings.RefreshIntervalOptions", xaml, StringComparison.Ordinal);
+        Assert.Contains("Binding Settings.SelectedRefreshInterval", xaml, StringComparison.Ordinal);
         Assert.Contains("Value=\"{Binding Usage.FiveHourRemainingPercent", xaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding Usage.FiveHourRemainingText", xaml, StringComparison.Ordinal);
         Assert.Contains("Value=\"{Binding Usage.WeeklyRemainingPercent", xaml, StringComparison.Ordinal);
@@ -275,6 +278,7 @@ public sealed partial class AppCompositionTests
                 "Usage.RefreshCommand" or
                 "Settings.IsFloatingPetEnabled" or
                 "Settings.IsLaunchAtStartupEnabled" or
+                "Settings.SelectedRefreshInterval" or
                 "Settings.ResetFloatingPetPositionCommand")
             {
                 return;

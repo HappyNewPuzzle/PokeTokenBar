@@ -363,6 +363,19 @@
                               Content="Launch at startup"
                               IsChecked="{Binding Settings.IsLaunchAtStartupEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               IsEnabled="{Binding Settings.IsLaunchAtStartupAvailable, Mode=OneWay}" />
+                    <Grid Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="Refresh interval" />
+                        <ComboBox Grid.Column="1"
+                                  Width="120"
+                                  ItemsSource="{Binding Settings.RefreshIntervalOptions, Mode=OneWay}"
+                                  DisplayMemberPath="Label"
+                                  SelectedValuePath="Value"
+                                  SelectedValue="{Binding Settings.SelectedRefreshInterval, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </Grid>
                     <Button Margin="0,12,0,0"
                             HorizontalAlignment="Left"
                             Padding="12,5"
