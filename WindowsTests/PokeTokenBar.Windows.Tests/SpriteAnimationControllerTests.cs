@@ -71,7 +71,32 @@ public sealed class SpriteAnimationControllerTests
         timer.Fire();
 
         Assert.Same(presentation.Frames[0].Image, controller.CurrentImage);
+        Assert.NotNull(controller.CurrentImage);
         Assert.Equal(TimeSpan.FromMilliseconds(100), timer.Interval);
+    }
+
+    [Fact]
+    public void EveryLoopTransitionKeepsAVisibleFrame()
+    {
+        var factory = new FakeTimerFactory();
+        using var controller = new SpriteAnimationController(factory);
+        var presentation = Animated((1, 100), (2, 100));
+        controller.SetPresentation(presentation);
+        controller.SetActive(true);
+        var images = new List<BitmapSource?> { controller.CurrentImage };
+        controller.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(SpriteAnimationController.CurrentImage))
+            {
+                images.Add(controller.CurrentImage);
+            }
+        };
+
+        factory.Timers.Single().Fire();
+        factory.Timers.Single().Fire();
+
+        Assert.All(images, Assert.NotNull);
+        Assert.Equal([presentation.Frames[0].Image, presentation.Frames[1].Image, presentation.Frames[0].Image], images);
     }
 
     [Fact]

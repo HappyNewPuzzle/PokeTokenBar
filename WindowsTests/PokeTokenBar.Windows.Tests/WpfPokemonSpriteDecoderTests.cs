@@ -61,6 +61,24 @@ public sealed class WpfPokemonSpriteDecoderTests
     }
 
     [Fact]
+    public void Decode_DeltaGifComposesEveryFrameOnTheLogicalCanvas()
+    {
+        var presentation = _decoder.Decode(Asset(CreateDeltaGif(), animated: true));
+
+        Assert.NotNull(presentation);
+        Assert.All(presentation.Frames, frame =>
+        {
+            Assert.Equal(2, frame.Image.PixelWidth);
+            Assert.Equal(1, frame.Image.PixelHeight);
+        });
+        Assert.Equal([255, 0], ReadRedRow(presentation.Frames[0].Image));
+        Assert.Equal([255, 0], ReadRedRow(presentation.Frames[1].Image));
+        Assert.Equal([0, 255], ReadBlueRow(presentation.Frames[1].Image));
+        Assert.Equal([255, 0], ReadRedRow(presentation.Frames[2].Image));
+        Assert.Equal([0, 0], ReadBlueRow(presentation.Frames[2].Image));
+    }
+
+    [Fact]
     public void Decode_GifWithoutDelayUsesOneTenthSecondFallback()
     {
         var presentation = _decoder.Decode(
@@ -156,11 +174,43 @@ public sealed class WpfPokemonSpriteDecoderTests
         return bytes.ToArray();
     }
 
+    private static byte[] CreateDeltaGif() =>
+    [
+        0x47, 0x49, 0x46, 0x38, 0x39, 0x61,
+        0x02, 0x00, 0x01, 0x00, 0x81, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0xFF, 0x00, 0x00,
+        0x00, 0x00, 0xFF, 0x00, 0x00, 0x00,
+        0x21, 0xF9, 0x04, 0x05, 0x0A, 0x00, 0x00, 0x00,
+        0x2C, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00,
+        0x02, 0x02, 0x4C, 0x01, 0x00,
+        0x21, 0xF9, 0x04, 0x09, 0x0A, 0x00, 0x00, 0x00,
+        0x2C, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00,
+        0x02, 0x02, 0x54, 0x01, 0x00,
+        0x21, 0xF9, 0x04, 0x05, 0x0A, 0x00, 0x00, 0x00,
+        0x2C, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00,
+        0x02, 0x02, 0x4C, 0x01, 0x00,
+        0x3B,
+    ];
+
     private static byte ReadRed(BitmapSource source)
     {
         var converted = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
         var pixels = new byte[4];
         converted.CopyPixels(pixels, 4, 0);
         return pixels[2];
+    }
+
+    private static byte[] ReadRedRow(BitmapSource source) => ReadChannelRow(source, 2);
+
+    private static byte[] ReadBlueRow(BitmapSource source) => ReadChannelRow(source, 0);
+
+    private static byte[] ReadChannelRow(BitmapSource source, int channel)
+    {
+        var converted = new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+        var pixels = new byte[source.PixelWidth * 4];
+        converted.CopyPixels(pixels, pixels.Length, 0);
+        return Enumerable.Range(0, source.PixelWidth)
+            .Select(index => pixels[(index * 4) + channel])
+            .ToArray();
     }
 }

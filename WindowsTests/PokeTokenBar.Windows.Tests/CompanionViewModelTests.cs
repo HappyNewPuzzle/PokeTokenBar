@@ -249,10 +249,37 @@ public sealed class CompanionViewModelTests
         var fixture = CreateFixture(StateWithActive(1, [1]), Line(1));
 
         await fixture.ViewModel.InitializeAsync();
+        var presentation = fixture.ViewModel.Sprite;
         await fixture.ViewModel.RefreshAsync();
         await fixture.ViewModel.RefreshAsync();
 
         Assert.Single(fixture.SpriteRequests);
+        Assert.Same(presentation, fixture.ViewModel.Sprite);
+    }
+
+    [Fact]
+    public async Task ProgressOnlyRefreshKeepsTheRunningSpritePresentation()
+    {
+        const string today = "2026-08-30";
+        var state = StateWithActive(1, [1]) with
+        {
+            InstallBaselineSet = true,
+            ClaimedTodayTokensByProvider = new Dictionary<string, long> { ["codex"] = 0 },
+            LastDate = today,
+        };
+        var fixture = CreateFixture(state, Line(1));
+        await fixture.ViewModel.InitializeAsync();
+        var presentation = fixture.ViewModel.Sprite;
+
+        await fixture.Store.UpdateUsageAsync(
+            new Dictionary<string, long> { ["codex"] = 100 },
+            today,
+            hasUsageData: true);
+        await fixture.ViewModel.RefreshAsync();
+
+        Assert.Equal(100, fixture.Store.State.Active!.UsedAtStage);
+        Assert.Single(fixture.SpriteRequests);
+        Assert.Same(presentation, fixture.ViewModel.Sprite);
     }
 
     [Fact]
@@ -438,7 +465,7 @@ public sealed class CompanionViewModelTests
             return Task.FromResult<PokemonSpriteAsset?>(Asset(id, shiny));
         };
         var viewModel = new CompanionViewModel(store, spriteLoader, decoder ?? new FakeDecoder());
-        return new Fixture(viewModel, api, persistence, requests);
+        return new Fixture(viewModel, store, api, persistence, requests);
     }
 
     private static CompanionState StateWithActive(
@@ -524,6 +551,7 @@ public sealed class CompanionViewModelTests
 
     private sealed record Fixture(
         CompanionViewModel ViewModel,
+        CompanionStore Store,
         FakeApi Api,
         FakePersistence Persistence,
         List<(int Id, bool Shiny)> SpriteRequests);
