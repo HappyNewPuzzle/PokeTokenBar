@@ -1,0 +1,321 @@
+# PokeTokenBar Windows Port Parity Audit
+
+## 1. Audit Baseline
+
+This is a code-based parity audit, not an implementation plan disguised as completed work. README claims were used only for orientation; every finding below is grounded in source or tests.
+
+| Item | Value |
+|---|---|
+| Audit date | 2026-08-30 |
+| Windows branch | `windows-port` |
+| Windows commit | `3ac59e4202d4e52016bd7ea5c749cca5dc03d12c` |
+| macOS baseline | `upstream/main` at `a69444c852559639dcde600fd71a41665f549e91` |
+| Merge base | `4c29ca0fa28c1fb67929517542d4e58d802171f8` |
+| Initial `git status --short` | clean |
+| Scope | Product behavior, runtime integration, settings, persistence, distribution, and meaningful test coverage |
+
+Status definitions:
+
+- **COMPLETE**: behavior and integration are materially at parity.
+- **PARTIAL**: useful behavior exists, but an important path, option, or integration is absent.
+- **MISSING**: no production implementation of the macOS behavior exists.
+- **WINDOWS EQUIVALENT**: different native mechanism, equivalent user outcome.
+- **MAC-ONLY / N/A**: the exact behavior is inherent to the macOS shell and needs no literal Windows port.
+
+Estimates are implementation effort after dependencies are available: **S** (up to 2 engineering days), **M** (3–5 days), **L** (1–2 weeks), **XL** (more than 2 weeks). They are comparative, not delivery commitments.
+
+## 2. Executive Summary
+
+The Windows port is a credible Codex-focused tray application, but it is not yet a full port of the current macOS product. Its strongest areas are Codex local parsing, period aggregation, official Codex limits, single-instance startup, tray/popup mechanics, floating-window mechanics, basic persistence, and sleep/resume handling. The largest parity boundary is architectural rather than cosmetic: macOS registers twelve local providers and drives a complete companion/economy loop from usage, while Windows registers only Codex and does not connect usage to companion progression.
+
+The full matrix in section 18 contains **93 atomic feature rows**:
+
+| Status | Count | Share |
+|---|---:|---:|
+| COMPLETE | 19 | 20% |
+| PARTIAL | 14 | 15% |
+| MISSING | 50 | 54% |
+| WINDOWS EQUIVALENT | 9 | 10% |
+| MAC-ONLY / N/A | 1 | 1% |
+
+These counts deliberately do not award parity merely because a model type or dormant method exists. A feature must be reachable from the production composition and UI.
+
+### P0 findings
+
+1. **Recurring usage refresh is missing.** Windows performs startup/manual/resume refreshes, but has no macOS-equivalent polling schedule. A long-running tray process can silently become stale.
+2. **Eleven production usage providers are missing.** Windows registers only Codex; Claude Code, Gemini, Antigravity, OpenCode, Hermes, Cursor, Grok, Copilot, Kiro, Pi, and omp are absent.
+3. **The companion is not driven by usage.** Windows has models, persistence, sprite loading, and manual hatch methods, but `AppComposition` does not connect `UsageStore` to `CompanionStore`; evolution, graduation, reward, and dex progression do not occur.
+
+## 3. Critical Missing Features
+
+| Priority | Gap | macOS behavior | Windows state | Size | Dependencies | Principal files |
+|---|---|---|---|---|---|---|
+| P0 | Recurring refresh | `UsageStore.reschedule` and `handleEmptyUsageRetry` keep data current using the selected interval. | `InitialRefreshController` refreshes at startup and `PowerLifecycleController` refreshes after resume; no timer exists. | M | Settings interval and lifecycle-safe cancellation | macOS `Core/UsageStore.swift`; Windows `Core/UsageStore.cs`, `App/Lifecycle/InitialRefreshController.cs`, `App.xaml.cs` |
+| P0 | Multi-provider coverage | `UsageStore.init` registers 12 providers with common period enrichment. | `AppComposition.CreateUsageViewModel` registers only `LocalCodexUsageProvider`. | XL | Provider-by-provider parsers, roots/auth, fixtures, selector integration | macOS `Core/UsageStore.swift`, `Core/LocalUsageProvider.swift`, `Core/LocalAdditionalUsageProvider.swift`; Windows `App/AppComposition.cs` |
+| P0 | Usage-driven companion loop | `PokeTokenBarApp.updateCompanion` passes provider daily totals/month/burn/limits into `CompanionStore.update`; deltas hatch, evolve, graduate, reward, and update the dex. | Companion and usage view models are composed independently. `CompanionStore` exposes restore/manual hatch/representative selection only. | XL | Stable refresh event, provider ledger semantics, persistence migration | macOS `PokeTokenBarApp.swift`, `Core/CompanionStore.swift`; Windows `AppComposition.cs`, `Core/CompanionStore.cs` |
+| P1 | Companion product UI | Home shows progression and celebrations; Shop, Bag, Collection, catch log, dex details, and representative selection are reachable. | Popup shows a read-only companion header; no Shop/Bag/Collection navigation. | L | Companion loop and economy actions | macOS `CompanionView.swift`, `ShopView.swift`, `BagView.swift`, `PopoverView.swift`; Windows `MainWindow.xaml` |
+| P1 | Economy and items | Usage awards candy; Rare Candy, Mint, Shiny Charm, premium/fresh eggs, purchases, and inventory mutations are functional. | Data shapes exist, but no production actions or UI implement the economy. | L | Companion loop, atomic persistence, UI | macOS `Core/CompanionStore.swift`; Windows `Core/CompanionModels.cs`, `Core/CompanionStore.cs` |
+| P1 | Notifications and warnings | Configurable warning/critical usage notifications, companion event notifications, and floating bubbles are deduplicated and re-armed. | No Windows notification or warning service exists. | L | Polling, thresholds, companion events | macOS `PokeTokenBarApp.swift`, `Core/UsageStore.swift`; Windows: absent |
+| P1 | Full settings surface | Language, refresh, animation quality, limit mode, menu content, floating size/bubbles, notifications, thresholds, provider roots/auth, updates, and save transfer are configurable. | Only launch-at-startup, floating enabled, and reset floating position are exposed. | L | Features being configured | macOS `SettingsView.swift`, `Core/UsageStore.swift`; Windows `MainWindow.xaml`, `SettingsViewModel.cs`, `Core/AppSettings.cs` |
+| P2 | Updates and Windows release UX | In-app release checks, update banner, Homebrew upgrade/relaunch or release-page fallback. | Self-contained publish exists; no update checker, installer flow, signing policy, or update UI. | L | Windows distribution choice and signing identity | macOS `Core/UpdateChecker.swift`, `PopoverView.swift`; Windows `.csproj`, `README.md` |
+
+## 4. Usage Providers
+
+macOS provider registration is explicit in `UsageStore.init` and provider implementations are in `LocalUsageProvider.swift` and `LocalAdditionalUsageProvider.swift`. Windows production registration is explicit in `AppComposition.CreateUsageViewModel`.
+
+| Provider | macOS | Windows | Status | Evidence |
+|---|---|---|---|---|
+| Codex | Local session parsing, period enrichment, cost/token aggregates, official app-server limits. | Detailed JSONL rollout/fork/canonical-session pipeline, daily/5h/week/month enrichment, official limits. | COMPLETE | macOS `LocalCodexProvider` in `LocalUsageProvider.swift`; Windows `LocalCodexUsageProvider.cs`, `CodexLocalRolloutPipeline.cs`, `CodexRateLimitsProvider.cs` |
+| Claude Code | Local JSONL usage plus OAuth limits/account metadata. | No production provider. | MISSING | macOS `LocalClaudeProvider`, `OAuthLimitsProvider.swift`; Windows `AppComposition.CreateUsageViewModel` |
+| Gemini | Local usage provider. | No production provider. | MISSING | macOS `LocalGeminiProvider`; Windows composition |
+| Antigravity | Local usage plus Google quota limits. | No production provider. | MISSING | macOS `LocalAntigravityProvider`, `AntigravityRateLimitsProvider.swift` |
+| OpenCode | Local usage provider. | No production provider. | MISSING | macOS `LocalOpenCodeProvider` |
+| Hermes Agent | Local usage provider. | No production provider. | MISSING | macOS `LocalHermesProvider` |
+| Cursor | Dashboard API primary path with SQLite fallback, including the zero-local-token fix. | No production provider. | MISSING | macOS `LocalCursorProvider` in `LocalAdditionalUsageProvider.swift` |
+| Grok | Local usage provider. | No production provider. | MISSING | macOS `LocalGrokProvider` |
+| GitHub Copilot | Local usage provider. | No production provider. | MISSING | macOS `LocalCopilotProvider` |
+| Kiro | Local usage including Kiro CLI 2.20+ JSONL sessions. | No production provider. | MISSING | macOS `LocalKiroProvider` |
+| Pi | Local usage provider. | No production provider. | MISSING | macOS `LocalPiProvider` |
+| omp | Provider added after the Windows branch point. | No production provider. | MISSING | macOS `LocalOmpProvider`; upstream commit `b833f12` |
+
+Windows `IUsageProvider`, `UsageSnapshot`, and provider-selector plumbing are reusable foundations, but they are not provider parity by themselves.
+
+## 5. Usage / Rate Limits
+
+The Windows Codex data path is one of the most complete parts of the port. `UsageStore.RefreshAsync` coalesces refreshes, performs daily and enrichment work, preserves stale snapshots on failure, and retains a provider when daily usage is empty but another period or official limit exists. `UsageViewModel.ApplyOfficialLimits` converts provider-level used percentages into clamped remaining values for the UI. `MainWindow.xaml` displays Today, Recent 5 hours, This week, This month, and official 5-hour/weekly reset information.
+
+Remaining gaps:
+
+- macOS supports configured polling intervals and empty-result retry; Windows does not poll.
+- macOS exposes used/remaining display preference, warning thresholds, burn-rate forecast, provider status checks, and configurable menu-bar summaries; Windows does not.
+- macOS Codex UI can represent multiple buckets, plan metadata, credits/spend controls, and warnings. Windows parses richer app-server data, but `UsageViewModel.ApplyOfficialLimits` selects only primary/secondary rows.
+- Claude OAuth and Antigravity official quota integrations are absent on Windows.
+- Windows core supports cost-bearing snapshots, but Codex production cost is zero and no cost-reporting provider is registered; cost parity is therefore only partial in the shipped app.
+
+## 6. Companion / Pokemon
+
+Windows has a substantial lower-level port: `CompanionModels.cs` contains rarity, nature, evolution, dex, inventory, and ledger shapes; `PokeApiClient` loads base species/evolution/name data; `PokemonSpriteLoader` loads animated/static sprites with caching; `JsonCompanionPersistence` restores state; and `CompanionViewModel` can display a restored subject and progress.
+
+The active behavior diverges sharply. macOS `CompanionStore.update`, `applyUsage`, and `graduate` consume per-provider token deltas, carry overflow through evolution stages, maintain planned branches, update the dex/catch log, roll rarity/nature/shiny state, handle Ditto disguise/reveal, grant rewards, and begin the next egg. Windows `CompanionStore` has no corresponding update/apply/graduation path. Its `HatchAsync` and `HatchRandomAsync` are manual seams and are not exposed as the macOS game loop in `MainWindow`.
+
+Consequently, model and rendering parity must not be reported as gameplay parity.
+
+## 7. Economy / Shop / Items
+
+macOS `CompanionStore` owns a persisted currency ledger and inventory mutations. `ShopView` and `BagView` expose purchases and item use. Rare Candy advances progression, Mint changes nature, Shiny Charm affects shiny odds, and premium/fresh eggs alter hatch behavior.
+
+Windows model types retain inventory/economy-shaped fields, but there is no connected reward calculation, purchase API, item-use API, or Shop/Bag UI. This category is functionally missing, not merely hidden.
+
+## 8. Floating Pet
+
+The basic floating pet is a good native mapping. macOS uses a non-activating `NSPanel`; Windows uses a transparent topmost WPF `Window` through `FloatingPetController` and `FloatingPokemonWindow`. Windows supports drag, persisted/restored position, multi-monitor clamping, click-to-open, Open/Hide context actions, representative/egg sprites, GIF animation, and sleep-time hide/pause.
+
+Windows lacks the user-selectable 48–192 size, animation-quality selection, token/limit hover tooltip, limit-warning speech bubbles, and companion-event bubbles. The current size is fixed. Upstream also contains recent fixes for animation quality and floating tooltip visibility that have no Windows setting/UI counterpart.
+
+## 9. Tray / Popup
+
+`SystemTrayController`/`NotifyIconTrayIcon` and the WPF popup provide the important Windows-equivalent behavior: startup hidden, left-click toggle, Open/Refresh/Exit menu, cursor-monitor/DPI-aware placement, deactivation-to-hide, and no taskbar entry. Provider selection and manual refresh are reachable.
+
+macOS additionally animates the representative in the `NSStatusItem` and can show configurable token/cost/limit text in the menu bar. A Windows notification-area icon cannot reproduce multiline menu-bar text literally; this is marked macOS-only for the exact shell treatment, while the absence of any equivalent live tray tooltip/badge remains a partial product gap. The Windows icon is currently generic rather than the companion sprite.
+
+## 10. Settings
+
+Windows persists and exposes only:
+
+- launch at startup (`HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run`),
+- floating pet enabled,
+- floating position and reset.
+
+`JsonAppSettingsPersistence` stores the app settings in LocalAppData. The macOS settings surface additionally covers language, representative, refresh interval, animation quality, used/remaining mode, menu content, floating size/bubbles, notification categories, warning thresholds, status checks, update behavior, save transfer, Keychain access, token refresh, and custom scan roots. Those omissions should be implemented only alongside the behavior they configure.
+
+## 11. Notifications
+
+macOS uses `UNUserNotificationCenter` for limit warning/critical alerts and companion events, with opt-in controls and deduplication/re-arm behavior. It also provides floating bubbles. Windows has neither a toast/notification service nor the related settings/event integration. This is a full functional gap.
+
+## 12. Localization
+
+macOS localizes the application and Pokémon data for Korean, English, Japanese, Spanish, French, and Portuguese through `Localization.swift` and `AppLanguage`. Windows preserves the language enum, localized Pokémon names from PokeAPI, and some companion/nature display strings, but `MainWindow.xaml`, tray commands, usage labels, and settings are hard-coded English and there is no language selector or runtime language application. Overall status is partial.
+
+## 13. Lifecycle / Background
+
+Both applications start as background/tray apps, enforce one instance, and respond to sleep/resume. Windows checks `SingleInstanceGuard.TryAcquire` before `AppComposition.Create`, so a second process does not create tray, windows, refresh, or power subscriptions. `WindowsPowerModeEventSource` maps system power events, and shutdown disposal is explicit.
+
+macOS additionally schedules normal and empty-result refresh timers, pauses polling/animation while asleep, supports launch-agent keep-alive, and includes logging/crash reporting. Windows has startup/manual/resume refresh and sleep behavior, but no recurring timer, automatic restart, or equivalent diagnostics pipeline.
+
+## 14. Persistence / Cache
+
+Windows has appropriate native persistence for its implemented scope: LocalAppData JSON for app and companion state, position persistence, sprite caching, base-species caching, and Registry auto-start. macOS also has incremental usage caches, richer companion/economy state mutation, save export/import, migration from earlier app identity, custom provider roots, and credential discovery through Keychain. Windows lacks save transfer and provider credential/configuration persistence because the corresponding providers are absent.
+
+Neither audit nor any verification modified user `.codex` data.
+
+## 15. Updates / Distribution
+
+macOS `UpdateChecker` checks GitHub releases and the UI presents update availability; Homebrew installs can upgrade/relaunch while other installs open the release page. The repository includes macOS packaging/signing scripts.
+
+Windows supports a self-contained Release publish and has release packaging metadata, but no in-app update check, installer/uninstaller UX, Windows signing policy, release-channel UI, or automated update path. A direct `.exe` publish is a valid initial distribution mechanism, but only partial parity with the supported macOS lifecycle.
+
+## 16. Platform-specific Mapping
+
+| macOS mechanism | Windows mapping | Assessment |
+|---|---|---|
+| `NSStatusItem` tray presence | WinForms `NotifyIcon` hosted by WPF | WINDOWS EQUIVALENT for presence/actions; text-rich menu-bar display is not directly portable |
+| `NSPopover` | Borderless WPF tool window, deactivation hides | WINDOWS EQUIVALENT |
+| Non-activating `NSPanel` | Transparent topmost WPF `Window` with `ShowActivated=false` | WINDOWS EQUIVALENT |
+| Process-based single-instance selection | User-SID named `Mutex` | WINDOWS EQUIVALENT |
+| `SMAppService` / launch agent | HKCU Run value | WINDOWS EQUIVALENT for login start; no keep-alive |
+| `UserDefaults` | LocalAppData JSON | WINDOWS EQUIVALENT |
+| Keychain credential discovery | No Windows credential/provider implementation | MISSING |
+| Workspace/display sleep notifications | `SystemEvents.PowerModeChanged` | WINDOWS EQUIVALENT |
+| `UNUserNotificationCenter` | No Windows notification implementation | MISSING |
+| Homebrew/app bundle update | Self-contained publish | PARTIAL; distribution exists, update lifecycle does not |
+| SwiftUI localization environment | No WPF resource/runtime language layer | PARTIAL |
+
+## 17. Test Coverage Gaps
+
+Windows has strong tests around Codex parsing and aggregation, including rollout/fork/canonical handling, daily/period behavior, stale preservation, coalescing, official-limit parsing, remaining-percentage projection, and provider visibility. It also tests tray placement/lifecycle seams, power behavior, single instance, persistence, sprite loading, PokeAPI behavior, and companion display/manual-hatch seams.
+
+The most important missing behavior tests correspond to missing production features:
+
+1. No production tests for the eleven absent providers or their custom-root/auth variants.
+2. No polling schedule, interval-change, suspend/resume timer, or empty-result retry tests.
+3. No end-to-end `UsageStore` → companion ledger → evolution/graduation/dex tests.
+4. No reward, purchase, item-use, premium egg, Shiny Charm, Mint, Rare Candy, or Ditto lifecycle tests.
+5. No Shop/Bag/Collection navigation and mutation tests.
+6. No notification opt-in, threshold, deduplication, re-arm, or event tests.
+7. No full UI localization/language-switch tests.
+8. No update checking, release selection, update UX, or save export/import tests.
+9. No warning/burn forecast/provider-status behavior tests.
+
+The macOS suite contains dedicated coverage for these areas, including `CompanionTests`, `RareCandyTests`, `PremiumEggTests`, `ShopTests`, `DittoTests`, `SaveTransferTests`, provider-specific suites, `CustomRootsTests`, `LocalUsageCacheTests`, and `SingleInstanceTests`. Test-count parity alone would be misleading; Windows should add tests only as each missing production slice is ported.
+
+## 18. Full Feature Matrix
+
+Counts in section 2 are calculated from this table only.
+
+| Category | Feature | macOS behavior | Windows behavior | Status | macOS evidence | Windows evidence | Priority | Size |
+|---|---|---|---|---|---|---|---|---|
+| Providers | Provider abstraction/selection | Common provider protocol and selected-provider state | Common interface, snapshots, selector | COMPLETE | `UsageProvider.swift`; `UsageStore.swift` | `IUsageProvider.cs`; `UsageViewModel.cs` | P0 | S |
+| Providers | Codex local usage | JSONL local usage with enrichment | Detailed JSONL pipeline and enrichment | COMPLETE | `LocalCodexProvider` | `LocalCodexUsageProvider.cs`; `CodexLocalRolloutPipeline.cs` | P0 | — |
+| Providers | Claude Code | Local usage provider | Not registered/implemented | MISSING | `LocalClaudeProvider` | `AppComposition.CreateUsageViewModel` | P0 | L |
+| Providers | Gemini | Local usage provider | Not registered/implemented | MISSING | `LocalGeminiProvider` | `AppComposition.CreateUsageViewModel` | P0 | M |
+| Providers | Antigravity | Local usage provider | Not registered/implemented | MISSING | `LocalAntigravityProvider` | `AppComposition.CreateUsageViewModel` | P0 | L |
+| Providers | OpenCode | Local usage provider | Not registered/implemented | MISSING | `LocalOpenCodeProvider` | `AppComposition.CreateUsageViewModel` | P1 | M |
+| Providers | Hermes Agent | Local usage provider | Not registered/implemented | MISSING | `LocalHermesProvider` | `AppComposition.CreateUsageViewModel` | P1 | M |
+| Providers | Cursor | Dashboard API with SQLite fallback | Not registered/implemented | MISSING | `LocalCursorProvider` | `AppComposition.CreateUsageViewModel` | P1 | L |
+| Providers | Grok | Local usage provider | Not registered/implemented | MISSING | `LocalGrokProvider` | `AppComposition.CreateUsageViewModel` | P1 | M |
+| Providers | Copilot | Local usage provider | Not registered/implemented | MISSING | `LocalCopilotProvider` | `AppComposition.CreateUsageViewModel` | P1 | M |
+| Providers | Kiro | Local usage, including 2.20+ JSONL | Not registered/implemented | MISSING | `LocalKiroProvider` | `AppComposition.CreateUsageViewModel` | P1 | M |
+| Providers | Pi | Local usage provider | Not registered/implemented | MISSING | `LocalPiProvider` | `AppComposition.CreateUsageViewModel` | P2 | M |
+| Providers | omp | Local usage provider | Not registered/implemented | MISSING | `LocalOmpProvider` | `AppComposition.CreateUsageViewModel` | P2 | M |
+| Usage | Daily aggregation | Common daily snapshot | Codex daily snapshot | COMPLETE | `UsageStore.refresh` | `UsageStore.RefreshAsync` | P0 | — |
+| Usage | Active 5-hour period | Enriched active block | Codex Recent 5 hours | COMPLETE | `LocalUsageReader` enrichment | `CodexUsagePeriodAggregator.cs` | P0 | — |
+| Usage | Week aggregation | Calendar week enrichment | Codex week enrichment | COMPLETE | `LocalUsageReader` | `CodexUsagePeriodAggregator.cs` | P0 | — |
+| Usage | Month aggregation | Calendar month enrichment | Codex month enrichment, including zero-today carrier | COMPLETE | `LocalUsageReader` | `UsageStore.cs`; `CodexUsagePeriodAggregator.cs` | P0 | — |
+| Usage | Token totals | Input/output/cache/total representation | Codex token totals represented | COMPLETE | `Models.swift` | `DailyUsage.cs`; `BlockUsage.cs`; `PeriodUsage.cs`; `UsageViewModel.cs` | P0 | — |
+| Usage | Cost display | Displayed for cost-reporting providers | Core/UI shape exists, but shipped Codex reports no cost | PARTIAL | `PopoverView.usageSection` | `UsageViewModel.cs`; `MainWindow.xaml` | P1 | S |
+| Usage | Refresh coalescing | Concurrent requests share refresh | Concurrent requests share refresh | COMPLETE | `UsageStore.refresh` | `UsageStore.RefreshAsync` | P0 | — |
+| Usage | Stale snapshot preservation | Keeps usable prior data on failure | Keeps daily/period/official prior data | COMPLETE | `UsageStore` refresh phases | `UsageStore.cs` | P0 | — |
+| Usage | Recurring polling | Configurable timer refresh | No recurring timer | MISSING | `UsageStore.reschedule` | `InitialRefreshController.cs` | P0 | M |
+| Usage | Empty-result retry | Short retry when scan returns empty | No retry scheduler | MISSING | `UsageStore.handleEmptyUsageRetry` | `UsageStore.cs` | P1 | S |
+| Usage | Custom scan roots | Per-provider configured roots | Codex conventional profile discovery only | MISSING | `CustomRoots`; persisted `UsageStore` settings | `CodexSessionLocator.cs` | P1 | M |
+| Usage | Burn forecast | Computes burn tier/forecast | No production calculation/UI | MISSING | `UsageStore` burn fields | `UsageViewModel.cs` | P2 | M |
+| Usage | Provider status checks | Optional provider health/status | No production status layer | MISSING | `UsageStore` status checks | absent | P2 | M |
+| Limits | Codex official fetch | App-server rate limits | App-server rate limits | COMPLETE | `CodexRateLimitsProvider.swift` | `CodexRateLimitsProvider.cs` | P0 | — |
+| Limits | Remaining percentages | Used/remaining selectable | Remaining values, clamped 0–100 | PARTIAL | `AppSettings.limitDisplayMode` | `UsageViewModel.ApplyOfficialLimits` | P0 | S |
+| Limits | Reset display | Shows reset timestamps | Shows reset timestamps | COMPLETE | `PopoverView.limitRow` | `MainWindow.xaml` | P0 | — |
+| Limits | Multiple Codex buckets | Models/displays bucket set | Parser can see richer data; UI projects primary/secondary only | PARTIAL | `CodexRateLimitsProvider` | `CodexRateLimitsProvider.cs`; `UsageViewModel.ApplyOfficialLimits` | P1 | M |
+| Limits | Plan/credits/spend | Displays plan, credits/spend controls where available | Not exposed in UI | MISSING | `CodexRateLimitsProvider`; `PopoverView` | `UsageViewModel.cs` | P1 | M |
+| Limits | Claude OAuth limits | OAuth limits/account metadata | No Claude integration | MISSING | `OAuthLimitsProvider.swift` | absent | P0 | L |
+| Limits | Antigravity quota | Google quota groups | No Antigravity integration | MISSING | `AntigravityRateLimitsProvider.swift` | absent | P1 | L |
+| Companion | Persisted companion restore | Restores current companion state | Restores current companion state | COMPLETE | `CompanionStore.load` | `CompanionStore.InitializeAsync`; `JsonCompanionPersistence.cs` | P0 | — |
+| Companion | Pokémon data lookup | Species/evolution/localized data | GraphQL index plus REST fallback/cache | COMPLETE | Pokémon API services | `PokeApiClient.cs` | P0 | — |
+| Companion | Manual representative | Collection representative can be selected | Stored representative can be selected through VM seam, no full collection UI | PARTIAL | `CompanionView` representative picker | `CompanionStore.SetRepresentativeAsync`; `CompanionViewModel.cs` | P1 | M |
+| Companion | Usage ledger | Per-provider daily ledger consumes deltas | Model field exists; no update path | MISSING | `CompanionStore.update` | `CompanionModels.cs`; `CompanionStore.cs` | P0 | L |
+| Companion | Egg progression | Usage advances egg | Display model exists; usage does not advance it | MISSING | `CompanionStore.applyUsage` | `CompanionViewModel.cs` | P0 | L |
+| Companion | Evolution | Planned branches and overflow progression | Evolution models/display only | MISSING | `CompanionStore.applyUsage` | `CompanionModels.cs`; `CompanionViewModel.cs` | P0 | L |
+| Companion | Graduation/new egg | Graduates final stage and starts cycle | No production path | MISSING | `CompanionStore.graduate` | `CompanionStore.cs` | P0 | L |
+| Companion | Dex/catch log mutation | Captures update dex and log | Persisted shapes, no mutation loop/UI | MISSING | `CompanionStore.graduate`; `CompanionView` | `CompanionModels.cs` | P1 | L |
+| Companion | Rarity/nature/shiny roll | Weighted hatch/capture attributes | Manual hatch supports weighted species/data, but no connected cycle | PARTIAL | `CompanionStore` sampling | `CompanionStore.HatchRandomAsync` | P1 | M |
+| Companion | Ditto disguise/reveal | Full disguise/reveal lifecycle | No production lifecycle | MISSING | `CompanionStore`; `DittoTests` | absent | P2 | M |
+| Economy | Currency rewards/ledger | Usage and events grant currency | Ledger-shaped model only | MISSING | `CompanionStore.grantCandies` | `CompanionModels.cs` | P1 | L |
+| Economy | Shop/purchases | Purchases validated and persisted | No actions/UI | MISSING | `CompanionStore.buy`; `ShopView.swift` | absent | P1 | L |
+| Economy | Rare Candy | Inventory item advances progress | Model shape only | MISSING | `CompanionStore.useRareCandy` | `CompanionModels.cs` | P1 | M |
+| Economy | Mint | Changes nature | Model shape only | MISSING | `CompanionStore.useMint` | `CompanionModels.cs` | P2 | M |
+| Economy | Shiny Charm | Alters shiny odds | Model shape only | MISSING | `CompanionStore`; `ShinyCharmTests` | `CompanionModels.cs` | P2 | M |
+| Economy | Premium/fresh eggs | Purchasable egg variants affect hatch | No production behavior | MISSING | `CompanionStore`; `PremiumEggTests` | absent | P2 | M |
+| Floating | Basic floating window | Non-activating always-on-top panel | Transparent topmost non-activating WPF window | WINDOWS EQUIVALENT | `FloatingPetPanel.swift` | `FloatingPokemonWindow.xaml.cs` | P0 | — |
+| Floating | Drag and position persistence | Drag/persist/multi-screen recovery | Drag/persist/multi-monitor clamp | WINDOWS EQUIVALENT | `FloatingPetPanel` | `FloatingPetController.cs`; `FloatingPetPositioner.cs` | P0 | — |
+| Floating | Click/context actions | Opens popup; Open/Hide actions | Opens popup; Open/Hide actions | WINDOWS EQUIVALENT | `FloatingPetPanel` | `FloatingPokemonWindow.xaml.cs` | P0 | — |
+| Floating | Animated/static fallback | Animated pet/egg with fallback | GIF/static pet/egg with cache/fallback | COMPLETE | `SpriteAnimation.swift`; `SpriteLoader.swift` | `PokemonSpriteLoader.cs`; `AnimatedSpritePresenter.cs`; `WpfPokemonSpriteDecoder.cs` | P0 | — |
+| Floating | Configurable size | 48–192 setting | Fixed size | MISSING | `AppSettings.floatingPetSize` | `FloatingPokemonWindow.xaml` | P2 | S |
+| Floating | Animation quality | User-selectable quality | No setting | MISSING | `AppSettings.animationQuality` | absent | P2 | M |
+| Floating | Hover usage tooltip | Tokens/limit hover summary | No tooltip | MISSING | `FloatingPetPanel` | `FloatingPokemonWindow.xaml` | P2 | M |
+| Floating | Alert/event bubbles | Limit and companion speech bubbles | No bubbles | MISSING | `FloatingPetPanel`; app event routing | absent | P1 | M |
+| Tray | Tray presence/actions | `NSStatusItem` opens app controls | `NotifyIcon` with Open/Refresh/Exit | WINDOWS EQUIVALENT | `PokeTokenBarApp` status item | `SystemTrayController.cs`; `NotifyIconTrayIcon.cs` | P0 | — |
+| Tray | Popup behavior | Transient popover closes outside | Tool window closes on deactivation | WINDOWS EQUIVALENT | `PopoverView`; app delegate | `MainWindow.xaml.cs` | P0 | — |
+| Tray | Multi-monitor placement | Native popover placement | Cursor-monitor and DPI-aware placement | COMPLETE | AppKit popover | `PopupPositioner.cs` | P0 | — |
+| Tray | Animated companion icon | Representative animates in menu bar | Generic application icon | PARTIAL | status-item sprite controller | `NotifyIconTrayIcon.cs` | P1 | M |
+| Tray | Menu-bar token/cost/limit text | Configurable status-item text | Exact menu-bar treatment unavailable in notification area | MAC-ONLY / N/A | `UsageStore.menuBarText` | Windows shell constraint | P3 | — |
+| Tray | Provider switch/manual refresh | Provider tabs and refresh | Selector and refresh command | COMPLETE | `PopoverView` | `MainWindow.xaml`; `UsageViewModel.cs` | P0 | — |
+| Popup | Home usage view | Usage, limits, companion, warnings | Usage, limits, companion header | PARTIAL | `PopoverView` | `MainWindow.xaml` | P0 | M |
+| Popup | Shop tab | Reachable shop | Absent | MISSING | `ShopView.swift`; `PopoverView` | absent | P1 | M |
+| Popup | Bag tab | Reachable inventory/actions | Absent | MISSING | `BagView.swift`; `PopoverView` | absent | P1 | M |
+| Popup | Collection/dex tab | Collection, dex, catch log, representative | Absent | MISSING | `CompanionView.swift`; `PopoverView` | absent | P1 | L |
+| Settings | Launch at login | Native login service | HKCU Run entry | WINDOWS EQUIVALENT | settings login service | `WindowsAutoStartService.cs` | P0 | — |
+| Settings | Floating enabled/position reset | Toggle/reset | Toggle/reset | COMPLETE | `SettingsView` | `SettingsViewModel.cs`; `MainWindow.xaml` | P0 | — |
+| Settings | Refresh interval | Manual/1/2/5/15 minute choices | No setting or polling | MISSING | `AppSettings.refreshInterval` | `AppSettings.cs` | P0 | M |
+| Settings | Language | Six-language selector | No app-language selector | MISSING | `SettingsView`; `Localization.swift` | `MainWindow.xaml` | P1 | M |
+| Settings | Limit used/remaining mode | User choice | Fixed remaining display | PARTIAL | `AppSettings.limitDisplayMode` | `UsageViewModel.ApplyOfficialLimits` | P2 | S |
+| Settings | Floating/animation options | Size, quality, bubble preferences | Enabled only | PARTIAL | `SettingsView` | `SettingsViewModel.cs` | P2 | M |
+| Settings | Notification/threshold options | Category toggles and 80/95 defaults | Absent | MISSING | `AppSettings` | absent | P1 | M |
+| Settings | Provider roots/auth controls | Roots, Keychain opt-out, refresh controls | Absent | MISSING | `SettingsView`; `CustomRoots` | absent | P1 | L |
+| Localization | Pokémon names/natures | Six languages | API names and some companion strings support six languages | PARTIAL | `Localization.swift`; model helpers | `PokeApiClient.cs`; `CompanionViewModel.cs` | P1 | M |
+| Localization | Full application UI | Six-language UI strings | Usage/tray/settings hard-coded English | MISSING | `Localization.swift` | `MainWindow.xaml`; `NotifyIconTrayIcon.cs` | P1 | L |
+| Notifications | Limit warning/critical | Configurable, deduped notifications | Absent | MISSING | app notification routing; `UsageStore` | absent | P1 | L |
+| Notifications | Companion events | Hatch/evolve/graduate notifications | Absent | MISSING | `PokeTokenBarApp` | absent | P1 | M |
+| Lifecycle | Start hidden/background | Accessory tray app | WPF tray app starts hidden | WINDOWS EQUIVALENT | `PokeTokenBarApp` | `App.xaml.cs` | P0 | — |
+| Lifecycle | Single instance | Prevents duplicate lifecycle | User-SID named mutex before composition | WINDOWS EQUIVALENT | `SingleInstanceController` | `SingleInstanceGuard.cs`; `App.OnStartup` | P0 | — |
+| Lifecycle | Sleep/resume | Pauses work and refreshes after wake | Hides/pauses pet and refreshes after resume | PARTIAL | app sleep handlers | `PowerLifecycleController.cs` | P0 | S |
+| Lifecycle | Clean shutdown | Releases app resources | Disposes tray/windows/events/mutex | COMPLETE | app termination | `App.xaml.cs` | P0 | — |
+| Lifecycle | Crash diagnostics/keep-alive | Logging/crash reporting and launch-agent behavior | No equivalent diagnostics or restart | MISSING | app/logging/launch-agent code | absent | P2 | L |
+| Persistence | App settings | `UserDefaults` | LocalAppData JSON | WINDOWS EQUIVALENT | `UsageStore.init` and persisted properties | `JsonAppSettingsPersistence.cs` | P0 | — |
+| Persistence | Companion state | Persisted game state | Persisted/restored state | PARTIAL | `CompanionStore` | `JsonCompanionPersistence.cs` | P0 | M |
+| Persistence | Sprite/species cache | Cached assets/data | Cached sprites/base index | COMPLETE | sprite/cache services | `PokemonSpriteLoader.cs`; `PokeApiClient.cs` | P1 | — |
+| Persistence | Incremental usage cache | Provider scan/cache support | Codex scans and in-memory snapshots; no equivalent persistent usage cache | PARTIAL | `LocalUsageCache` | `CodexLocalRolloutPipeline.cs`; `UsageStore.cs` | P2 | M |
+| Persistence | Save export/import | Transfer companion save | Absent | MISSING | save transfer service/UI | absent | P2 | M |
+| Updates | Update checking/UI | GitHub release check and banner | Absent | MISSING | `UpdateChecker.swift`; `PopoverView` | absent | P1 | M |
+| Distribution | Packaged release | App bundle/Homebrew flows | Self-contained Windows publish | PARTIAL | packaging scripts | Windows `.csproj`; `README.md` | P0 | M |
+| Distribution | Upgrade/relaunch | Homebrew upgrade or release-page path | No updater/relaunch path | MISSING | `UpdateChecker` | absent | P2 | L |
+| Distribution | Signing/installer policy | macOS signing/package workflow | No equivalent documented automated Windows installer/signing path | MISSING | `scripts/`; package docs | Windows project/release docs | P2 | L |
+
+## 19. Recommended Porting Roadmap
+
+### Phase A — Runtime correctness and provider foundation
+
+Add lifecycle-safe recurring polling first, including interval persistence and empty-result retry. Then port providers in dependency/value order: Claude Code (with Windows credential strategy and official limits), Gemini, Antigravity, Cursor, then the remaining local-only providers. Reuse the existing `IUsageProvider`/`UsageStore`/selector contract and add no speculative provider framework.
+
+**Exit criteria:** long-running usage stays current; provider registration is data-driven enough for the implemented set; each provider has local fixtures and period tests; failures preserve stale data.
+
+### Phase B — Connect the companion game loop
+
+Port only the state transitions needed to connect successful usage refreshes to the provider ledger, egg progress, evolution, graduation, next egg, dex, and persisted catch history. Preserve the existing Windows PokeAPI/sprite/persistence work. Establish a single refresh-to-companion integration seam before adding presentation polish.
+
+**Exit criteria:** real usage deterministically progresses and persists a companion across restart; overflow and date/provider ledger semantics match macOS.
+
+### Phase C — Economy and companion surfaces
+
+Port candy rewards, inventory mutations, Rare Candy, Mint, Shiny Charm, egg variants, and purchases; then expose Shop, Bag, Collection/dex, catch log, and representative selection. Do not build screens before their store actions are functional and tested.
+
+**Exit criteria:** every visible action is persisted, recoverable, and covered by focused state-transition tests.
+
+### Phase D — Alerts, settings, and localization
+
+Add Windows notifications with threshold/deduplication semantics, floating bubbles, full refresh/limit/floating settings, and a WPF resource-based six-language UI. Add burn/status displays only after polling and notifications supply a reason for them.
+
+**Exit criteria:** all user-facing strings switch language; warning and companion notifications respect settings and do not spam; floating size/quality/bubbles persist.
+
+### Phase E — Update and distribution closure
+
+Choose and document a Windows installer/signing/update strategy, add release checking and safe handoff to the chosen updater or release page, then add save export/import and support diagnostics.
+
+**Exit criteria:** a non-developer can install, update, recover/export state, and provide actionable diagnostics without altering `.codex` data.
