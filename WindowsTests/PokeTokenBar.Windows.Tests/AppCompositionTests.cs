@@ -18,10 +18,14 @@ public sealed partial class AppCompositionTests
         var viewModel = AppComposition.CreateUsageViewModel();
         var store = GetPrivateField<UsageStore>(viewModel, "_store");
         var providers = GetPrivateField<IReadOnlyList<IUsageProvider>>(store, "_providers");
+        var rateLimitsProvider = GetPrivateField<ICodexRateLimitsProvider>(
+            store,
+            "_codexRateLimitsProvider");
 
         var provider = Assert.Single(providers);
         Assert.IsType<LocalCodexUsageProvider>(provider);
         Assert.Equal("codex", provider.Id);
+        Assert.IsType<CodexRateLimitsProvider>(rateLimitsProvider);
         Assert.Empty(viewModel.Providers);
     }
 
@@ -171,6 +175,15 @@ public sealed partial class AppCompositionTests
             "LastUpdatedText",
             "RefreshCommand",
             "ErrorMessage",
+            "HasCodexRateLimits",
+            "HasFiveHourLimit",
+            "FiveHourLimitPercent",
+            "FiveHourLimitText",
+            "FiveHourResetText",
+            "HasWeeklyLimit",
+            "WeeklyLimitPercent",
+            "WeeklyLimitText",
+            "WeeklyResetText",
         ];
 
         Assert.All(expected, property =>

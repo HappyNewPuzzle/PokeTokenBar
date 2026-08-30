@@ -8,6 +8,7 @@ public sealed class UsageStore
     private readonly IReadOnlyList<IUsageProvider> _providers;
     private readonly IReadOnlyList<(string Id, string DisplayName)> _registeredProviders;
     private readonly TimeProvider _timeProvider;
+    private readonly ICodexRateLimitsProvider? _codexRateLimitsProvider;
     private readonly object _stateLock = new();
 
     private IReadOnlyList<ProviderSnapshot> _snapshots = Array.Empty<ProviderSnapshot>();
@@ -15,10 +16,13 @@ public sealed class UsageStore
     private string? _lastErrorDescription;
     private bool _isRefreshing;
     private bool _refreshPending;
+    private CodexRateLimitStatus? _codexRateLimits;
+    private DateTimeOffset? _codexRateLimitsUpdatedAt;
 
     public UsageStore(
         IEnumerable<IUsageProvider> providers,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        ICodexRateLimitsProvider? codexRateLimitsProvider = null)
     {
         ArgumentNullException.ThrowIfNull(providers);
 
@@ -34,6 +38,7 @@ public sealed class UsageStore
                 .Select(static provider => (provider.Id, provider.DisplayName))
                 .ToArray());
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _codexRateLimitsProvider = codexRateLimitsProvider;
     }
 
     public IReadOnlyList<ProviderSnapshot> Snapshots
@@ -82,6 +87,41 @@ public sealed class UsageStore
             lock (_stateLock)
             {
                 return _lastErrorDescription;
+            }
+        }
+    }
+
+    public CodexRateLimitStatus? CodexRateLimits
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _codexRateLimits;
+            }
+        }
+    }
+
+    public DateTimeOffset? CodexRateLimitsUpdatedAt
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _codexRateLimitsUpdatedAt;
+            }
+        }
+    }
+
+    public bool CodexRateLimitsStale
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _codexRateLimits is not null &&
+                    _codexRateLimitsUpdatedAt is DateTimeOffset updatedAt &&
+                    Now() - updatedAt > TimeSpan.FromMinutes(15);
             }
         }
     }
@@ -283,6 +323,38 @@ public sealed class UsageStore
 
         cancellationToken.ThrowIfCancellationRequested();
         CommitEnrichmentPhase(enrichmentOutcomes);
+        await RefreshCodexRateLimitsAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task RefreshCodexRateLimitsAsync(CancellationToken cancellationToken)
+    {
+        if (_codexRateLimitsProvider is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var limits = await _codexRateLimitsProvider
+                .FetchAsync(cancellationToken)
+                .ConfigureAwait(false);
+            lock (_stateLock)
+            {
+                _codexRateLimits = limits;
+                if (limits is not null)
+                {
+                    _codexRateLimitsUpdatedAt = Now();
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // Official limits are best effort. Preserve the previous successful value.
+        }
     }
 
     private void CommitDailyPhase(

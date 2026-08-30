@@ -47,7 +47,10 @@ public static class AppComposition
     public static UsageViewModel CreateUsageViewModel()
     {
         IUsageProvider provider = new LocalCodexUsageProvider();
-        var store = new UsageStore([provider]);
+        ICodexRateLimitsProvider rateLimitsProvider = new CodexRateLimitsProvider();
+        var store = new UsageStore(
+            [provider],
+            codexRateLimitsProvider: rateLimitsProvider);
         return new UsageViewModel(store);
     }
 }

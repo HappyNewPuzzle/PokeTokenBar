@@ -38,6 +38,15 @@ public sealed class UsageViewModel : INotifyPropertyChanged
     private string? _errorMessage;
     private DateTimeOffset? _lastUpdated;
     private string? _lastUpdatedText;
+    private bool _hasCodexRateLimits;
+    private bool _hasFiveHourLimit;
+    private int _fiveHourLimitPercent;
+    private string? _fiveHourLimitText;
+    private string? _fiveHourResetText;
+    private bool _hasWeeklyLimit;
+    private int _weeklyLimitPercent;
+    private string? _weeklyLimitText;
+    private string? _weeklyResetText;
 
     public UsageViewModel(
         UsageStore store,
@@ -386,6 +395,60 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         private set => SetField(ref _lastUpdatedText, value);
     }
 
+    public bool HasCodexRateLimits
+    {
+        get => _hasCodexRateLimits;
+        private set => SetField(ref _hasCodexRateLimits, value);
+    }
+
+    public bool HasFiveHourLimit
+    {
+        get => _hasFiveHourLimit;
+        private set => SetField(ref _hasFiveHourLimit, value);
+    }
+
+    public int FiveHourLimitPercent
+    {
+        get => _fiveHourLimitPercent;
+        private set => SetField(ref _fiveHourLimitPercent, value);
+    }
+
+    public string? FiveHourLimitText
+    {
+        get => _fiveHourLimitText;
+        private set => SetField(ref _fiveHourLimitText, value);
+    }
+
+    public string? FiveHourResetText
+    {
+        get => _fiveHourResetText;
+        private set => SetField(ref _fiveHourResetText, value);
+    }
+
+    public bool HasWeeklyLimit
+    {
+        get => _hasWeeklyLimit;
+        private set => SetField(ref _hasWeeklyLimit, value);
+    }
+
+    public int WeeklyLimitPercent
+    {
+        get => _weeklyLimitPercent;
+        private set => SetField(ref _weeklyLimitPercent, value);
+    }
+
+    public string? WeeklyLimitText
+    {
+        get => _weeklyLimitText;
+        private set => SetField(ref _weeklyLimitText, value);
+    }
+
+    public string? WeeklyResetText
+    {
+        get => _weeklyResetText;
+        private set => SetField(ref _weeklyResetText, value);
+    }
+
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
         if (IsRefreshing)
@@ -450,6 +513,59 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         ErrorMessage = _store.LastErrorDescription;
         LastUpdated = _store.LastUpdated;
         LastUpdatedText = FormatRelative(_store.LastUpdated);
+        ApplyOfficialLimits(selected?.ProviderId);
+    }
+
+    private void ApplyOfficialLimits(string? selectedProviderId)
+    {
+        var status = selectedProviderId == "codex" ? _store.CodexRateLimits : null;
+        var snapshot = status?.RateLimits.HasVisibleLimit == true
+            ? status.RateLimits
+            : status?.VisibleSnapshots.FirstOrDefault();
+        var primary = snapshot?.Primary;
+        var secondary = snapshot?.Secondary;
+
+        HasFiveHourLimit = primary is not null;
+        FiveHourLimitPercent = Math.Clamp(primary?.UsedPercent ?? 0, 0, 100);
+        FiveHourLimitText = primary is null ? null : $"{primary.UsedPercent}%";
+        FiveHourResetText = FormatReset(primary?.ResetsAt);
+
+        HasWeeklyLimit = secondary is not null;
+        WeeklyLimitPercent = Math.Clamp(secondary?.UsedPercent ?? 0, 0, 100);
+        WeeklyLimitText = secondary is null ? null : $"{secondary.UsedPercent}%";
+        WeeklyResetText = FormatReset(secondary?.ResetsAt);
+        HasCodexRateLimits = HasFiveHourLimit || HasWeeklyLimit;
+    }
+
+    private string? FormatReset(DateTimeOffset? timestamp)
+    {
+        if (timestamp is not DateTimeOffset value)
+        {
+            return null;
+        }
+
+        var remaining = value.ToUniversalTime() - _timeProvider.GetUtcNow();
+        if (remaining <= TimeSpan.Zero)
+        {
+            return "Reset due";
+        }
+
+        if (remaining < TimeSpan.FromMinutes(1))
+        {
+            return "Resets in <1m";
+        }
+
+        if (remaining >= TimeSpan.FromDays(1))
+        {
+            return $"Resets in {(int)remaining.TotalDays}d {remaining.Hours}h";
+        }
+
+        if (remaining >= TimeSpan.FromHours(1))
+        {
+            return $"Resets in {(int)remaining.TotalHours}h {remaining.Minutes}m";
+        }
+
+        return $"Resets in {(int)remaining.TotalMinutes}m";
     }
 
     private string? FormatRelative(DateTimeOffset? timestamp)

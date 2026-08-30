@@ -699,7 +699,7 @@ public sealed class UsageStoreTests : IDisposable
     }
 
     [Fact]
-    public void UsageStorePublicApi_DependsOnProviderAndCoreModelsNotCodexTypes()
+    public void UsageStorePublicApi_KeepsOfficialLimitsInCoreAndAvoidsInfrastructureTypes()
     {
         var exposedTypes = typeof(UsageStore)
             .GetMembers(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
@@ -708,7 +708,8 @@ public sealed class UsageStoreTests : IDisposable
             .Cast<Type>();
 
         Assert.DoesNotContain(exposedTypes, type =>
-            type.Name.Contains("Codex", StringComparison.Ordinal));
+            type.Namespace?.Contains("Infrastructure", StringComparison.Ordinal) == true);
+        Assert.Contains(typeof(CodexRateLimitStatus), exposedTypes);
     }
 
     private int _coalescingDailyCalls;
