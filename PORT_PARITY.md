@@ -8,7 +8,7 @@ This is a code-based parity audit, not an implementation plan disguised as compl
 |---|---|
 | Audit date | 2026-08-30 |
 | Windows branch | `windows-port` |
-| Windows commit | `62204bcc29aecacecec7faf8579baa3c232bb8c8` |
+| Windows commit | `a6908bbd04a1dbc25ad6501a3467a01323161c3c` |
 | macOS baseline | `upstream/main` at `a69444c852559639dcde600fd71a41665f549e91` |
 | Merge base | `4c29ca0fa28c1fb67929517542d4e58d802171f8` |
 | Initial `git status --short` | Existing unrelated `.gitignore` change and two untracked Korean documentation files |
@@ -26,15 +26,15 @@ Estimates are implementation effort after dependencies are available: **S** (up 
 
 ## 2. Executive Summary
 
-The Windows port is a credible Codex- and Claude-focused tray application, but it is not yet a full port of the current macOS product. Its strongest areas are Codex/Claude local parsing and period aggregation, their official limits, configurable background polling, the core usage-driven companion loop, single-instance startup, tray/popup mechanics, floating-window mechanics, persistence, and sleep/resume handling. The largest parity boundary is now provider and product breadth: macOS registers twelve local providers and exposes a complete companion/economy surface, while Windows registers Codex and Claude Code and does not expose the economy or collection surfaces.
+The Windows port is a credible four-provider tray application, but it is not yet a full port of the current macOS product. Its strongest areas are Codex, Claude, Gemini, and Antigravity local parsing and period aggregation; official Codex/Claude limits and Antigravity quota; configurable background polling; the core usage-driven companion loop; single-instance startup; tray/popup mechanics; floating-window mechanics; persistence; and sleep/resume handling. The largest parity boundary is now the remaining provider and product breadth: macOS registers twelve local providers and exposes a complete companion/economy surface, while Windows registers four providers and does not expose the economy or collection surfaces.
 
 The full matrix in section 18 contains **93 atomic feature rows**:
 
 | Status | Count | Share |
 |---|---:|---:|
-| COMPLETE | 33 | 35.5% |
-| PARTIAL | 10 | 10.8% |
-| MISSING | 40 | 43.0% |
+| COMPLETE | 35 | 37.6% |
+| PARTIAL | 11 | 11.8% |
+| MISSING | 37 | 39.8% |
 | WINDOWS EQUIVALENT | 9 | 9.7% |
 | MAC-ONLY / N/A | 1 | 1.1% |
 
@@ -42,13 +42,13 @@ These counts deliberately do not award parity merely because a model type or dor
 
 ### P0 findings
 
-1. **Ten production usage providers are missing.** Windows registers Codex and Claude Code; Gemini, Antigravity, OpenCode, Hermes, Cursor, Grok, Copilot, Kiro, Pi, and omp are absent.
+1. **Eight production usage providers are missing.** Windows registers Codex, Claude Code, Gemini, and Antigravity; OpenCode, Hermes, Cursor, Grok, Copilot, Kiro, Pi, and omp are absent.
 
 ## 3. Critical Missing Features
 
 | Priority | Gap | macOS behavior | Windows state | Size | Dependencies | Principal files |
 |---|---|---|---|---|---|---|
-| P0 | Multi-provider coverage | `UsageStore.init` registers 12 providers with common period enrichment. | `AppComposition.CreateUsageViewModel` registers Codex and Claude Code. | XL | Remaining provider parsers, roots/auth, fixtures, selector integration | macOS `Core/UsageStore.swift`, `Core/LocalUsageProvider.swift`, `Core/LocalAdditionalUsageProvider.swift`; Windows `App/AppComposition.cs` |
+| P0 | Multi-provider coverage | `UsageStore.init` registers 12 providers with common period enrichment. | `AppComposition.CreateUsageViewModel` registers Codex, Claude Code, Gemini, and Antigravity. | XL | Remaining provider parsers, roots/auth, fixtures, selector integration | macOS `Core/UsageStore.swift`, `Core/LocalUsageProvider.swift`, `Core/LocalAdditionalUsageProvider.swift`; Windows `App/AppComposition.cs` |
 | P1 | Companion product UI | Home shows progression and celebrations; Shop, Bag, Collection, catch log, dex details, and representative selection are reachable. | Popup shows a read-only companion header; no Shop/Bag/Collection navigation. | L | Companion loop and economy actions | macOS `CompanionView.swift`, `ShopView.swift`, `BagView.swift`, `PopoverView.swift`; Windows `MainWindow.xaml` |
 | P1 | Economy and items | Usage awards candy; Rare Candy, Mint, Shiny Charm, premium/fresh eggs, purchases, and inventory mutations are functional. | Data shapes exist, but no production actions or UI implement the economy. | L | Companion loop, atomic persistence, UI | macOS `Core/CompanionStore.swift`; Windows `Core/CompanionModels.cs`, `Core/CompanionStore.cs` |
 | P1 | Notifications and warnings | Configurable warning/critical usage notifications, companion event notifications, and floating bubbles are deduplicated and re-armed. | No Windows notification or warning service exists. | L | Polling, thresholds, companion events | macOS `PokeTokenBarApp.swift`, `Core/UsageStore.swift`; Windows: absent |
@@ -63,8 +63,8 @@ macOS provider registration is explicit in `UsageStore.init` and provider implem
 |---|---|---|---|---|
 | Codex | Local session parsing, period enrichment, cost/token aggregates, official app-server limits. | Detailed JSONL rollout/fork/canonical-session pipeline, daily/5h/week/month enrichment, official limits. | COMPLETE | macOS `LocalCodexProvider` in `LocalUsageProvider.swift`; Windows `LocalCodexUsageProvider.cs`, `CodexLocalRolloutPipeline.cs`, `CodexRateLimitsProvider.cs` |
 | Claude Code | Local JSONL usage plus OAuth limits/account metadata. | Recursive local JSONL usage/cost parsing plus read-only CLI OAuth limits/account metadata. | COMPLETE | macOS `LocalClaudeProvider`, `OAuthLimitsProvider.swift`; Windows `LocalClaudeUsageProvider.cs`, `ClaudeRateLimitsProvider.cs`, `ClaudeCredentialProvider.cs` |
-| Gemini | Local usage provider. | No production provider. | MISSING | macOS `LocalGeminiProvider`; Windows composition |
-| Antigravity | Local usage plus Google quota limits. | No production provider. | MISSING | macOS `LocalAntigravityProvider`, `AntigravityRateLimitsProvider.swift` |
+| Gemini | Local JSON/JSONL usage, period enrichment, and model pricing. | Recursive Windows-profile JSON/JSONL parsing, matching token mapping/dedup, periods, and cost. | COMPLETE | macOS `LocalGeminiProvider`; Windows `LocalGeminiUsageProvider.cs` |
+| Antigravity | SQLite/protobuf local usage plus Google quota limits. | Windows built-in SQLite/protobuf local usage plus read-only token-file quota integration. | COMPLETE | macOS `LocalAntigravityProvider`, `AntigravityRateLimitsProvider.swift`; Windows `LocalAntigravityUsageProvider.cs`, `AntigravityRateLimitsProvider.cs` |
 | OpenCode | Local usage provider. | No production provider. | MISSING | macOS `LocalOpenCodeProvider` |
 | Hermes Agent | Local usage provider. | No production provider. | MISSING | macOS `LocalHermesProvider` |
 | Cursor | Dashboard API primary path with SQLite fallback, including the zero-local-token fix. | No production provider. | MISSING | macOS `LocalCursorProvider` in `LocalAdditionalUsageProvider.swift` |
@@ -85,8 +85,8 @@ Remaining gaps:
 - Windows `UsagePollingController` matches the macOS Manual/1/2/5/15-minute schedule, defaults to two minutes, retries a truly empty successful refresh once after 20 seconds, and preserves `UsageStore` refresh coalescing.
 - macOS exposes used/remaining display preference, warning thresholds, burn-rate forecast, provider status checks, and configurable menu-bar summaries; Windows does not.
 - macOS Codex UI can represent multiple buckets, plan metadata, credits/spend controls, and warnings. Windows parses richer app-server data, but `UsageViewModel.ApplyOfficialLimits` selects only primary/secondary rows.
-- Antigravity official quota integration is absent on Windows. Claude OAuth limits use the Claude CLI credential file read-only and preserve prior limits on transient or authorization failures.
-- Claude Code is a production cost-reporting provider; calculated local cost flows through the existing snapshot and UI path.
+- Antigravity quota groups are fetched and displayed without the existing two-row projection losing buckets. Windows reads the two known standalone token files, but OS credential-store discovery and refresh remain unverified because this machine has no Antigravity installation; quota parity is therefore partial.
+- Claude Code and Gemini are production cost-reporting providers; calculated local cost flows through the existing snapshot and UI path. Antigravity intentionally reports no per-token cost.
 
 ## 6. Companion / Pokemon
 
@@ -139,7 +139,7 @@ macOS additionally supports launch-agent keep-alive and includes logging/crash r
 
 ## 14. Persistence / Cache
 
-Windows has appropriate native persistence for its implemented scope: LocalAppData JSON for app settings and the complete core companion progression state, position persistence, sprite caching, base-species caching, and Registry auto-start. Claude credentials are discovered read-only from the Claude CLI file; PokeTokenBar neither stores nor refreshes them. macOS also has incremental usage caches, economy state mutation, save export/import, migration from earlier app identity, custom provider roots, and Keychain credential discovery. Windows lacks save transfer and general provider credential/configuration persistence.
+Windows has appropriate native persistence for its implemented scope: LocalAppData JSON for app settings and the complete core companion progression state, position persistence, sprite caching, base-species caching, and Registry auto-start. Claude and Antigravity credentials are discovered read-only from their CLI files; PokeTokenBar neither stores nor overwrites them. macOS also has incremental usage caches, economy state mutation, save export/import, migration from earlier app identity, custom provider roots, and Keychain credential discovery. Windows lacks save transfer and general provider credential/configuration persistence.
 
 Neither audit nor any verification modified user `.codex` data.
 
@@ -159,7 +159,7 @@ Windows supports a self-contained Release publish and has release packaging meta
 | Process-based single-instance selection | User-SID named `Mutex` | WINDOWS EQUIVALENT |
 | `SMAppService` / launch agent | HKCU Run value | WINDOWS EQUIVALENT for login start; no keep-alive |
 | `UserDefaults` | LocalAppData JSON | WINDOWS EQUIVALENT |
-| Keychain credential discovery | Read-only Claude CLI credential-file discovery | WINDOWS EQUIVALENT for Claude CLI OAuth; no PokeTokenBar credential writes |
+| Keychain credential discovery | Read-only Claude and Antigravity CLI credential-file discovery | PARTIAL; file paths are supported without PokeTokenBar writes, but Antigravity Windows OS-store discovery is unverified |
 | Workspace/display sleep notifications | `SystemEvents.PowerModeChanged` | WINDOWS EQUIVALENT |
 | `UNUserNotificationCenter` | No Windows notification implementation | MISSING |
 | Homebrew/app bundle update | Self-contained publish | PARTIAL; distribution exists, update lifecycle does not |
@@ -167,11 +167,11 @@ Windows supports a self-contained Release publish and has release packaging meta
 
 ## 17. Test Coverage Gaps
 
-Windows has strong tests around Codex parsing and aggregation, including rollout/fork/canonical handling, daily/period behavior, stale preservation, coalescing, official-limit parsing, remaining-percentage projection, and provider visibility. It also tests tray placement/lifecycle seams, power behavior, single instance, persistence, sprite loading, PokeAPI behavior, and the usage-to-companion ledger/hatch/evolution/graduation cycle.
+Windows has strong tests around Codex, Claude, Gemini, and Antigravity parsing and aggregation, including JSON/JSONL and SQLite/protobuf fixtures, WAL-safe reads, daily/period behavior, stale preservation, coalescing, official-limit parsing, multi-bucket quota projection, remaining percentages, and provider visibility. It also tests tray placement/lifecycle seams, power behavior, single instance, persistence, sprite loading, PokeAPI behavior, and the usage-to-companion ledger/hatch/evolution/graduation cycle.
 
 The most important missing behavior tests correspond to missing production features:
 
-1. No production tests for the ten absent providers or their custom-root/auth variants.
+1. No production tests for the eight absent providers or their custom-root/auth variants.
 2. No reward, purchase, item-use, premium egg, Shiny Charm, Mint, Rare Candy, or Ditto lifecycle tests.
 3. No Shop/Bag/Collection navigation and mutation tests.
 4. No notification opt-in, threshold, deduplication, re-arm, or event tests.
@@ -190,8 +190,8 @@ Counts in section 2 are calculated from this table only.
 | Providers | Provider abstraction/selection | Common provider protocol and selected-provider state | Common interface, snapshots, selector | COMPLETE | `UsageProvider.swift`; `UsageStore.swift` | `IUsageProvider.cs`; `UsageViewModel.cs` | P0 | S |
 | Providers | Codex local usage | JSONL local usage with enrichment | Detailed JSONL pipeline and enrichment | COMPLETE | `LocalCodexProvider` | `LocalCodexUsageProvider.cs`; `CodexLocalRolloutPipeline.cs` | P0 | — |
 | Providers | Claude Code | Local usage provider | Registered local JSONL provider with period enrichment and cost | COMPLETE | `LocalClaudeProvider` | `LocalClaudeUsageProvider.cs`; `AppComposition.CreateUsageViewModel` | P0 | — |
-| Providers | Gemini | Local usage provider | Not registered/implemented | MISSING | `LocalGeminiProvider` | `AppComposition.CreateUsageViewModel` | P0 | M |
-| Providers | Antigravity | Local usage provider | Not registered/implemented | MISSING | `LocalAntigravityProvider` | `AppComposition.CreateUsageViewModel` | P0 | L |
+| Providers | Gemini | Local usage provider | Registered JSON/JSONL provider with periods, dedup, token mapping, and cost | COMPLETE | `LocalGeminiProvider` | `LocalGeminiUsageProvider.cs`; `AppComposition.CreateUsageViewModel` | P0 | — |
+| Providers | Antigravity | Local usage provider | Registered Windows SQLite/protobuf provider with read-only database copies and periods | COMPLETE | `LocalAntigravityProvider` | `LocalAntigravityUsageProvider.cs`; `AppComposition.CreateUsageViewModel` | P0 | — |
 | Providers | OpenCode | Local usage provider | Not registered/implemented | MISSING | `LocalOpenCodeProvider` | `AppComposition.CreateUsageViewModel` | P1 | M |
 | Providers | Hermes Agent | Local usage provider | Not registered/implemented | MISSING | `LocalHermesProvider` | `AppComposition.CreateUsageViewModel` | P1 | M |
 | Providers | Cursor | Dashboard API with SQLite fallback | Not registered/implemented | MISSING | `LocalCursorProvider` | `AppComposition.CreateUsageViewModel` | P1 | L |
@@ -200,17 +200,17 @@ Counts in section 2 are calculated from this table only.
 | Providers | Kiro | Local usage, including 2.20+ JSONL | Not registered/implemented | MISSING | `LocalKiroProvider` | `AppComposition.CreateUsageViewModel` | P1 | M |
 | Providers | Pi | Local usage provider | Not registered/implemented | MISSING | `LocalPiProvider` | `AppComposition.CreateUsageViewModel` | P2 | M |
 | Providers | omp | Local usage provider | Not registered/implemented | MISSING | `LocalOmpProvider` | `AppComposition.CreateUsageViewModel` | P2 | M |
-| Usage | Daily aggregation | Common daily snapshot | Codex and Claude daily snapshots | COMPLETE | `UsageStore.refresh` | `UsageStore.RefreshAsync` | P0 | — |
-| Usage | Active 5-hour period | Enriched active block | Codex and Claude Recent 5 hours | COMPLETE | `LocalUsageReader` enrichment | `CodexUsagePeriodAggregator.cs`; `LocalClaudeUsageProvider.cs` | P0 | — |
-| Usage | Week aggregation | Calendar week enrichment | Codex and Claude calendar-week enrichment | COMPLETE | `LocalUsageReader` | `CodexUsagePeriodAggregator.cs`; `LocalClaudeUsageProvider.cs` | P0 | — |
-| Usage | Month aggregation | Calendar month enrichment | Codex and Claude month enrichment, including zero-today carriers | COMPLETE | `LocalUsageReader` | `UsageStore.cs`; `CodexUsagePeriodAggregator.cs`; `LocalClaudeUsageProvider.cs` | P0 | — |
-| Usage | Token totals | Input/output/cache/total representation | Codex and Claude token totals represented | COMPLETE | `Models.swift` | `DailyUsage.cs`; `BlockUsage.cs`; `PeriodUsage.cs`; `UsageViewModel.cs` | P0 | — |
-| Usage | Cost display | Displayed for cost-reporting providers | Claude local cost uses the shared snapshot/UI path | COMPLETE | `PopoverView.usageSection` | `LocalClaudeUsageProvider.cs`; `UsageViewModel.cs`; `MainWindow.xaml` | P1 | — |
+| Usage | Daily aggregation | Common daily snapshot | Four registered providers produce daily snapshots | COMPLETE | `UsageStore.refresh` | `UsageStore.RefreshAsync` | P0 | — |
+| Usage | Active 5-hour period | Enriched active block | Four registered providers produce Recent 5 hours | COMPLETE | `LocalUsageReader` enrichment | local provider implementations | P0 | — |
+| Usage | Week aggregation | Calendar week enrichment | Four registered providers use calendar-week enrichment | COMPLETE | `LocalUsageReader` | local provider implementations | P0 | — |
+| Usage | Month aggregation | Calendar month enrichment | Four registered providers support month enrichment and zero-today carriers | COMPLETE | `LocalUsageReader` | `UsageStore.cs`; local provider implementations | P0 | — |
+| Usage | Token totals | Input/output/cache/total representation | Four registered providers represent their source token buckets | COMPLETE | `Models.swift` | `DailyUsage.cs`; `BlockUsage.cs`; `PeriodUsage.cs`; `UsageViewModel.cs` | P0 | — |
+| Usage | Cost display | Displayed for cost-reporting providers | Claude and Gemini cost use the shared snapshot/UI path | COMPLETE | `PopoverView.usageSection` | local provider implementations; `UsageViewModel.cs`; `MainWindow.xaml` | P1 | — |
 | Usage | Refresh coalescing | Concurrent requests share refresh | Concurrent requests share refresh | COMPLETE | `UsageStore.refresh` | `UsageStore.RefreshAsync` | P0 | — |
 | Usage | Stale snapshot preservation | Keeps usable prior data on failure | Keeps daily/period/official prior data | COMPLETE | `UsageStore` refresh phases | `UsageStore.cs` | P0 | — |
 | Usage | Recurring polling | Configurable timer refresh | Native timer with Manual/1/2/5/15-minute schedules | COMPLETE | `UsageStore.reschedule` | `UsagePollingController.cs` | P0 | — |
 | Usage | Empty-result retry | One 20-second retry after successful empty scan | Same; errors, month-only, and official-only are not empty | COMPLETE | `UsageStore.handleEmptyUsageRetry` | `UsagePollingController.EvaluateEmptyRetry` | P1 | — |
-| Usage | Custom scan roots | Per-provider configured roots | Conventional roots plus Claude's `CLAUDE_CONFIG_DIR`; no settings UI/persistence | MISSING | `CustomRoots`; persisted `UsageStore` settings | `CodexSessionLocator.cs`; `LocalClaudeUsageProvider.cs` | P1 | M |
+| Usage | Custom scan roots | Per-provider configured roots | Conventional/environment roots and injectable Gemini/Antigravity roots; no settings UI/persistence | MISSING | `CustomRoots`; persisted `UsageStore` settings | local provider constructors | P1 | M |
 | Usage | Burn forecast | Computes burn tier/forecast | No production calculation/UI | MISSING | `UsageStore` burn fields | `UsageViewModel.cs` | P2 | M |
 | Usage | Provider status checks | Optional provider health/status | No production status layer | MISSING | `UsageStore` status checks | absent | P2 | M |
 | Limits | Codex official fetch | App-server rate limits | App-server rate limits | COMPLETE | `CodexRateLimitsProvider.swift` | `CodexRateLimitsProvider.cs` | P0 | — |
@@ -219,7 +219,7 @@ Counts in section 2 are calculated from this table only.
 | Limits | Multiple Codex buckets | Models/displays bucket set | Parser can see richer data; UI projects primary/secondary only | PARTIAL | `CodexRateLimitsProvider` | `CodexRateLimitsProvider.cs`; `UsageViewModel.ApplyOfficialLimits` | P1 | M |
 | Limits | Plan/credits/spend | Displays plan, credits/spend controls where available | Not exposed in UI | MISSING | `CodexRateLimitsProvider`; `PopoverView` | `UsageViewModel.cs` | P1 | M |
 | Limits | Claude OAuth limits | OAuth limits/account metadata | Read-only CLI OAuth credential discovery, limits, plan, email, and organization metadata | COMPLETE | `OAuthLimitsProvider.swift` | `ClaudeCredentialProvider.cs`; `ClaudeRateLimitsProvider.cs`; `UsageViewModel.cs` | P0 | — |
-| Limits | Antigravity quota | Google quota groups | No Antigravity integration | MISSING | `AntigravityRateLimitsProvider.swift` | absent | P1 | L |
+| Limits | Antigravity quota | Google quota groups | All groups/buckets displayed from read-only standalone-token auth; Windows OS-store/refresh path unverified | PARTIAL | `AntigravityRateLimitsProvider.swift` | `AntigravityRateLimitsProvider.cs`; `AntigravityCredentialProvider.cs`; `UsageViewModel.cs` | P1 | S |
 | Companion | Persisted companion restore | Restores current companion state | Restores current companion state | COMPLETE | `CompanionStore.load` | `CompanionStore.InitializeAsync`; `JsonCompanionPersistence.cs` | P0 | — |
 | Companion | Pokémon data lookup | Species/evolution/localized data | GraphQL index plus REST fallback/cache | COMPLETE | Pokémon API services | `PokeApiClient.cs` | P0 | — |
 | Companion | Manual representative | Collection representative can be selected | Stored representative can be selected through VM seam, no full collection UI | PARTIAL | `CompanionView` representative picker | `CompanionStore.SetRepresentativeAsync`; `CompanionViewModel.cs` | P1 | M |
@@ -285,7 +285,7 @@ Counts in section 2 are calculated from this table only.
 
 ### Phase A — Runtime correctness and provider foundation
 
-With lifecycle-safe polling, interval persistence, empty-result retry, and Claude Code complete, port the remaining providers in dependency/value order: Gemini, Antigravity, Cursor, then the remaining local-only providers. Reuse the existing `IUsageProvider`/`UsageStore`/selector contract and add no speculative provider framework.
+With lifecycle-safe polling, interval persistence, empty-result retry, and the first four providers complete, port the remaining providers in dependency/value order: Cursor, then the remaining local-only providers. Reuse the existing `IUsageProvider`/`UsageStore`/selector contract and add no speculative provider framework.
 
 **Exit criteria:** long-running usage stays current; provider registration is data-driven enough for the implemented set; each provider has local fixtures and period tests; failures preserve stale data.
 

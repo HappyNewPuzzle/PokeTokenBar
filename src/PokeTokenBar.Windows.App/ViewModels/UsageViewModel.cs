@@ -49,6 +49,7 @@ public sealed class UsageViewModel : INotifyPropertyChanged
     private string? _weeklyRemainingText;
     private string? _weeklyResetText;
     private string? _officialLimitsMetadataText;
+    private IReadOnlyList<OfficialLimitRow> _antigravityLimitRows = Array.Empty<OfficialLimitRow>();
 
     public UsageViewModel(
         UsageStore store,
@@ -467,6 +468,20 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         private set => SetField(ref _officialLimitsMetadataText, value);
     }
 
+    public IReadOnlyList<OfficialLimitRow> AntigravityLimitRows
+    {
+        get => _antigravityLimitRows;
+        private set
+        {
+            if (SetField(ref _antigravityLimitRows, value))
+            {
+                OnPropertyChanged(nameof(HasAntigravityLimitRows));
+            }
+        }
+    }
+
+    public bool HasAntigravityLimitRows => AntigravityLimitRows.Count > 0;
+
     public Task RefreshAsync(CancellationToken cancellationToken = default) =>
         RefreshAsync(scheduleEmptyRetry: true, cancellationToken);
 
@@ -553,6 +568,7 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         DateTimeOffset? primaryReset = null;
         DateTimeOffset? secondaryReset = null;
         OfficialLimitsMetadataText = null;
+        AntigravityLimitRows = Array.Empty<OfficialLimitRow>();
 
         if (selectedProviderId == "codex")
         {
@@ -581,6 +597,16 @@ public sealed class UsageViewModel : INotifyPropertyChanged
                 OfficialLimitsMetadataText = null;
             }
         }
+        else if (selectedProviderId == "antigravity")
+        {
+            AntigravityLimitRows = _store.AntigravityRateLimits?.Groups
+                .SelectMany(group => group.Buckets.Select(bucket => new OfficialLimitRow(
+                    $"{group.DisplayName} · {bucket.DisplayName}",
+                    bucket.RemainingPercent,
+                    $"{bucket.RemainingPercent}% remaining",
+                    FormatReset(bucket.ResetsAt))))
+                .ToArray() ?? Array.Empty<OfficialLimitRow>();
+        }
 
         HasFiveHourLimit = primaryUsed is not null;
         FiveHourRemainingPercent = RemainingPercent(primaryUsed);
@@ -591,7 +617,7 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         WeeklyRemainingPercent = RemainingPercent(secondaryUsed);
         WeeklyRemainingText = secondaryUsed is null ? null : $"{WeeklyRemainingPercent}% remaining";
         WeeklyResetText = FormatReset(secondaryReset);
-        HasCodexRateLimits = HasFiveHourLimit || HasWeeklyLimit;
+        HasCodexRateLimits = HasFiveHourLimit || HasWeeklyLimit || HasAntigravityLimitRows;
     }
 
     private static int RemainingPercent(double? usedPercent) =>

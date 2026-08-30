@@ -286,6 +286,36 @@
                                FontSize="11"
                                Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
 
+                    <ItemsControl Margin="0,4,0,0"
+                                  ItemsSource="{Binding Usage.AntigravityLimitRows, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="0,10,0,0">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="{Binding Label, Mode=OneWay}" TextWrapping="Wrap" />
+                                        <TextBlock Grid.Column="1"
+                                                   Margin="8,0,0,0"
+                                                   Text="{Binding RemainingText, Mode=OneWay}"
+                                                   FontWeight="SemiBold" />
+                                    </Grid>
+                                    <ProgressBar Margin="0,6,0,0"
+                                                 Height="6"
+                                                 Minimum="0"
+                                                 Maximum="100"
+                                                 Value="{Binding RemainingPercent, Mode=OneWay}" />
+                                    <TextBlock Margin="0,4,0,0"
+                                               Text="{Binding ResetText, Mode=OneWay}"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
                     <StackPanel Margin="0,14,0,0">
                         <StackPanel.Style>
                             <Style TargetType="StackPanel">

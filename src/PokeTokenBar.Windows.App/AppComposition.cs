@@ -73,13 +73,18 @@ public static class AppComposition
         [
             new LocalCodexUsageProvider(),
             new LocalClaudeUsageProvider(),
+            new LocalGeminiUsageProvider(),
+            new LocalAntigravityUsageProvider(),
         ];
         ICodexRateLimitsProvider codexRateLimitsProvider = new CodexRateLimitsProvider();
         IClaudeRateLimitsProvider claudeRateLimitsProvider = new ClaudeRateLimitsProvider();
+        IAntigravityRateLimitsProvider antigravityRateLimitsProvider =
+            new AntigravityRateLimitsProvider();
         var store = new UsageStore(
             providers,
             codexRateLimitsProvider: codexRateLimitsProvider,
-            claudeRateLimitsProvider: claudeRateLimitsProvider);
+            claudeRateLimitsProvider: claudeRateLimitsProvider,
+            antigravityRateLimitsProvider: antigravityRateLimitsProvider);
         return new UsageViewModel(store);
     }
 }

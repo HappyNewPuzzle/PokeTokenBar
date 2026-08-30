@@ -10,6 +10,7 @@ public sealed class UsageStore
     private readonly TimeProvider _timeProvider;
     private readonly ICodexRateLimitsProvider? _codexRateLimitsProvider;
     private readonly IClaudeRateLimitsProvider? _claudeRateLimitsProvider;
+    private readonly IAntigravityRateLimitsProvider? _antigravityRateLimitsProvider;
     private readonly object _stateLock = new();
 
     private IReadOnlyList<ProviderSnapshot> _snapshots = Array.Empty<ProviderSnapshot>();
@@ -21,12 +22,15 @@ public sealed class UsageStore
     private DateTimeOffset? _codexRateLimitsUpdatedAt;
     private ClaudeRateLimitStatus? _claudeRateLimits;
     private DateTimeOffset? _claudeRateLimitsUpdatedAt;
+    private AntigravityRateLimitStatus? _antigravityRateLimits;
+    private DateTimeOffset? _antigravityRateLimitsUpdatedAt;
 
     public UsageStore(
         IEnumerable<IUsageProvider> providers,
         TimeProvider? timeProvider = null,
         ICodexRateLimitsProvider? codexRateLimitsProvider = null,
-        IClaudeRateLimitsProvider? claudeRateLimitsProvider = null)
+        IClaudeRateLimitsProvider? claudeRateLimitsProvider = null,
+        IAntigravityRateLimitsProvider? antigravityRateLimitsProvider = null)
     {
         ArgumentNullException.ThrowIfNull(providers);
 
@@ -44,6 +48,7 @@ public sealed class UsageStore
         _timeProvider = timeProvider ?? TimeProvider.System;
         _codexRateLimitsProvider = codexRateLimitsProvider;
         _claudeRateLimitsProvider = claudeRateLimitsProvider;
+        _antigravityRateLimitsProvider = antigravityRateLimitsProvider;
     }
 
     public IReadOnlyList<ProviderSnapshot> Snapshots
@@ -330,7 +335,8 @@ public sealed class UsageStore
         CommitEnrichmentPhase(enrichmentOutcomes);
         await Task.WhenAll(
             RefreshCodexRateLimitsAsync(cancellationToken),
-            RefreshClaudeRateLimitsAsync(cancellationToken)).ConfigureAwait(false);
+            RefreshClaudeRateLimitsAsync(cancellationToken),
+            RefreshAntigravityRateLimitsAsync(cancellationToken)).ConfigureAwait(false);
     }
 
     private async Task RefreshCodexRateLimitsAsync(CancellationToken cancellationToken)
@@ -424,6 +430,76 @@ public sealed class UsageStore
                     MonthTotal: null,
                     Now(),
                     provider.ReportsCost)).ToArray());
+            }
+        }
+    }
+
+    private async Task RefreshAntigravityRateLimitsAsync(CancellationToken cancellationToken)
+    {
+        if (_antigravityRateLimitsProvider is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var limits = await _antigravityRateLimitsProvider
+                .FetchAsync(cancellationToken)
+                .ConfigureAwait(false);
+            lock (_stateLock)
+            {
+                _antigravityRateLimits = limits;
+                if (limits is not null)
+                {
+                    _antigravityRateLimitsUpdatedAt = Now();
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // Antigravity quota is best effort; local usage remains available.
+        }
+
+        EnsureProviderSnapshotForOfficialLimits(
+            "antigravity",
+            _antigravityRateLimits?.HasVisibleLimit == true);
+    }
+
+    public AntigravityRateLimitStatus? AntigravityRateLimits
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _antigravityRateLimits;
+            }
+        }
+    }
+
+    public DateTimeOffset? AntigravityRateLimitsUpdatedAt
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _antigravityRateLimitsUpdatedAt;
+            }
+        }
+    }
+
+    public bool AntigravityRateLimitsStale
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _antigravityRateLimits is not null &&
+                    _antigravityRateLimitsUpdatedAt is DateTimeOffset updatedAt &&
+                    Now() - updatedAt > TimeSpan.FromMinutes(15);
             }
         }
     }

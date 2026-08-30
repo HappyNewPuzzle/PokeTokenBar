@@ -13,7 +13,7 @@ namespace PokeTokenBar.Windows.Tests;
 public sealed partial class AppCompositionTests
 {
     [Fact]
-    public void ProductionComposition_RegistersCodexAndClaudeWithOfficialLimits()
+    public void ProductionComposition_RegistersPhase3BProvidersAndOfficialLimits()
     {
         var viewModel = AppComposition.CreateUsageViewModel();
         var store = GetPrivateField<UsageStore>(viewModel, "_store");
@@ -24,14 +24,22 @@ public sealed partial class AppCompositionTests
         var claudeRateLimitsProvider = GetPrivateField<IClaudeRateLimitsProvider>(
             store,
             "_claudeRateLimitsProvider");
+        var antigravityRateLimitsProvider = GetPrivateField<IAntigravityRateLimitsProvider>(
+            store,
+            "_antigravityRateLimitsProvider");
 
         Assert.Collection(
             providers,
             provider => Assert.IsType<LocalCodexUsageProvider>(provider),
-            provider => Assert.IsType<LocalClaudeUsageProvider>(provider));
-        Assert.Equal(["codex", "claude_code"], providers.Select(provider => provider.Id));
+            provider => Assert.IsType<LocalClaudeUsageProvider>(provider),
+            provider => Assert.IsType<LocalGeminiUsageProvider>(provider),
+            provider => Assert.IsType<LocalAntigravityUsageProvider>(provider));
+        Assert.Equal(
+            ["codex", "claude_code", "gemini", "antigravity"],
+            providers.Select(provider => provider.Id));
         Assert.IsType<CodexRateLimitsProvider>(rateLimitsProvider);
         Assert.IsType<ClaudeRateLimitsProvider>(claudeRateLimitsProvider);
+        Assert.IsType<AntigravityRateLimitsProvider>(antigravityRateLimitsProvider);
         Assert.Empty(viewModel.Providers);
     }
 
@@ -190,7 +198,13 @@ public sealed partial class AppCompositionTests
             .ToArray();
 
         Assert.NotEmpty(bindingPaths);
-        Assert.All(bindingPaths, path => AssertBindingPath(typeof(MainViewModel), path));
+        Assert.All(bindingPaths, path =>
+        {
+            if (typeof(OfficialLimitRow).GetProperty(path) is null)
+            {
+                AssertBindingPath(typeof(MainViewModel), path);
+            }
+        });
     }
 
     [Fact]
@@ -223,6 +237,7 @@ public sealed partial class AppCompositionTests
             "WeeklyRemainingText",
             "WeeklyResetText",
             "OfficialLimitsMetadataText",
+            "AntigravityLimitRows",
         ];
 
         Assert.All(expected, property =>
@@ -237,6 +252,9 @@ public sealed partial class AppCompositionTests
         Assert.Contains("Text=\"{Binding Usage.FiveHourRemainingText", xaml, StringComparison.Ordinal);
         Assert.Contains("Value=\"{Binding Usage.WeeklyRemainingPercent", xaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding Usage.WeeklyRemainingText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{Binding Usage.AntigravityLimitRows", xaml, StringComparison.Ordinal);
+        Assert.Contains("Value=\"{Binding RemainingPercent", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding RemainingText", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
