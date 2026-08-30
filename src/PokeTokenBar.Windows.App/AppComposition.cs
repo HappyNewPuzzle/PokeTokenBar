@@ -49,6 +49,10 @@ public static class AppComposition
             companionStore,
             spriteLoader,
             new WpfPokemonSpriteDecoder());
+        var usageCompanion = new UsageCompanionController(
+            usage,
+            companionStore,
+            companion.RefreshAsync);
         var floatingPet = new FloatingPetViewModel(companion);
         var settings = new SettingsViewModel(settingsPersistence, autoStartService);
         var usagePolling = new UsagePollingController(
@@ -59,6 +63,7 @@ public static class AppComposition
             new MainViewModel(usage, companion, settings),
             floatingPet,
             usagePolling,
+            usageCompanion,
             httpClient);
     }
 

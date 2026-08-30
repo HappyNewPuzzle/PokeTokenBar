@@ -89,6 +89,8 @@ public sealed partial class AppCompositionTests
     {
         var appXaml = ReadRepositoryFile("src", "PokeTokenBar.Windows.App", "App.xaml");
         var appCode = ReadRepositoryFile("src", "PokeTokenBar.Windows.App", "App.xaml.cs");
+        var compositionCode = ReadRepositoryFile(
+            "src", "PokeTokenBar.Windows.App", "AppComposition.cs");
 
         Assert.DoesNotContain("StartupUri", appXaml, StringComparison.Ordinal);
         Assert.Contains("AppComposition.CreateApplication()", appCode, StringComparison.Ordinal);
@@ -98,6 +100,9 @@ public sealed partial class AppCompositionTests
         Assert.Contains("new SystemTrayController(", appCode, StringComparison.Ordinal);
         Assert.Contains("new InitialRefreshController(viewModel.Usage)", appCode, StringComparison.Ordinal);
         Assert.Contains("new InitialCompanionController(viewModel.Companion)", appCode, StringComparison.Ordinal);
+        Assert.Contains("new UsageCompanionController(", compositionCode, StringComparison.Ordinal);
+        Assert.Contains("companionStore,", compositionCode, StringComparison.Ordinal);
+        Assert.Contains("companion.RefreshAsync", compositionCode, StringComparison.Ordinal);
         Assert.Contains("new FloatingPokemonWindow(_composition.FloatingPet)", appCode, StringComparison.Ordinal);
         Assert.Contains("_floatingPet.Start()", appCode, StringComparison.Ordinal);
         Assert.Contains("_initialRefresh.StartAsync()", appCode, StringComparison.Ordinal);

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using PokeTokenBar.Windows.App.Commands;
 using PokeTokenBar.Windows.App.Formatting;
@@ -66,6 +67,14 @@ public sealed class UsageViewModel : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     internal event EventHandler<RefreshCompletedEventArgs>? RefreshCompleted;
+
+    internal IReadOnlyDictionary<string, long> TodayTokensByProvider =>
+        _store.TodayTokensByProvider;
+
+    internal string TodayDate =>
+        _timeProvider.GetLocalNow().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    internal bool HasUsageData => _store.HasUsageData;
 
     public AsyncCommand RefreshCommand { get; }
 
@@ -491,7 +500,9 @@ public sealed class UsageViewModel : INotifyPropertyChanged
             IsRefreshing = false;
             RefreshCompleted?.Invoke(
                 this,
-                new RefreshCompletedEventArgs(scheduleEmptyRetry && !cancelled && refreshError is null));
+                new RefreshCompletedEventArgs(
+                    scheduleEmptyRetry && !cancelled && refreshError is null,
+                    !cancelled && refreshError is null));
         }
     }
 
@@ -636,7 +647,11 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 }
 
-internal sealed class RefreshCompletedEventArgs(bool scheduleEmptyRetry) : EventArgs
+internal sealed class RefreshCompletedEventArgs(
+    bool scheduleEmptyRetry,
+    bool succeeded) : EventArgs
 {
     public bool ScheduleEmptyRetry { get; } = scheduleEmptyRetry;
+
+    public bool Succeeded { get; } = succeeded;
 }

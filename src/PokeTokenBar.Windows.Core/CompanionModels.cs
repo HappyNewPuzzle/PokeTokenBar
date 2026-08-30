@@ -163,6 +163,33 @@ public static class PokemonOdds
     public const int DittoSpeciesId = 132;
 }
 
+public static class PokemonBalance
+{
+    public const long EggHatchThreshold = 5_000_000;
+
+    public static long GraduationTotal(PokemonRarity rarity) =>
+        rarity switch
+        {
+            PokemonRarity.Common => 750_000_000,
+            PokemonRarity.Uncommon => 1_875_000_000,
+            PokemonRarity.Rare => 3_000_000_000,
+            PokemonRarity.Legendary => 6_000_000_000,
+            _ => 750_000_000,
+        };
+
+    public static long PhaseThreshold(
+        PokemonRarity rarity,
+        int totalForms,
+        int stageIndex)
+    {
+        var forms = Math.Max(1, totalForms);
+        var denominator = forms * (forms + 1) / 2d;
+        return (long)Math.Round(
+            GraduationTotal(rarity) * (stageIndex + 1) / denominator,
+            MidpointRounding.AwayFromZero);
+    }
+}
+
 public sealed record BaseSpecies(int Id, int CaptureRate);
 
 public sealed record EvoNode(int SpeciesId, IReadOnlyList<EvoNode> Children)

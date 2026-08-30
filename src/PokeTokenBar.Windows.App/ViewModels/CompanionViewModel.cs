@@ -8,7 +8,6 @@ namespace PokeTokenBar.Windows.App.ViewModels;
 
 public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
 {
-    private const long EggHatchThreshold = 5_000_000;
     private readonly CompanionStore _store;
     private readonly Func<int, bool, CancellationToken, Task<PokemonSpriteAsset?>> _loadSprite;
     private readonly IPokemonSpriteDecoder _spriteDecoder;
@@ -149,10 +148,16 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
         {
             if (_store.State.Active is not MonState active)
             {
-                return Math.Clamp((double)_store.State.EggUsage / EggHatchThreshold, 0, 1);
+                return Math.Clamp(
+                    (double)_store.State.EggUsage / PokemonBalance.EggHatchThreshold,
+                    0,
+                    1);
             }
 
-            var threshold = PhaseThreshold(active);
+            var threshold = PokemonBalance.PhaseThreshold(
+                active.Rarity,
+                active.TotalForms,
+                active.StageIndex);
             return threshold == 0
                 ? 0
                 : Math.Clamp((double)active.UsedAtStage / threshold, 0, 1);
@@ -165,8 +170,13 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
         {
             var active = _store.State.Active;
             var remaining = active is null
-                ? Math.Max(0, EggHatchThreshold - _store.State.EggUsage)
-                : Math.Max(0, PhaseThreshold(active) - active.UsedAtStage);
+                ? Math.Max(0, PokemonBalance.EggHatchThreshold - _store.State.EggUsage)
+                : Math.Max(
+                    0,
+                    PokemonBalance.PhaseThreshold(
+                        active.Rarity,
+                        active.TotalForms,
+                        active.StageIndex) - active.UsedAtStage);
             return CompanionDisplayTexts.Progress(
                 active is null,
                 IsFinalStage,
@@ -528,23 +538,6 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
     {
         var node = _store.CurrentLine?.Tree.Find(active.CurrentId);
         return node?.Children.Count == 0;
-    }
-
-    private static long PhaseThreshold(MonState active)
-    {
-        var graduationTotal = active.Rarity switch
-        {
-            PokemonRarity.Common => 750_000_000L,
-            PokemonRarity.Uncommon => 1_875_000_000L,
-            PokemonRarity.Rare => 3_000_000_000L,
-            PokemonRarity.Legendary => 6_000_000_000L,
-            _ => 750_000_000L,
-        };
-        var forms = Math.Max(1, active.TotalForms);
-        var denominator = forms * (forms + 1) / 2d;
-        return (long)Math.Round(
-            graduationTotal * (active.StageIndex + 1) / denominator,
-            MidpointRounding.AwayFromZero);
     }
 
     private void CancelSpriteLoad()

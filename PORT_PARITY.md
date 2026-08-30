@@ -8,7 +8,7 @@ This is a code-based parity audit, not an implementation plan disguised as compl
 |---|---|
 | Audit date | 2026-08-30 |
 | Windows branch | `windows-port` |
-| Windows commit | `3ac59e4202d4e52016bd7ea5c749cca5dc03d12c` |
+| Windows commit | `a195fd3e5c46e18a099babe7bab3f06a2bc7b187` |
 | macOS baseline | `upstream/main` at `a69444c852559639dcde600fd71a41665f549e91` |
 | Merge base | `4c29ca0fa28c1fb67929517542d4e58d802171f8` |
 | Initial `git status --short` | clean |
@@ -26,15 +26,15 @@ Estimates are implementation effort after dependencies are available: **S** (up 
 
 ## 2. Executive Summary
 
-The Windows port is a credible Codex-focused tray application, but it is not yet a full port of the current macOS product. Its strongest areas are Codex local parsing, period aggregation, official Codex limits, configurable background polling, single-instance startup, tray/popup mechanics, floating-window mechanics, basic persistence, and sleep/resume handling. The largest parity boundary is architectural rather than cosmetic: macOS registers twelve local providers and drives a complete companion/economy loop from usage, while Windows registers only Codex and does not connect usage to companion progression.
+The Windows port is a credible Codex-focused tray application, but it is not yet a full port of the current macOS product. Its strongest areas are Codex local parsing, period aggregation, official Codex limits, configurable background polling, the core usage-driven companion loop, single-instance startup, tray/popup mechanics, floating-window mechanics, persistence, and sleep/resume handling. The largest parity boundary is now provider and product breadth: macOS registers twelve local providers and exposes a complete companion/economy surface, while Windows registers only Codex and does not expose the economy or collection surfaces.
 
 The full matrix in section 18 contains **93 atomic feature rows**:
 
 | Status | Count | Share |
 |---|---:|---:|
-| COMPLETE | 23 | 24.7% |
-| PARTIAL | 13 | 14.0% |
-| MISSING | 47 | 50.5% |
+| COMPLETE | 30 | 32.3% |
+| PARTIAL | 11 | 11.8% |
+| MISSING | 42 | 45.1% |
 | WINDOWS EQUIVALENT | 9 | 9.7% |
 | MAC-ONLY / N/A | 1 | 1.1% |
 
@@ -43,14 +43,12 @@ These counts deliberately do not award parity merely because a model type or dor
 ### P0 findings
 
 1. **Eleven production usage providers are missing.** Windows registers only Codex; Claude Code, Gemini, Antigravity, OpenCode, Hermes, Cursor, Grok, Copilot, Kiro, Pi, and omp are absent.
-2. **The companion is not driven by usage.** Windows has models, persistence, sprite loading, and manual hatch methods, but `AppComposition` does not connect `UsageStore` to `CompanionStore`; evolution, graduation, reward, and dex progression do not occur.
 
 ## 3. Critical Missing Features
 
 | Priority | Gap | macOS behavior | Windows state | Size | Dependencies | Principal files |
 |---|---|---|---|---|---|---|
 | P0 | Multi-provider coverage | `UsageStore.init` registers 12 providers with common period enrichment. | `AppComposition.CreateUsageViewModel` registers only `LocalCodexUsageProvider`. | XL | Provider-by-provider parsers, roots/auth, fixtures, selector integration | macOS `Core/UsageStore.swift`, `Core/LocalUsageProvider.swift`, `Core/LocalAdditionalUsageProvider.swift`; Windows `App/AppComposition.cs` |
-| P0 | Usage-driven companion loop | `PokeTokenBarApp.updateCompanion` passes provider daily totals/month/burn/limits into `CompanionStore.update`; deltas hatch, evolve, graduate, reward, and update the dex. | Companion and usage view models are composed independently. `CompanionStore` exposes restore/manual hatch/representative selection only. | XL | Stable refresh event, provider ledger semantics, persistence migration | macOS `PokeTokenBarApp.swift`, `Core/CompanionStore.swift`; Windows `AppComposition.cs`, `Core/CompanionStore.cs` |
 | P1 | Companion product UI | Home shows progression and celebrations; Shop, Bag, Collection, catch log, dex details, and representative selection are reachable. | Popup shows a read-only companion header; no Shop/Bag/Collection navigation. | L | Companion loop and economy actions | macOS `CompanionView.swift`, `ShopView.swift`, `BagView.swift`, `PopoverView.swift`; Windows `MainWindow.xaml` |
 | P1 | Economy and items | Usage awards candy; Rare Candy, Mint, Shiny Charm, premium/fresh eggs, purchases, and inventory mutations are functional. | Data shapes exist, but no production actions or UI implement the economy. | L | Companion loop, atomic persistence, UI | macOS `Core/CompanionStore.swift`; Windows `Core/CompanionModels.cs`, `Core/CompanionStore.cs` |
 | P1 | Notifications and warnings | Configurable warning/critical usage notifications, companion event notifications, and floating bubbles are deduplicated and re-armed. | No Windows notification or warning service exists. | L | Polling, thresholds, companion events | macOS `PokeTokenBarApp.swift`, `Core/UsageStore.swift`; Windows: absent |
@@ -92,11 +90,9 @@ Remaining gaps:
 
 ## 6. Companion / Pokemon
 
-Windows has a substantial lower-level port: `CompanionModels.cs` contains rarity, nature, evolution, dex, inventory, and ledger shapes; `PokeApiClient` loads base species/evolution/name data; `PokemonSpriteLoader` loads animated/static sprites with caching; `JsonCompanionPersistence` restores state; and `CompanionViewModel` can display a restored subject and progress.
+Windows now connects every successful usage refresh to one provider-neutral companion seam. `CompanionStore` seeds the first valid daily observation, consumes independent provider deltas, handles date rollover/regression/disappearance, carries egg and evolution overflow, persists planned branches, graduates into the dex/catch history, and starts the next egg. Automatic hatch reuses the existing weighted PokeAPI selection and rarity/nature/shiny rules; the view model updates immediately and state survives restart.
 
-The active behavior diverges sharply. macOS `CompanionStore.update`, `applyUsage`, and `graduate` consume per-provider token deltas, carry overflow through evolution stages, maintain planned branches, update the dex/catch log, roll rarity/nature/shiny state, handle Ditto disguise/reveal, grant rewards, and begin the next egg. Windows `CompanionStore` has no corresponding update/apply/graduation path. Its `HatchAsync` and `HatchRandomAsync` are manual seams and are not exposed as the macOS game loop in `MainWindow`.
-
-Consequently, model and rendering parity must not be reported as gameplay parity.
+The remaining companion gaps are product/economy features intentionally outside this phase: rewards/items, Ditto disguise/reveal, celebrations/notifications, and the Shop, Bag, Collection, and catch-log UI.
 
 ## 7. Economy / Shop / Items
 
@@ -143,7 +139,7 @@ macOS additionally supports launch-agent keep-alive and includes logging/crash r
 
 ## 14. Persistence / Cache
 
-Windows has appropriate native persistence for its implemented scope: LocalAppData JSON for app and companion state, position persistence, sprite caching, base-species caching, and Registry auto-start. macOS also has incremental usage caches, richer companion/economy state mutation, save export/import, migration from earlier app identity, custom provider roots, and credential discovery through Keychain. Windows lacks save transfer and provider credential/configuration persistence because the corresponding providers are absent.
+Windows has appropriate native persistence for its implemented scope: LocalAppData JSON for app settings and the complete core companion progression state, position persistence, sprite caching, base-species caching, and Registry auto-start. macOS also has incremental usage caches, economy state mutation, save export/import, migration from earlier app identity, custom provider roots, and credential discovery through Keychain. Windows lacks save transfer and provider credential/configuration persistence because the corresponding providers are absent.
 
 Neither audit nor any verification modified user `.codex` data.
 
@@ -171,18 +167,17 @@ Windows supports a self-contained Release publish and has release packaging meta
 
 ## 17. Test Coverage Gaps
 
-Windows has strong tests around Codex parsing and aggregation, including rollout/fork/canonical handling, daily/period behavior, stale preservation, coalescing, official-limit parsing, remaining-percentage projection, and provider visibility. It also tests tray placement/lifecycle seams, power behavior, single instance, persistence, sprite loading, PokeAPI behavior, and companion display/manual-hatch seams.
+Windows has strong tests around Codex parsing and aggregation, including rollout/fork/canonical handling, daily/period behavior, stale preservation, coalescing, official-limit parsing, remaining-percentage projection, and provider visibility. It also tests tray placement/lifecycle seams, power behavior, single instance, persistence, sprite loading, PokeAPI behavior, and the usage-to-companion ledger/hatch/evolution/graduation cycle.
 
 The most important missing behavior tests correspond to missing production features:
 
 1. No production tests for the eleven absent providers or their custom-root/auth variants.
-2. No end-to-end `UsageStore` → companion ledger → evolution/graduation/dex tests.
-3. No reward, purchase, item-use, premium egg, Shiny Charm, Mint, Rare Candy, or Ditto lifecycle tests.
-4. No Shop/Bag/Collection navigation and mutation tests.
-5. No notification opt-in, threshold, deduplication, re-arm, or event tests.
-6. No full UI localization/language-switch tests.
-7. No update checking, release selection, update UX, or save export/import tests.
-8. No warning/burn forecast/provider-status behavior tests.
+2. No reward, purchase, item-use, premium egg, Shiny Charm, Mint, Rare Candy, or Ditto lifecycle tests.
+3. No Shop/Bag/Collection navigation and mutation tests.
+4. No notification opt-in, threshold, deduplication, re-arm, or event tests.
+5. No full UI localization/language-switch tests.
+6. No update checking, release selection, update UX, or save export/import tests.
+7. No warning/burn forecast/provider-status behavior tests.
 
 The macOS suite contains dedicated coverage for these areas, including `CompanionTests`, `RareCandyTests`, `PremiumEggTests`, `ShopTests`, `DittoTests`, `SaveTransferTests`, provider-specific suites, `CustomRootsTests`, `LocalUsageCacheTests`, and `SingleInstanceTests`. Test-count parity alone would be misleading; Windows should add tests only as each missing production slice is ported.
 
@@ -228,12 +223,12 @@ Counts in section 2 are calculated from this table only.
 | Companion | Persisted companion restore | Restores current companion state | Restores current companion state | COMPLETE | `CompanionStore.load` | `CompanionStore.InitializeAsync`; `JsonCompanionPersistence.cs` | P0 | — |
 | Companion | Pokémon data lookup | Species/evolution/localized data | GraphQL index plus REST fallback/cache | COMPLETE | Pokémon API services | `PokeApiClient.cs` | P0 | — |
 | Companion | Manual representative | Collection representative can be selected | Stored representative can be selected through VM seam, no full collection UI | PARTIAL | `CompanionView` representative picker | `CompanionStore.SetRepresentativeAsync`; `CompanionViewModel.cs` | P1 | M |
-| Companion | Usage ledger | Per-provider daily ledger consumes deltas | Model field exists; no update path | MISSING | `CompanionStore.update` | `CompanionModels.cs`; `CompanionStore.cs` | P0 | L |
-| Companion | Egg progression | Usage advances egg | Display model exists; usage does not advance it | MISSING | `CompanionStore.applyUsage` | `CompanionViewModel.cs` | P0 | L |
-| Companion | Evolution | Planned branches and overflow progression | Evolution models/display only | MISSING | `CompanionStore.applyUsage` | `CompanionModels.cs`; `CompanionViewModel.cs` | P0 | L |
-| Companion | Graduation/new egg | Graduates final stage and starts cycle | No production path | MISSING | `CompanionStore.graduate` | `CompanionStore.cs` | P0 | L |
-| Companion | Dex/catch log mutation | Captures update dex and log | Persisted shapes, no mutation loop/UI | MISSING | `CompanionStore.graduate`; `CompanionView` | `CompanionModels.cs` | P1 | L |
-| Companion | Rarity/nature/shiny roll | Weighted hatch/capture attributes | Manual hatch supports weighted species/data, but no connected cycle | PARTIAL | `CompanionStore` sampling | `CompanionStore.HatchRandomAsync` | P1 | M |
+| Companion | Usage ledger | Per-provider daily ledger consumes deltas | Provider-neutral daily ledger with baseline, rollover, rebase, and restart semantics | COMPLETE | `CompanionStore.update` | `CompanionStore.UpdateUsageAsync` | P0 | — |
+| Companion | Egg progression | Usage advances egg | Usage advances egg; 5M hatch threshold and overflow carry match | COMPLETE | `CompanionStore.applyUsage` | `CompanionStore.UpdateUsageAsync` | P0 | — |
+| Companion | Evolution | Planned branches and overflow progression | Persisted planned branches and cross-stage overflow progression | COMPLETE | `CompanionStore.applyUsage` | `CompanionStore.ApplyUsageCore` | P0 | — |
+| Companion | Graduation/new egg | Graduates final stage and starts cycle | Final stage graduates and starts a zero-progress egg | COMPLETE | `CompanionStore.graduate` | `CompanionStore.GraduateCore` | P0 | — |
+| Companion | Dex/catch log mutation | Captures update dex and log | Graduation persists individual dex/catch entries; presentation UI remains separate | COMPLETE | `CompanionStore.graduate`; `CompanionView` | `CompanionStore.GraduateCore`; `JsonCompanionPersistence.cs` | P1 | — |
+| Companion | Rarity/nature/shiny roll | Weighted hatch/capture attributes | Production auto-hatch uses weighted species and persists rarity/nature/shiny | COMPLETE | `CompanionStore` sampling | `CompanionStore.HatchRandomAsync` | P1 | — |
 | Companion | Ditto disguise/reveal | Full disguise/reveal lifecycle | No production lifecycle | MISSING | `CompanionStore`; `DittoTests` | absent | P2 | M |
 | Economy | Currency rewards/ledger | Usage and events grant currency | Ledger-shaped model only | MISSING | `CompanionStore.grantCandies` | `CompanionModels.cs` | P1 | L |
 | Economy | Shop/purchases | Purchases validated and persisted | No actions/UI | MISSING | `CompanionStore.buy`; `ShopView.swift` | absent | P1 | L |
@@ -277,7 +272,7 @@ Counts in section 2 are calculated from this table only.
 | Lifecycle | Clean shutdown | Releases app resources | Disposes tray/windows/events/mutex | COMPLETE | app termination | `App.xaml.cs` | P0 | — |
 | Lifecycle | Crash diagnostics/keep-alive | Logging/crash reporting and launch-agent behavior | No equivalent diagnostics or restart | MISSING | app/logging/launch-agent code | absent | P2 | L |
 | Persistence | App settings | `UserDefaults` | LocalAppData JSON | WINDOWS EQUIVALENT | `UsageStore.init` and persisted properties | `JsonAppSettingsPersistence.cs` | P0 | — |
-| Persistence | Companion state | Persisted game state | Persisted/restored state | PARTIAL | `CompanionStore` | `JsonCompanionPersistence.cs` | P0 | M |
+| Persistence | Companion state | Persisted game state | Ledger, egg, active path, traits, dex, and representative persist/restore | COMPLETE | `CompanionStore` | `CompanionStore.cs`; `JsonCompanionPersistence.cs` | P0 | — |
 | Persistence | Sprite/species cache | Cached assets/data | Cached sprites/base index | COMPLETE | sprite/cache services | `PokemonSpriteLoader.cs`; `PokeApiClient.cs` | P1 | — |
 | Persistence | Incremental usage cache | Provider scan/cache support | Codex scans and in-memory snapshots; no equivalent persistent usage cache | PARTIAL | `LocalUsageCache` | `CodexLocalRolloutPipeline.cs`; `UsageStore.cs` | P2 | M |
 | Persistence | Save export/import | Transfer companion save | Absent | MISSING | save transfer service/UI | absent | P2 | M |
@@ -294,9 +289,9 @@ With lifecycle-safe polling, interval persistence, and empty-result retry comple
 
 **Exit criteria:** long-running usage stays current; provider registration is data-driven enough for the implemented set; each provider has local fixtures and period tests; failures preserve stale data.
 
-### Phase B — Connect the companion game loop
+### Phase B — Connect the companion game loop — complete
 
-Port only the state transitions needed to connect successful usage refreshes to the provider ledger, egg progress, evolution, graduation, next egg, dex, and persisted catch history. Preserve the existing Windows PokeAPI/sprite/persistence work. Establish a single refresh-to-companion integration seam before adding presentation polish.
+Completed with one refresh-to-companion integration seam and focused provider-ledger, egg, evolution, graduation, dex, UI-update, and persistence tests.
 
 **Exit criteria:** real usage deterministically progresses and persists a companion across restart; overflow and date/provider ledger semantics match macOS.
 

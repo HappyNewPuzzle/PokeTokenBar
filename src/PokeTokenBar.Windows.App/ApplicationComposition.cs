@@ -13,11 +13,13 @@ public sealed class ApplicationComposition : IDisposable
         MainViewModel viewModel,
         FloatingPetViewModel floatingPet,
         UsagePollingController usagePolling,
+        UsageCompanionController usageCompanion,
         HttpClient httpClient)
     {
         ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         FloatingPet = floatingPet ?? throw new ArgumentNullException(nameof(floatingPet));
         UsagePolling = usagePolling ?? throw new ArgumentNullException(nameof(usagePolling));
+        UsageCompanion = usageCompanion ?? throw new ArgumentNullException(nameof(usageCompanion));
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
     }
 
@@ -26,6 +28,8 @@ public sealed class ApplicationComposition : IDisposable
     public FloatingPetViewModel FloatingPet { get; }
 
     internal UsagePollingController UsagePolling { get; }
+
+    internal UsageCompanionController UsageCompanion { get; }
 
     public void Dispose()
     {
@@ -36,6 +40,7 @@ public sealed class ApplicationComposition : IDisposable
 
         _disposed = true;
         UsagePolling.Dispose();
+        UsageCompanion.Dispose();
         FloatingPet.Dispose();
         ViewModel.Dispose();
         _httpClient.Dispose();
