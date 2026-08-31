@@ -78,6 +78,13 @@ public static class AppComposition
             httpClient is null
                 ? new LocalCursorUsageProvider()
                 : new LocalCursorUsageProvider(httpClient),
+            new LocalOpenCodeUsageProvider(),
+            new LocalHermesUsageProvider(),
+            new LocalGrokUsageProvider(),
+            new LocalCopilotUsageProvider(),
+            new LocalKiroUsageProvider(),
+            new LocalPiUsageProvider(),
+            new LocalOmpUsageProvider(),
         ];
         ICodexRateLimitsProvider codexRateLimitsProvider = new CodexRateLimitsProvider();
         IClaudeRateLimitsProvider claudeRateLimitsProvider = new ClaudeRateLimitsProvider();

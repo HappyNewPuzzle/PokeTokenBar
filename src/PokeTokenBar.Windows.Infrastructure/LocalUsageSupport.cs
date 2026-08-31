@@ -138,6 +138,45 @@ internal static class LocalUsageSupport
         return byId.Values.ToArray();
     }
 
+    public static double CalculateCost(
+        string model,
+        long input,
+        long output,
+        long cacheWrite,
+        long cacheRead)
+    {
+        var lower = model.ToLowerInvariant();
+        var rates = lower switch
+        {
+            "claude-opus-4-8" or "claude-opus-4-7" => (5d, 25d, 6.25d, 0.5d),
+            "claude-sonnet-4-6" => (3d, 15d, 3.75d, 0.3d),
+            "claude-haiku-4-5-20251001" => (1d, 5d, 1.25d, 0.1d),
+            "claude-fable-5" => (10d, 50d, 12.5d, 1d),
+            "gpt-5.5" => (5d, 30d, 0d, 0.5d),
+            "gemini-2.5-pro" => (1.25d, 10d, 0d, 0.3125d),
+            "gemini-2.5-flash" => (0.30d, 2.5d, 0d, 0.075d),
+            "gemini-2.0-flash" => (0.10d, 0.4d, 0d, 0.025d),
+            _ when lower.StartsWith("grok", StringComparison.Ordinal) => (0d, 0d, 0d, 0d),
+            _ when lower.Contains("fable", StringComparison.Ordinal) => (10d, 50d, 12.5d, 1d),
+            _ when lower.Contains("opus", StringComparison.Ordinal) => (5d, 25d, 6.25d, 0.5d),
+            _ when lower.Contains("sonnet", StringComparison.Ordinal) => (3d, 15d, 3.75d, 0.3d),
+            _ when lower.Contains("haiku", StringComparison.Ordinal) => (1d, 5d, 1.25d, 0.1d),
+            _ when lower.Contains("gpt", StringComparison.Ordinal) ||
+                   lower.Contains("codex", StringComparison.Ordinal) ||
+                   lower.Contains("o4", StringComparison.Ordinal) ||
+                   lower.Contains("o3", StringComparison.Ordinal) => (5d, 30d, 0d, 0.5d),
+            _ when lower.StartsWith("gemini", StringComparison.Ordinal) &&
+                   lower.Contains("pro", StringComparison.Ordinal) => (1.25d, 10d, 0d, 0.3125d),
+            _ when lower.StartsWith("gemini", StringComparison.Ordinal) &&
+                   lower.Contains("flash", StringComparison.Ordinal) => (0.30d, 2.5d, 0d, 0.075d),
+            _ => (0d, 0d, 0d, 0d),
+        };
+        return ((input * rates.Item1) +
+                (output * rates.Item2) +
+                (cacheWrite * rates.Item3) +
+                (cacheRead * rates.Item4)) / 1_000_000d;
+    }
+
     private static BlockUsage? ActiveBlock(IReadOnlyList<LocalUsageEntry> recent, DateTimeOffset now)
     {
         if (recent.Count == 0)

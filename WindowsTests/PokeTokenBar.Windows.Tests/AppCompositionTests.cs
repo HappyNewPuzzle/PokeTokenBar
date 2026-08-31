@@ -13,7 +13,7 @@ namespace PokeTokenBar.Windows.Tests;
 public sealed partial class AppCompositionTests
 {
     [Fact]
-    public void ProductionComposition_RegistersPhase3CProvidersAndOfficialLimits()
+    public void ProductionComposition_RegistersPhase3DProvidersAndOfficialLimits()
     {
         var viewModel = AppComposition.CreateUsageViewModel();
         var store = GetPrivateField<UsageStore>(viewModel, "_store");
@@ -34,9 +34,16 @@ public sealed partial class AppCompositionTests
             provider => Assert.IsType<LocalClaudeUsageProvider>(provider),
             provider => Assert.IsType<LocalGeminiUsageProvider>(provider),
             provider => Assert.IsType<LocalAntigravityUsageProvider>(provider),
-            provider => Assert.IsType<LocalCursorUsageProvider>(provider));
+            provider => Assert.IsType<LocalCursorUsageProvider>(provider),
+            provider => Assert.IsType<LocalOpenCodeUsageProvider>(provider),
+            provider => Assert.IsType<LocalHermesUsageProvider>(provider),
+            provider => Assert.IsType<LocalGrokUsageProvider>(provider),
+            provider => Assert.IsType<LocalCopilotUsageProvider>(provider),
+            provider => Assert.IsType<LocalKiroUsageProvider>(provider),
+            provider => Assert.IsType<LocalPiUsageProvider>(provider),
+            provider => Assert.IsType<LocalOmpUsageProvider>(provider));
         Assert.Equal(
-            ["codex", "claude_code", "gemini", "antigravity", "cursor"],
+            ["codex", "claude_code", "gemini", "antigravity", "cursor", "opencode", "hermes", "grok", "copilot", "kiro", "pi", "omp"],
             providers.Select(provider => provider.Id));
         Assert.IsType<CodexRateLimitsProvider>(rateLimitsProvider);
         Assert.IsType<ClaudeRateLimitsProvider>(claudeRateLimitsProvider);

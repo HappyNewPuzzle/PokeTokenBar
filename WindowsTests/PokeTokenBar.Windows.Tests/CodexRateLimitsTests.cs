@@ -219,7 +219,7 @@ public sealed class CodexRateLimitsTests : IDisposable
     {
         var local = new FakeUsageProvider(Daily(130));
         var official = new FakeRateLimitsProvider(Status(82, 61, Now.AddHours(2)));
-        var store = new UsageStore([local], codexRateLimitsProvider: official);
+        var store = new UsageStore([local], new FixedTimeProvider(Now), official);
         await store.RefreshAsync();
 
         local.Daily = Daily(260);
@@ -237,6 +237,7 @@ public sealed class CodexRateLimitsTests : IDisposable
         var official = new FakeRateLimitsProvider(Status(82, 61, Now.AddHours(2)));
         var store = new UsageStore(
             [new FakeUsageProvider(Daily(130))],
+            new FixedTimeProvider(Now),
             codexRateLimitsProvider: official);
         await store.RefreshAsync();
 

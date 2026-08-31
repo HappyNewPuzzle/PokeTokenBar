@@ -283,7 +283,7 @@ public sealed class LocalCursorUsageProvider : IUsageProvider
             ? root
             : Path.Combine(root, "state.vscdb");
 
-    private static T WithDatabaseCopy<T>(string database, Func<SqliteConnection, T> action)
+    internal static T WithDatabaseCopy<T>(string database, Func<SqliteConnection, T> action)
     {
         var temporary = Directory.CreateTempSubdirectory("PokeTokenBar-Cursor-");
         try

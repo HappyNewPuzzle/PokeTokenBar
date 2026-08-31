@@ -89,11 +89,17 @@ public sealed class CompanionGameLoopTests
     public async Task ProvidersHaveIndependentLedgersAndDeltasAreSummed()
     {
         var fixture = Create();
-        await Update(fixture.Store, Day1, ("codex", 10), ("claude", 20));
+        await Update(fixture.Store, Day1,
+            ("codex", 10), ("claude", 20), ("opencode", 30), ("hermes", 40),
+            ("grok", 50), ("copilot", 60), ("kiro", 70), ("pi", 80), ("omp", 90));
 
-        await Update(fixture.Store, Day1, ("codex", 15), ("claude", 27));
+        await Update(fixture.Store, Day1,
+            ("codex", 15), ("claude", 27), ("opencode", 31), ("hermes", 42),
+            ("grok", 53), ("copilot", 64), ("kiro", 75), ("pi", 86), ("omp", 97));
 
-        Assert.Equal(12, fixture.Store.State.UsedSinceInstall);
+        Assert.Equal(40, fixture.Store.State.UsedSinceInstall);
+        Assert.All(new[] { "opencode", "hermes", "grok", "copilot", "kiro", "pi", "omp" },
+            id => Assert.True(fixture.Store.State.ClaimedTodayTokensByProvider!.ContainsKey(id)));
     }
 
     [Fact]
