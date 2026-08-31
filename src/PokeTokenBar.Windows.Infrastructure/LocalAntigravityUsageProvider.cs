@@ -588,6 +588,66 @@ internal sealed class SqliteConnection : IDisposable
         }
     }
 
+    public string? ReadTextScalar(string sql)
+    {
+        var rows = ReadTextRows(sql, 1);
+        return rows.Count == 0 ? null : rows[0][0];
+    }
+
+    public IReadOnlyList<string?[]> ReadTextRows(
+        string sql,
+        int columnCount,
+        bool prepareErrorIsFailure = false)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(columnCount, 1);
+        var prepared = Native.sqlite3_prepare_v2(_handle, sql, -1, out var statement, IntPtr.Zero);
+        if (prepared == Error)
+        {
+            if (prepareErrorIsFailure)
+            {
+                throw new InvalidDataException("SQLite schema does not support the requested query.");
+            }
+
+            return [];
+        }
+
+        if (prepared != Ok || statement == IntPtr.Zero)
+        {
+            throw new InvalidDataException($"Unable to query SQLite database ({prepared}).");
+        }
+
+        try
+        {
+            var rows = new List<string?[]>();
+            while (true)
+            {
+                var step = Native.sqlite3_step(statement);
+                if (step == Done)
+                {
+                    return rows;
+                }
+
+                if (step != Row)
+                {
+                    throw new InvalidDataException($"Incomplete SQLite scan ({step}).");
+                }
+
+                var row = new string?[columnCount];
+                for (var column = 0; column < columnCount; column++)
+                {
+                    var pointer = Native.sqlite3_column_text(statement, column);
+                    row[column] = pointer == IntPtr.Zero ? null : Marshal.PtrToStringUTF8(pointer);
+                }
+
+                rows.Add(row);
+            }
+        }
+        finally
+        {
+            Native.sqlite3_finalize(statement);
+        }
+    }
+
     public void Dispose()
     {
         var handle = Interlocked.Exchange(ref _handle, IntPtr.Zero);
@@ -628,6 +688,9 @@ internal sealed class SqliteConnection : IDisposable
 
         [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr sqlite3_column_blob(IntPtr statement, int column);
+
+        [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr sqlite3_column_text(IntPtr statement, int column);
 
         [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl)]
         internal static extern int sqlite3_column_bytes(IntPtr statement, int column);

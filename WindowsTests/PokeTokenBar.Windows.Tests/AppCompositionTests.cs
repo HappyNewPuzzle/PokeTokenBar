@@ -13,7 +13,7 @@ namespace PokeTokenBar.Windows.Tests;
 public sealed partial class AppCompositionTests
 {
     [Fact]
-    public void ProductionComposition_RegistersPhase3BProvidersAndOfficialLimits()
+    public void ProductionComposition_RegistersPhase3CProvidersAndOfficialLimits()
     {
         var viewModel = AppComposition.CreateUsageViewModel();
         var store = GetPrivateField<UsageStore>(viewModel, "_store");
@@ -33,9 +33,10 @@ public sealed partial class AppCompositionTests
             provider => Assert.IsType<LocalCodexUsageProvider>(provider),
             provider => Assert.IsType<LocalClaudeUsageProvider>(provider),
             provider => Assert.IsType<LocalGeminiUsageProvider>(provider),
-            provider => Assert.IsType<LocalAntigravityUsageProvider>(provider));
+            provider => Assert.IsType<LocalAntigravityUsageProvider>(provider),
+            provider => Assert.IsType<LocalCursorUsageProvider>(provider));
         Assert.Equal(
-            ["codex", "claude_code", "gemini", "antigravity"],
+            ["codex", "claude_code", "gemini", "antigravity", "cursor"],
             providers.Select(provider => provider.Id));
         Assert.IsType<CodexRateLimitsProvider>(rateLimitsProvider);
         Assert.IsType<ClaudeRateLimitsProvider>(claudeRateLimitsProvider);

@@ -41,7 +41,7 @@ public static class AppComposition
         ArgumentNullException.ThrowIfNull(settingsPersistence);
         ArgumentNullException.ThrowIfNull(autoStartService);
 
-        var usage = CreateUsageViewModel();
+        var usage = CreateUsageViewModel(httpClient);
         var api = new PokeApiClient(httpClient);
         var companionStore = new CompanionStore(api, persistence);
         var spriteLoader = new PokemonSpriteLoader(httpClient);
@@ -67,7 +67,7 @@ public static class AppComposition
             httpClient);
     }
 
-    public static UsageViewModel CreateUsageViewModel()
+    public static UsageViewModel CreateUsageViewModel(HttpClient? httpClient = null)
     {
         IUsageProvider[] providers =
         [
@@ -75,6 +75,9 @@ public static class AppComposition
             new LocalClaudeUsageProvider(),
             new LocalGeminiUsageProvider(),
             new LocalAntigravityUsageProvider(),
+            httpClient is null
+                ? new LocalCursorUsageProvider()
+                : new LocalCursorUsageProvider(httpClient),
         ];
         ICodexRateLimitsProvider codexRateLimitsProvider = new CodexRateLimitsProvider();
         IClaudeRateLimitsProvider claudeRateLimitsProvider = new ClaudeRateLimitsProvider();
