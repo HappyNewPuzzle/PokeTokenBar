@@ -7,16 +7,20 @@ public sealed class MainViewModel : IDisposable
     public MainViewModel(
         UsageViewModel usage,
         CompanionViewModel companion,
+        EconomyViewModel economy,
         SettingsViewModel settings)
     {
         Usage = usage ?? throw new ArgumentNullException(nameof(usage));
         Companion = companion ?? throw new ArgumentNullException(nameof(companion));
+        Economy = economy ?? throw new ArgumentNullException(nameof(economy));
         Settings = settings ?? throw new ArgumentNullException(nameof(settings));
     }
 
     public UsageViewModel Usage { get; }
 
     public CompanionViewModel Companion { get; }
+
+    public EconomyViewModel Economy { get; }
 
     public SettingsViewModel Settings { get; }
 

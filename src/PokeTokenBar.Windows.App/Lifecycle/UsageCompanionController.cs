@@ -65,6 +65,8 @@ internal sealed class UsageCompanionController : IDisposable
             _usage.TodayTokensByProvider,
             StringComparer.Ordinal);
         var hasUsageData = _usage.HasUsageData;
+        var candyWindows = _usage.CandyEligibleWindows;
+        var limitsReady = _usage.LimitsReady;
         lock (_sync)
         {
             if (_disposed)
@@ -72,7 +74,8 @@ internal sealed class UsageCompanionController : IDisposable
                 return;
             }
 
-            _lastUpdate = ApplyAsync(tokens, date, hasUsageData, _cancellation.Token);
+            _lastUpdate = ApplyAsync(
+                tokens, date, hasUsageData, candyWindows, limitsReady, _cancellation.Token);
         }
     }
 
@@ -80,6 +83,8 @@ internal sealed class UsageCompanionController : IDisposable
         IReadOnlyDictionary<string, long> tokens,
         string date,
         bool hasUsageData,
+        IReadOnlyList<CandyWindow> candyWindows,
+        bool limitsReady,
         CancellationToken cancellationToken)
     {
         try
@@ -91,6 +96,10 @@ internal sealed class UsageCompanionController : IDisposable
                     tokens,
                     date,
                     hasUsageData,
+                    cancellationToken);
+                await _companion.GrantCandiesAsync(
+                    candyWindows,
+                    limitsReady,
                     cancellationToken);
                 await _refreshPresentation(cancellationToken);
             }

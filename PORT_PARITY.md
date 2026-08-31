@@ -32,9 +32,9 @@ The full matrix in section 18 contains **93 atomic feature rows**:
 
 | Status | Count | Share |
 |---|---:|---:|
-| COMPLETE | 43 | 46.2% |
-| PARTIAL | 11 | 11.8% |
-| MISSING | 29 | 31.2% |
+| COMPLETE | 53 | 57.0% |
+| PARTIAL | 10 | 10.8% |
+| MISSING | 20 | 21.5% |
 | WINDOWS EQUIVALENT | 9 | 9.7% |
 | MAC-ONLY / N/A | 1 | 1.1% |
 
@@ -48,8 +48,7 @@ No P0 provider-coverage finding remains: Windows registers all twelve upstream l
 
 | Priority | Gap | macOS behavior | Windows state | Size | Dependencies | Principal files |
 |---|---|---|---|---|---|---|
-| P1 | Companion product UI | Home shows progression and celebrations; Shop, Bag, Collection, catch log, dex details, and representative selection are reachable. | Popup shows a read-only companion header; no Shop/Bag/Collection navigation. | L | Companion loop and economy actions | macOS `CompanionView.swift`, `ShopView.swift`, `BagView.swift`, `PopoverView.swift`; Windows `MainWindow.xaml` |
-| P1 | Economy and items | Usage awards candy; Rare Candy, Mint, Shiny Charm, premium/fresh eggs, purchases, and inventory mutations are functional. | Data shapes exist, but no production actions or UI implement the economy. | L | Companion loop, atomic persistence, UI | macOS `Core/CompanionStore.swift`; Windows `Core/CompanionModels.cs`, `Core/CompanionStore.cs` |
+| P1 | Companion product UI | Home shows progression and celebrations; Shop, Bag, Collection, catch log, dex details, and representative selection are reachable. | Home, Shop, Bag, and Collection are reachable; celebrations and richer dex details remain absent. | M | Celebration/detail presentation | macOS `CompanionView.swift`, `ShopView.swift`, `BagView.swift`, `PopoverView.swift`; Windows `MainWindow.xaml` |
 | P1 | Notifications and warnings | Configurable warning/critical usage notifications, companion event notifications, and floating bubbles are deduplicated and re-armed. | No Windows notification or warning service exists. | L | Polling, thresholds, companion events | macOS `PokeTokenBarApp.swift`, `Core/UsageStore.swift`; Windows: absent |
 | P1 | Full settings surface | Language, refresh, animation quality, limit mode, menu content, floating size/bubbles, notifications, thresholds, provider roots/auth, updates, and save transfer are configurable. | Only launch-at-startup, floating enabled, and reset floating position are exposed. | L | Features being configured | macOS `SettingsView.swift`, `Core/UsageStore.swift`; Windows `MainWindow.xaml`, `SettingsViewModel.cs`, `Core/AppSettings.cs` |
 | P2 | Updates and Windows release UX | In-app release checks, update banner, Homebrew upgrade/relaunch or release-page fallback. | Self-contained publish exists; no update checker, installer flow, signing policy, or update UI. | L | Windows distribution choice and signing identity | macOS `Core/UpdateChecker.swift`, `PopoverView.swift`; Windows `.csproj`, `README.md` |
@@ -91,13 +90,11 @@ Remaining gaps:
 
 Windows now connects every successful usage refresh to one provider-neutral companion seam. `CompanionStore` seeds the first valid daily observation, consumes independent provider deltas, handles date rollover/regression/disappearance, carries egg and evolution overflow, persists planned branches, graduates into the dex/catch history, and starts the next egg. Automatic hatch reuses the existing weighted PokeAPI selection and rarity/nature/shiny rules; the view model updates immediately and state survives restart.
 
-The remaining companion gaps are product/economy features intentionally outside this phase: rewards/items, Ditto disguise/reveal, celebrations/notifications, and the Shop, Bag, Collection, and catch-log UI.
+The remaining companion gaps are Ditto disguise/reveal, celebrations/notifications, and richer dex detail presentation.
 
 ## 7. Economy / Shop / Items
 
-macOS `CompanionStore` owns a persisted currency ledger and inventory mutations. `ShopView` and `BagView` expose purchases and item use. Rare Candy advances progression, Mint changes nature, Shiny Charm affects shiny odds, and premium/fresh eggs alter hatch behavior.
-
-Windows model types retain inventory/economy-shaped fields, but there is no connected reward calculation, purchase API, item-use API, or Shop/Bag UI. This category is functionally missing, not merely hidden.
+Windows now matches the upstream token wallet (`usedSinceInstall - spentTokens`), persisted inventory and candy grant ledger, atomic purchase/item mutations, Rare Candy progression, Mint rerolls, permanent Shiny Charm odds, and fresh/premium egg guarantees. Home, Shop, Bag, and Collection are reachable from the popup without a separate economy timer or provider-specific companion branch.
 
 ## 8. Floating Pet
 
@@ -170,12 +167,11 @@ Windows has strong tests around all twelve registered providers, including JSON/
 
 The most important missing behavior tests correspond to missing production features:
 
-1. No reward, purchase, item-use, premium egg, Shiny Charm, Mint, Rare Candy, or Ditto lifecycle tests.
-2. No Shop/Bag/Collection navigation and mutation tests.
-3. No notification opt-in, threshold, deduplication, re-arm, or event tests.
-4. No full UI localization/language-switch tests.
-5. No update checking, release selection, update UX, or save export/import tests.
-6. No warning/burn forecast/provider-status behavior tests.
+1. No Ditto lifecycle tests.
+2. No notification opt-in, threshold, deduplication, re-arm, or event tests.
+3. No full UI localization/language-switch tests.
+4. No update checking, release selection, update UX, or save export/import tests.
+5. No warning/burn forecast/provider-status behavior tests.
 
 The macOS suite contains dedicated coverage for these areas, including `CompanionTests`, `RareCandyTests`, `PremiumEggTests`, `ShopTests`, `DittoTests`, `SaveTransferTests`, provider-specific suites, `CustomRootsTests`, `LocalUsageCacheTests`, and `SingleInstanceTests`. Test-count parity alone would be misleading; Windows should add tests only as each missing production slice is ported.
 
@@ -220,7 +216,7 @@ Counts in section 2 are calculated from this table only.
 | Limits | Antigravity quota | Google quota groups | All groups/buckets displayed from read-only standalone-token auth; Windows OS-store/refresh path unverified | PARTIAL | `AntigravityRateLimitsProvider.swift` | `AntigravityRateLimitsProvider.cs`; `AntigravityCredentialProvider.cs`; `UsageViewModel.cs` | P1 | S |
 | Companion | Persisted companion restore | Restores current companion state | Restores current companion state | COMPLETE | `CompanionStore.load` | `CompanionStore.InitializeAsync`; `JsonCompanionPersistence.cs` | P0 | — |
 | Companion | Pokémon data lookup | Species/evolution/localized data | GraphQL index plus REST fallback/cache | COMPLETE | Pokémon API services | `PokeApiClient.cs` | P0 | — |
-| Companion | Manual representative | Collection representative can be selected | Stored representative can be selected through VM seam, no full collection UI | PARTIAL | `CompanionView` representative picker | `CompanionStore.SetRepresentativeAsync`; `CompanionViewModel.cs` | P1 | M |
+| Companion | Manual representative | Collection representative can be selected | Collection entries expose persisted representative selection | COMPLETE | `CompanionView` representative picker | `CompanionStore.SetRepresentativeAsync`; `EconomyViewModel.cs`; `MainWindow.xaml` | P1 | — |
 | Companion | Usage ledger | Per-provider daily ledger consumes deltas | Provider-neutral daily ledger with baseline, rollover, rebase, and restart semantics | COMPLETE | `CompanionStore.update` | `CompanionStore.UpdateUsageAsync` | P0 | — |
 | Companion | Egg progression | Usage advances egg | Usage advances egg; 5M hatch threshold and overflow carry match | COMPLETE | `CompanionStore.applyUsage` | `CompanionStore.UpdateUsageAsync` | P0 | — |
 | Companion | Evolution | Planned branches and overflow progression | Persisted planned branches and cross-stage overflow progression | COMPLETE | `CompanionStore.applyUsage` | `CompanionStore.ApplyUsageCore` | P0 | — |
@@ -228,12 +224,12 @@ Counts in section 2 are calculated from this table only.
 | Companion | Dex/catch log mutation | Captures update dex and log | Graduation persists individual dex/catch entries; presentation UI remains separate | COMPLETE | `CompanionStore.graduate`; `CompanionView` | `CompanionStore.GraduateCore`; `JsonCompanionPersistence.cs` | P1 | — |
 | Companion | Rarity/nature/shiny roll | Weighted hatch/capture attributes | Production auto-hatch uses weighted species and persists rarity/nature/shiny | COMPLETE | `CompanionStore` sampling | `CompanionStore.HatchRandomAsync` | P1 | — |
 | Companion | Ditto disguise/reveal | Full disguise/reveal lifecycle | No production lifecycle | MISSING | `CompanionStore`; `DittoTests` | absent | P2 | M |
-| Economy | Currency rewards/ledger | Usage and events grant currency | Ledger-shaped model only | MISSING | `CompanionStore.grantCandies` | `CompanionModels.cs` | P1 | L |
-| Economy | Shop/purchases | Purchases validated and persisted | No actions/UI | MISSING | `CompanionStore.buy`; `ShopView.swift` | absent | P1 | L |
-| Economy | Rare Candy | Inventory item advances progress | Model shape only | MISSING | `CompanionStore.useRareCandy` | `CompanionModels.cs` | P1 | M |
-| Economy | Mint | Changes nature | Model shape only | MISSING | `CompanionStore.useMint` | `CompanionModels.cs` | P2 | M |
-| Economy | Shiny Charm | Alters shiny odds | Model shape only | MISSING | `CompanionStore`; `ShinyCharmTests` | `CompanionModels.cs` | P2 | M |
-| Economy | Premium/fresh eggs | Purchasable egg variants affect hatch | No production behavior | MISSING | `CompanionStore`; `PremiumEggTests` | absent | P2 | M |
+| Economy | Currency rewards/ledger | Usage and events grant currency | Usage-backed wallet and official-window candy ledger persist atomically | COMPLETE | `CompanionStore.grantCandies` | `CompanionEconomy.cs`; `CompanionStore.cs`; `UsageCompanionController.cs` | P1 | — |
+| Economy | Shop/purchases | Purchases validated and persisted | Prices, balance validation, ownership, and inventory purchases are connected to Shop UI | COMPLETE | `CompanionStore.buy`; `ShopView.swift` | `CompanionStore.PurchaseAsync`; `EconomyViewModel.cs`; `MainWindow.xaml` | P1 | — |
+| Economy | Rare Candy | Inventory item advances progress | Adds 100M progress through the production hatch/evolution/graduation path | COMPLETE | `CompanionStore.useRareCandy` | `CompanionStore.UseItemAsync`; `EconomyViewModel.cs` | P1 | — |
+| Economy | Mint | Changes nature | Consumable nature reroll is persisted and exposed in Bag | COMPLETE | `CompanionStore.useMint` | `CompanionStore.UseItemAsync`; `EconomyViewModel.cs` | P2 | — |
+| Economy | Shiny Charm | Alters shiny odds | Permanent purchase changes future hatch odds from 1/64 to 1/48 | COMPLETE | `CompanionStore`; `ShinyCharmTests` | `CompanionStore.cs`; `CompanionEconomy.cs` | P2 | — |
+| Economy | Premium/fresh eggs | Purchasable egg variants affect hatch | Basic/uncommon/rare fresh eggs reset progress and persist hatch guarantees | COMPLETE | `CompanionStore`; `PremiumEggTests` | `CompanionStore.PurchaseAsync`; `CompanionEconomy.cs` | P2 | — |
 | Floating | Basic floating window | Non-activating always-on-top panel | Transparent topmost non-activating WPF window | WINDOWS EQUIVALENT | `FloatingPetPanel.swift` | `FloatingPokemonWindow.xaml.cs` | P0 | — |
 | Floating | Drag and position persistence | Drag/persist/multi-screen recovery | Drag/persist/multi-monitor clamp | WINDOWS EQUIVALENT | `FloatingPetPanel` | `FloatingPetController.cs`; `FloatingPetPositioner.cs` | P0 | — |
 | Floating | Click/context actions | Opens popup; Open/Hide actions | Opens popup; Open/Hide actions | WINDOWS EQUIVALENT | `FloatingPetPanel` | `FloatingPokemonWindow.xaml.cs` | P0 | — |
@@ -249,9 +245,9 @@ Counts in section 2 are calculated from this table only.
 | Tray | Menu-bar token/cost/limit text | Configurable status-item text | Exact menu-bar treatment unavailable in notification area | MAC-ONLY / N/A | `UsageStore.menuBarText` | Windows shell constraint | P3 | — |
 | Tray | Provider switch/manual refresh | Provider tabs and refresh | Selector and refresh command | COMPLETE | `PopoverView` | `MainWindow.xaml`; `UsageViewModel.cs` | P0 | — |
 | Popup | Home usage view | Usage, limits, companion, warnings | Usage, limits, companion header | PARTIAL | `PopoverView` | `MainWindow.xaml` | P0 | M |
-| Popup | Shop tab | Reachable shop | Absent | MISSING | `ShopView.swift`; `PopoverView` | absent | P1 | M |
-| Popup | Bag tab | Reachable inventory/actions | Absent | MISSING | `BagView.swift`; `PopoverView` | absent | P1 | M |
-| Popup | Collection/dex tab | Collection, dex, catch log, representative | Absent | MISSING | `CompanionView.swift`; `PopoverView` | absent | P1 | L |
+| Popup | Shop tab | Reachable shop | Reachable catalog with balance, prices, disabled states, and buy actions | COMPLETE | `ShopView.swift`; `PopoverView` | `EconomyViewModel.cs`; `MainWindow.xaml` | P1 | — |
+| Popup | Bag tab | Reachable inventory/actions | Reachable inventory with item counts and use actions | COMPLETE | `BagView.swift`; `PopoverView` | `EconomyViewModel.cs`; `MainWindow.xaml` | P1 | — |
+| Popup | Collection/dex tab | Collection, dex, catch log, representative | Reachable active/graduated collection and representative selection | COMPLETE | `CompanionView.swift`; `PopoverView` | `EconomyViewModel.cs`; `MainWindow.xaml` | P1 | — |
 | Settings | Launch at login | Native login service | HKCU Run entry | WINDOWS EQUIVALENT | settings login service | `WindowsAutoStartService.cs` | P0 | — |
 | Settings | Floating enabled/position reset | Toggle/reset | Toggle/reset | COMPLETE | `SettingsView` | `SettingsViewModel.cs`; `MainWindow.xaml` | P0 | — |
 | Settings | Refresh interval | Manual/1/2/5/15 minute choices | Same choices, persisted and immediately rescheduled | COMPLETE | `UsageStore.refreshInterval` | `RefreshIntervalMode`; `SettingsViewModel.SelectedRefreshInterval`; `MainWindow.xaml` | P0 | — |
@@ -295,7 +291,7 @@ Completed with one refresh-to-companion integration seam and focused provider-le
 
 ### Phase C — Economy and companion surfaces
 
-Port candy rewards, inventory mutations, Rare Candy, Mint, Shiny Charm, egg variants, and purchases; then expose Shop, Bag, Collection/dex, catch log, and representative selection. Do not build screens before their store actions are functional and tested.
+Completed in Windows Phase 4: candy rewards, wallet/inventory mutations, Rare Candy, Mint, Shiny Charm, fresh egg variants, purchases, and the Shop/Bag/Collection surfaces are connected to persisted production store actions.
 
 **Exit criteria:** every visible action is persisted, recoverable, and covered by focused state-transition tests.
 

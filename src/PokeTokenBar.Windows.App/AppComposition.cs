@@ -49,10 +49,15 @@ public static class AppComposition
             companionStore,
             spriteLoader,
             new WpfPokemonSpriteDecoder());
+        var economy = new EconomyViewModel(companionStore, companion.RefreshAsync);
         var usageCompanion = new UsageCompanionController(
             usage,
             companionStore,
-            companion.RefreshAsync);
+            async cancellationToken =>
+            {
+                await companion.RefreshAsync(cancellationToken);
+                economy.Refresh();
+            });
         var floatingPet = new FloatingPetViewModel(companion);
         var settings = new SettingsViewModel(settingsPersistence, autoStartService);
         var usagePolling = new UsagePollingController(
@@ -60,7 +65,7 @@ public static class AppComposition
             settings,
             dispatchAsync: usageRefreshDispatcher);
         return new ApplicationComposition(
-            new MainViewModel(usage, companion, settings),
+            new MainViewModel(usage, companion, economy, settings),
             floatingPet,
             usagePolling,
             usageCompanion,

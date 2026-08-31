@@ -13,8 +13,10 @@
         ResizeMode="NoResize"
         WindowStyle="ToolWindow"
         Topmost="True">
-    <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                  VerticalScrollBarVisibility="Auto">
+    <TabControl>
+        <TabItem Header="Home">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto">
         <Grid Margin="28">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -456,5 +458,130 @@
                            TextWrapping="Wrap" />
             </Border>
         </Grid>
-    </ScrollViewer>
+            </ScrollViewer>
+        </TabItem>
+
+        <TabItem Header="Shop">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="28">
+                    <TextBlock Text="Shop" FontSize="22" FontWeight="SemiBold" />
+                    <TextBlock Margin="0,6,0,0"
+                               Text="Spend the tokens earned since installation. Purchases do not reduce growth."
+                               Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                               TextWrapping="Wrap" />
+                    <TextBlock Margin="0,14,0,0" Text="Balance" FontWeight="SemiBold" />
+                    <TextBlock Margin="0,3,0,0" Text="{Binding Economy.BalanceText, Mode=OneWay}" FontSize="20" />
+                    <ItemsControl Margin="0,12,0,0" ItemsSource="{Binding Economy.ShopProducts, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,10" Padding="14"
+                                        BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
+                                        BorderThickness="1" CornerRadius="8">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
+                                            <TextBlock Margin="0,3,0,0" Text="{Binding PriceText, Mode=OneWay}"
+                                                       Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Padding="12,5" Content="Buy"
+                                                IsEnabled="{Binding CanPurchase, Mode=OneWay}"
+                                                Command="{Binding PurchaseCommand, Mode=OneWay}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="{Binding Economy.ResultMessage, Mode=OneWay}" TextWrapping="Wrap" />
+                </StackPanel>
+            </ScrollViewer>
+        </TabItem>
+
+        <TabItem Header="Bag">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="28">
+                    <TextBlock Text="Bag" FontSize="22" FontWeight="SemiBold" />
+                    <TextBlock Margin="0,6,0,0" Text="Items persist across restarts."
+                               Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                    <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding Economy.BagItems, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,10" Padding="14"
+                                        BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
+                                        BorderThickness="1" CornerRadius="8">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
+                                            <TextBlock Margin="0,3,0,0" Text="{Binding StatusText, Mode=OneWay}"
+                                                       Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Padding="12,5" Content="Use"
+                                                IsEnabled="{Binding CanUse, Mode=OneWay}"
+                                                Command="{Binding UseCommand, Mode=OneWay}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="{Binding Economy.ResultMessage, Mode=OneWay}" TextWrapping="Wrap" />
+                </StackPanel>
+            </ScrollViewer>
+        </TabItem>
+
+        <TabItem Header="Collection">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="28">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Collection" FontSize="22" FontWeight="SemiBold" />
+                        <Button Grid.Column="1" Padding="10,4" Content="Follow current"
+                                Command="{Binding Economy.ClearRepresentativeCommand, Mode=OneWay}" />
+                    </Grid>
+                    <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding Economy.CollectionEntries, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="0,0,0,10" Padding="14"
+                                        BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
+                                        BorderThickness="1" CornerRadius="8">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock FontWeight="SemiBold">
+                                                <Run Text="{Binding Name, Mode=OneWay}" /><Run Text="  #" /><Run Text="{Binding SpeciesId, Mode=OneWay}" />
+                                            </TextBlock>
+                                            <TextBlock Margin="0,3,0,0">
+                                                <Run Text="{Binding Rarity, Mode=OneWay}" /><Run Text=" · " />
+                                                <Run Text="{Binding ShinyText, Mode=OneWay}" /><Run Text=" · " />
+                                                <Run Text="{Binding Nature, Mode=OneWay, TargetNullValue=Unknown nature}" />
+                                            </TextBlock>
+                                            <TextBlock Text="{Binding RoleText, Mode=OneWay}"
+                                                       Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                                            <TextBlock Text="{Binding CaughtText, Mode=OneWay}"
+                                                       Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Padding="10,4" Content="Represent"
+                                                Command="{Binding SelectRepresentativeCommand, Mode=OneWay}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="{Binding Economy.ResultMessage, Mode=OneWay}" TextWrapping="Wrap" />
+                </StackPanel>
+            </ScrollViewer>
+        </TabItem>
+    </TabControl>
 </Window>

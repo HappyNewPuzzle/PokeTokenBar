@@ -110,6 +110,263 @@ public sealed class CompanionStore
         }
     }
 
+    public long AvailableTokens => Math.Max(0, State.UsedSinceInstall - State.SpentTokens);
+
+    public bool OwnsShinyCharm => ItemCount(CompanionItemKind.ShinyCharm) > 0;
+
+    public int ItemCount(CompanionItemKind kind) =>
+        State.Inventory.GetValueOrDefault(kind.Key());
+
+    public IReadOnlyList<InventoryStack> OwnedItems =>
+        Enum.GetValues<CompanionItemKind>()
+            .Select(kind => new InventoryStack(kind, ItemCount(kind)))
+            .Where(item => item.Count > 0)
+            .ToArray();
+
+    public IReadOnlyList<ShopProduct> ShopProducts
+    {
+        get
+        {
+            var products = Enum.GetValues<CompanionItemKind>()
+                .Select(kind => new ShopProduct(
+                    kind.Key(), ShopProductKind.Item, kind.Price(), kind))
+                .ToList();
+            if (State.Active is not null)
+            {
+                products.AddRange(CompanionEconomyRules.EggTiers.Select(tier => new ShopProduct(
+                    tier is null ? "egg.basic" : $"egg.{tier.Value.ToString().ToLowerInvariant()}",
+                    ShopProductKind.Egg,
+                    CompanionEconomyRules.EggPrice(tier),
+                    GuaranteedRarity: tier)));
+            }
+
+            return products
+                .OrderBy(product => product.ItemKind is CompanionItemKind item &&
+                                    item.IsPassive() && ItemCount(item) > 0)
+                .ThenBy(product => product.Price)
+                .ToArray();
+        }
+    }
+
+    public async Task<PurchaseResult> PurchaseAsync(
+        string productId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(productId);
+        await _mutationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var product = AllShopProducts().FirstOrDefault(candidate =>
+                candidate.Id.Equals(productId, StringComparison.Ordinal));
+            if (product is null)
+            {
+                return PurchaseResult.InvalidProduct;
+            }
+
+            if (product.ProductKind == ShopProductKind.Egg && State.Active is null)
+            {
+                return PurchaseResult.NotAllowed;
+            }
+
+            if (product.ItemKind is CompanionItemKind passive &&
+                passive.IsPassive() && ItemCount(passive) > 0)
+            {
+                return PurchaseResult.AlreadyOwned;
+            }
+
+            if (AvailableTokens < product.Price)
+            {
+                return PurchaseResult.InsufficientFunds;
+            }
+
+            var next = State with { SpentTokens = AddClamped(State.SpentTokens, product.Price) };
+            if (product.ItemKind is CompanionItemKind item)
+            {
+                var inventory = new Dictionary<string, int>(State.Inventory, StringComparer.Ordinal)
+                {
+                    [item.Key()] = ItemCount(item) + 1,
+                };
+                next = next with { Inventory = inventory };
+                return CommitEconomyState(next)
+                    ? PurchaseResult.Success
+                    : PurchaseResult.PersistenceFailed;
+            }
+
+            next = next with
+            {
+                Active = null,
+                RepresentativeSpeciesId = State.RepresentativeSpeciesId is int selected &&
+                                          State.Dex.Any(entry => entry.ChainOrder.Contains(selected))
+                    ? selected
+                    : null,
+                EggUsage = 0,
+                EggTier = product.GuaranteedRarity,
+                PendingHatchId = null,
+            };
+            if (!CommitEconomyState(next))
+            {
+                return PurchaseResult.PersistenceFailed;
+            }
+
+            CurrentLine = null;
+            DisplayState = CompanionStateKind.Egg;
+            RefreshRepresentativeSubject();
+            return PurchaseResult.Success;
+        }
+        finally
+        {
+            _mutationGate.Release();
+        }
+    }
+
+    public async Task<ItemUseOutcome> UseItemAsync(
+        CompanionItemKind kind,
+        CancellationToken cancellationToken = default)
+    {
+        await _mutationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (kind == CompanionItemKind.ShinyCharm || ItemCount(kind) <= 0 || State.Active is null)
+            {
+                return new ItemUseOutcome(ItemUseResult.Unavailable);
+            }
+
+            if (kind == CompanionItemKind.Mint)
+            {
+                var active = State.Active;
+                var pool = Enum.GetValues<PokemonNature>()
+                    .Where(nature => nature != active.Nature)
+                    .ToArray();
+                var nature = pool[_random.Next(pool.Length)];
+                var inventory = DecrementedInventory(kind);
+                var next = State with
+                {
+                    Active = active with { Nature = nature },
+                    Inventory = inventory,
+                };
+                return CommitEconomyState(next)
+                    ? new ItemUseOutcome(ItemUseResult.NatureChanged, nature)
+                    : new ItemUseOutcome(ItemUseResult.PersistenceFailed);
+            }
+
+            if (CurrentLine is null)
+            {
+                return new ItemUseOutcome(ItemUseResult.Unavailable);
+            }
+
+            var previousState = State;
+            var previousLine = CurrentLine;
+            var previousDisplayState = DisplayState;
+            var previousRepresentative = RepresentativeSubject;
+            var beforeStage = State.Active.StageIndex;
+            State = State with { Inventory = DecrementedInventory(kind) };
+            ApplyUsageCore(CompanionEconomyRules.RareCandyExperience, save: false);
+            var result = State.Active is null
+                ? ItemUseResult.Graduated
+                : State.Active.StageIndex > beforeStage
+                    ? ItemUseResult.Evolved
+                    : ItemUseResult.Progressed;
+            try
+            {
+                _persistence.Save(State);
+                RefreshRepresentativeSubject();
+                return new ItemUseOutcome(result);
+            }
+            catch (Exception)
+            {
+                State = previousState;
+                CurrentLine = previousLine;
+                DisplayState = previousDisplayState;
+                RepresentativeSubject = previousRepresentative;
+                return new ItemUseOutcome(ItemUseResult.PersistenceFailed);
+            }
+        }
+        finally
+        {
+            _mutationGate.Release();
+        }
+    }
+
+    public static IReadOnlyList<CandyGrant> EvaluateCandyGrants(
+        IEnumerable<CandyWindow> windows,
+        IDictionary<string, int> grantTier)
+    {
+        ArgumentNullException.ThrowIfNull(windows);
+        ArgumentNullException.ThrowIfNull(grantTier);
+        var grants = new List<CandyGrant>();
+        foreach (var window in windows)
+        {
+            if (window.Utilization < 100)
+            {
+                grantTier.Remove(window.Key);
+                continue;
+            }
+
+            if (grantTier.TryGetValue(window.Key, out var previous) && previous >= 1)
+            {
+                continue;
+            }
+
+            grantTier[window.Key] = 1;
+            grants.Add(new CandyGrant(
+                window.Key,
+                window.Name,
+                window.Kind == LimitWindowClass.Weekly
+                    ? CompanionEconomyRules.WeeklyCandyGrant
+                    : 1));
+        }
+
+        return grants;
+    }
+
+    public async Task<int> GrantCandiesAsync(
+        IReadOnlyList<CandyWindow> windows,
+        bool limitsReady,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(windows);
+        if (!limitsReady)
+        {
+            return 0;
+        }
+
+        await _mutationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var ledger = new Dictionary<string, int>(State.CandyGrantTier, StringComparer.Ordinal);
+            if (!State.CandyFeatureSeeded)
+            {
+                foreach (var window in windows.Where(window => window.Utilization >= 100))
+                {
+                    ledger[window.Key] = 1;
+                }
+
+                var seeded = State with { CandyGrantTier = ledger, CandyFeatureSeeded = true };
+                CommitEconomyState(seeded);
+                return 0;
+            }
+
+            var grants = EvaluateCandyGrants(windows, ledger);
+            var total = grants.Sum(grant => grant.Count);
+            var changed = total > 0 || !ledger.OrderBy(pair => pair.Key)
+                .SequenceEqual(State.CandyGrantTier.OrderBy(pair => pair.Key));
+            if (!changed)
+            {
+                return 0;
+            }
+
+            var inventory = new Dictionary<string, int>(State.Inventory, StringComparer.Ordinal);
+            inventory[CompanionItemKind.RareCandy.Key()] =
+                inventory.GetValueOrDefault(CompanionItemKind.RareCandy.Key()) + total;
+            var next = State with { CandyGrantTier = ledger, Inventory = inventory };
+            return CommitEconomyState(next) ? total : 0;
+        }
+        finally
+        {
+            _mutationGate.Release();
+        }
+    }
+
     public async Task UpdateUsageAsync(
         IReadOnlyDictionary<string, long> todayTokensByProvider,
         string todayDate,
@@ -387,7 +644,7 @@ public sealed class CompanionStore
         }
     }
 
-    private void ApplyUsageCore(long delta)
+    private void ApplyUsageCore(long delta, bool save = true)
     {
         if (State.Active is not MonState active)
         {
@@ -458,7 +715,10 @@ public sealed class CompanionStore
             DisplayState = CompanionStateKind.LevelUp;
         }
 
-        TrySave();
+        if (save)
+        {
+            TrySave();
+        }
     }
 
     private EvoNode PickEvolutionChild(EvoNode node, int baseId)
@@ -629,7 +889,11 @@ public sealed class CompanionStore
             UsedAtStage = 0,
             Rarity = line.Rarity,
             TotalForms = plan.Count,
-            IsShiny = _random.Next(PokemonOdds.ShinyDenominator) == 0,
+            IsShiny = CompanionEconomyRules.RollsShiny(
+                _random.Next(OwnsShinyCharm
+                    ? CompanionEconomyRules.ShinyCharmDenominator
+                    : PokemonOdds.ShinyDenominator),
+                OwnsShinyCharm),
             Nature = natures[_random.Next(natures.Length)],
         };
 
@@ -718,6 +982,41 @@ public sealed class CompanionStore
         }
     }
 
+    private IReadOnlyList<ShopProduct> AllShopProducts() =>
+        Enum.GetValues<CompanionItemKind>()
+            .Select(kind => new ShopProduct(
+                kind.Key(), ShopProductKind.Item, kind.Price(), kind))
+            .Concat(CompanionEconomyRules.EggTiers.Select(tier => new ShopProduct(
+                tier is null ? "egg.basic" : $"egg.{tier.Value.ToString().ToLowerInvariant()}",
+                ShopProductKind.Egg,
+                CompanionEconomyRules.EggPrice(tier),
+                GuaranteedRarity: tier)))
+            .ToArray();
+
+    private IReadOnlyDictionary<string, int> DecrementedInventory(CompanionItemKind kind)
+    {
+        var inventory = new Dictionary<string, int>(State.Inventory, StringComparer.Ordinal)
+        {
+            [kind.Key()] = Math.Max(0, ItemCount(kind) - 1),
+        };
+        return inventory;
+    }
+
+    private bool CommitEconomyState(CompanionState next)
+    {
+        try
+        {
+            _persistence.Save(next);
+            State = next;
+            RefreshRepresentativeSubject();
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
     private static CompanionState NormalizeState(CompanionState state)
     {
         var active = state.Active;
@@ -741,6 +1040,7 @@ public sealed class CompanionStore
             }
         }
 
+        var hasActive = active is not null;
         var normalized = state with
         {
             UsedSinceInstall = Math.Max(0, state.UsedSinceInstall),
@@ -752,6 +1052,10 @@ public sealed class CompanionStore
             CollectedFinals = state.CollectedFinals ?? new HashSet<string>(),
             Inventory = state.Inventory ?? new Dictionary<string, int>(),
             CandyGrantTier = state.CandyGrantTier ?? new Dictionary<string, int>(),
+            EggTier = !hasActive && state.EggTier is PokemonRarity.Uncommon or PokemonRarity.Rare
+                ? state.EggTier
+                : null,
+            PendingHatchId = hasActive ? null : state.PendingHatchId,
         };
 
         if (normalized.RepresentativeSpeciesId is int selected &&

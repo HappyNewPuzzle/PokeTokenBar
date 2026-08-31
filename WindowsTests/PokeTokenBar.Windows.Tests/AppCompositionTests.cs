@@ -208,11 +208,35 @@ public sealed partial class AppCompositionTests
         Assert.NotEmpty(bindingPaths);
         Assert.All(bindingPaths, path =>
         {
-            if (typeof(OfficialLimitRow).GetProperty(path) is null)
+            if (new[]
+                {
+                    typeof(OfficialLimitRow),
+                    typeof(ShopProductViewModel),
+                    typeof(BagItemViewModel),
+                    typeof(CollectionEntryViewModel),
+                }.All(type => type.GetProperty(path) is null))
             {
                 AssertBindingPath(typeof(MainViewModel), path);
             }
         });
+    }
+
+    [Fact]
+    public void MainWindow_EconomyTabsBindShopBagAndCollectionCommands()
+    {
+        var xaml = ReadRepositoryFile(
+            "src", "PokeTokenBar.Windows.App", "MainWindow.xaml");
+
+        Assert.Contains("Header=\"Shop\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"Bag\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"Collection\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Economy.BalanceText", xaml, StringComparison.Ordinal);
+        Assert.Contains("Economy.ShopProducts", xaml, StringComparison.Ordinal);
+        Assert.Contains("PurchaseCommand", xaml, StringComparison.Ordinal);
+        Assert.Contains("Economy.BagItems", xaml, StringComparison.Ordinal);
+        Assert.Contains("UseCommand", xaml, StringComparison.Ordinal);
+        Assert.Contains("Economy.CollectionEntries", xaml, StringComparison.Ordinal);
+        Assert.Contains("SelectRepresentativeCommand", xaml, StringComparison.Ordinal);
     }
 
     [Fact]

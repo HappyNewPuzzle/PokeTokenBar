@@ -78,6 +78,76 @@ public sealed class UsageViewModel : INotifyPropertyChanged
 
     internal bool HasUsageData => _store.HasUsageData;
 
+    internal bool LimitsReady =>
+        _store.ClaudeRateLimits is not null ||
+        _store.CodexRateLimits is not null ||
+        _store.AntigravityRateLimits is not null;
+
+    internal IReadOnlyList<CandyWindow> CandyEligibleWindows
+    {
+        get
+        {
+            var windows = new List<CandyWindow>();
+            if (_store.ClaudeRateLimits?.FiveHour is { } fiveHour)
+            {
+                windows.Add(new CandyWindow(
+                    "claude.fiveHour", "Claude 5-hour session",
+                    LimitWindowClass.Session, fiveHour.UsedPercent));
+            }
+
+            if (_store.ClaudeRateLimits?.SevenDay is { } sevenDay)
+            {
+                windows.Add(new CandyWindow(
+                    "claude.sevenDay", "Claude weekly",
+                    LimitWindowClass.Weekly, sevenDay.UsedPercent));
+            }
+
+            foreach (var snapshot in _store.CodexRateLimits?.VisibleSnapshots ?? [])
+            {
+                var key = snapshot.LimitId ?? snapshot.LimitName ?? "codex";
+                var name = snapshot.LimitName ?? "Codex";
+                if (snapshot.Primary is { } primary)
+                {
+                    windows.Add(new CandyWindow(
+                        $"codex.{key}.primary", $"{name} session",
+                        WindowClass(primary.WindowDurationMinutes), primary.UsedPercent));
+                }
+
+                if (snapshot.Secondary is { } secondary)
+                {
+                    windows.Add(new CandyWindow(
+                        $"codex.{key}.secondary", $"{name} weekly",
+                        WindowClass(secondary.WindowDurationMinutes), secondary.UsedPercent));
+                }
+            }
+
+            foreach (var group in _store.AntigravityRateLimits?.Groups ?? [])
+            {
+                var groupKey = group.DisplayName.Contains("gemini", StringComparison.OrdinalIgnoreCase)
+                    ? "gemini"
+                    : "3p";
+                if (group.FiveHour is { } session)
+                {
+                    windows.Add(new CandyWindow(
+                        $"antigravity.{groupKey}.5h", $"{group.DisplayName} 5-hour session",
+                        LimitWindowClass.Session, session.UsedPercent));
+                }
+
+                if (group.Weekly is { } weekly)
+                {
+                    windows.Add(new CandyWindow(
+                        $"antigravity.{groupKey}.weekly", $"{group.DisplayName} weekly",
+                        LimitWindowClass.Weekly, weekly.UsedPercent));
+                }
+            }
+
+            return windows;
+        }
+    }
+
+    internal static LimitWindowClass WindowClass(int? minutes) =>
+        minutes is > 1440 ? LimitWindowClass.Weekly : LimitWindowClass.Session;
+
     public AsyncCommand RefreshCommand { get; }
 
     public IReadOnlyList<ProviderSnapshot> Providers

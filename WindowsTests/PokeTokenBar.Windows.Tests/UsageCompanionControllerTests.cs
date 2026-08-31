@@ -72,6 +72,24 @@ public sealed class UsageCompanionControllerTests
         Assert.Equal(0, fixture.Store.State.EggUsage);
     }
 
+    [Fact]
+    public async Task OfficialLimitEdgeGrantsCandyThroughRefreshIntegration()
+    {
+        var provider = new MutableUsageProvider { Tokens = 100 };
+        var usage = new UsageViewModel(new UsageStore(
+            [provider],
+            claudeRateLimitsProvider: new FixedClaudeLimits()));
+        var persistence = new MemoryPersistence(new CompanionState { CandyFeatureSeeded = true });
+        var store = new CompanionStore(new UnusedPokeApi(), persistence);
+        using var controller = new UsageCompanionController(usage, store, _ => Task.CompletedTask);
+
+        await usage.RefreshAsync();
+        await controller.LastUpdate;
+
+        Assert.Equal(1, store.ItemCount(CompanionItemKind.RareCandy));
+        Assert.Equal(1, persistence.State?.Inventory["rareCandy"]);
+    }
+
     private static Fixture Create(long tokens)
     {
         var provider = new MutableUsageProvider { Tokens = tokens };
@@ -121,11 +139,20 @@ public sealed class UsageCompanionControllerTests
             Task.FromResult(new ProviderEnrichment());
     }
 
-    private sealed class MemoryPersistence : ICompanionPersistence
+    private sealed class MemoryPersistence(CompanionState? state = null) : ICompanionPersistence
     {
-        public CompanionState? Load() => null;
-        public void Save(CompanionState state) { }
-        public void Delete() { }
+        public CompanionState? State { get; private set; } = state;
+        public CompanionState? Load() => State;
+        public void Save(CompanionState state) => State = state;
+        public void Delete() => State = null;
+    }
+
+    private sealed class FixedClaudeLimits : IClaudeRateLimitsProvider
+    {
+        public Task<ClaudeRateLimitStatus?> FetchAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<ClaudeRateLimitStatus?>(new(
+                new ClaudeRateLimitWindow(100, null),
+                null, null, null, null, null));
     }
 
     private sealed class UnusedPokeApi : IPokeApiClient
