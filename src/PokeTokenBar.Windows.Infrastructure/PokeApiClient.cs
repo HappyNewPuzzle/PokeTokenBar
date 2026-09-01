@@ -313,10 +313,7 @@ public sealed class PokeApiClient : IPokeApiClient
     }
 
     private static string GetDefaultBaseIndexCachePath() =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "PokeTokenBar",
-            "base-index.json");
+        Path.Combine(PokeTokenBarDataPaths.Root, "base-index.json");
 
     public async Task<BaseSpecies?> GetBaseSpeciesAsync(
         int id,

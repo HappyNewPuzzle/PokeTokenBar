@@ -79,6 +79,10 @@ public sealed class UsageViewModel : INotifyPropertyChanged
 
     internal bool HasUsageData => _store.HasUsageData;
 
+    internal IReadOnlyList<string> RegisteredProviderIds => _store.RegisteredProviderIds;
+
+    internal bool HasRefreshError => !string.IsNullOrWhiteSpace(_store.LastErrorDescription);
+
     internal bool LimitsReady =>
         _store.ClaudeRateLimits is not null ||
         _store.CodexRateLimits is not null ||

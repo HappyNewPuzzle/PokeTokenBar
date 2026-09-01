@@ -6,10 +6,10 @@ This is a code-based parity audit, not an implementation plan disguised as compl
 
 | Item | Value |
 |---|---|
-| Audit date | 2026-08-31 |
+| Audit date | 2026-09-01 |
 | Windows branch | `windows-port` |
-| Windows commit | `5b82f863b18931a803b242c634bea0ed882983be` plus the Phase 3D working tree |
-| macOS baseline | `upstream/main` at `8a20c3a4036221f75a637be45630efbf5aaf2a1c` |
+| Windows commit | `1e0b022` plus the Phase 6 working tree |
+| macOS baseline | `upstream/main` at `37763d3c367068492c18f6e51b45977c2d27f6d5` |
 | Merge base | `4c29ca0fa28c1fb67929517542d4e58d802171f8` |
 | Initial `git status --short` | Existing unrelated `.gitignore` change and two untracked Korean documentation files |
 | Scope | Product behavior, runtime integration, settings, persistence, distribution, and meaningful test coverage |
@@ -26,31 +26,31 @@ Estimates are implementation effort after dependencies are available: **S** (up 
 
 ## 2. Executive Summary
 
-The Windows port is now a twelve-provider tray application, with the same local provider set registered by the current macOS product. Its strongest areas are local/API parsing and period aggregation; official Codex/Claude limits and Antigravity quota; configurable background polling; the usage-driven companion and economy loop; single-instance startup; tray/popup mechanics; floating-window mechanics; persistence; notifications; and sleep/resume handling. The largest remaining parity boundaries are updates/distribution, diagnostics, save transfer, and the remaining product settings.
+The Windows port now has a complete P0 production path: twelve providers, limits, companion/economy UI, native lifecycle integration, update checks, safe save transfer, sanitized diagnostics, and reproducible self-contained portable packaging. Inno Setup source supplies the per-user installer path; installer compilation/signing and real Antigravity environment validation remain release-environment work.
 
 The full matrix in section 18 contains **93 atomic feature rows**:
 
 | Status | Count | Share |
 |---|---:|---:|
-| COMPLETE | 61 | 65.6% |
-| PARTIAL | 10 | 10.8% |
-| MISSING | 10 | 10.8% |
-| WINDOWS EQUIVALENT | 11 | 11.8% |
+| COMPLETE | 68 | 73.1% |
+| PARTIAL | 8 | 8.6% |
+| MISSING | 4 | 4.3% |
+| WINDOWS EQUIVALENT | 12 | 12.9% |
 | MAC-ONLY / N/A | 1 | 1.1% |
 
 These counts deliberately do not award parity merely because a model type or dormant method exists. A feature must be reachable from the production composition and UI.
 
 ### P0 findings
 
-No P0 provider-coverage finding remains: Windows registers all twelve upstream local providers.
+**P0 = 0.** No known gap blocks normal production use or the portable release path.
 
 ## 3. Critical Missing Features
 
 | Priority | Gap | macOS behavior | Windows state | Size | Dependencies | Principal files |
 |---|---|---|---|---|---|---|
 | P1 | Companion product UI | Home shows progression and celebrations; Shop, Bag, Collection, catch log, dex details, and representative selection are reachable. | Home, Shop, Bag, and Collection are reachable; celebrations and richer dex details remain absent. | M | Celebration/detail presentation | macOS `CompanionView.swift`, `ShopView.swift`, `BagView.swift`, `PopoverView.swift`; Windows `MainWindow.xaml` |
-| P1 | Full settings surface | Language, refresh, animation quality, limit mode, menu content, floating size/bubbles, notifications, thresholds, provider roots/auth, updates, and save transfer are configurable. | Phase 5 connects language, limits, floating, notification, threshold, and additive scan-root settings; menu-content/auth/update/save-transfer controls remain. | M | Remaining production features | macOS `SettingsView.swift`, `Core/UsageStore.swift`; Windows `MainWindow.xaml`, `SettingsViewModel.cs`, `Core/AppSettings.cs` |
-| P2 | Updates and Windows release UX | In-app release checks, update banner, Homebrew upgrade/relaunch or release-page fallback. | Self-contained publish exists; no update checker, installer flow, signing policy, or update UI. | L | Windows distribution choice and signing identity | macOS `Core/UpdateChecker.swift`, `PopoverView.swift`; Windows `.csproj`, `README.md` |
+| P1 | Full settings surface | Language, refresh, animation quality, limit mode, menu content, floating size/bubbles, notifications, thresholds, provider roots/auth, updates, and save transfer are configurable. | User-facing runtime, update, transfer, and root controls are connected; provider auth/status and configurable tray-content controls remain. | M | Remaining product settings | macOS `SettingsView.swift`, `Core/UsageStore.swift`; Windows `MainWindow.xaml`, `SettingsViewModel.cs`, `SupportViewModel.cs` |
+| P2 | Release signing and installer QA | macOS release workflow signs and packages releases. | Reproducible portable zip and Inno Setup source exist; a signing identity is intentionally absent and real installer compile/install QA is pending. | M | Release environment and signing identity | macOS release scripts; Windows `scripts/build-release.ps1`, `installer/PokeTokenBar.iss`, `WINDOWS_RELEASE.md` |
 
 ## 4. Usage Providers
 
@@ -119,7 +119,7 @@ Windows persists and exposes:
 - floating size, animation quality and bubble preference,
 - per-provider additive custom scan folders.
 
-`JsonAppSettingsPersistence` stores these settings atomically in LocalAppData, ignores unknown JSON fields, and safely supplies defaults to older files. Remaining settings gaps are configurable tray content, provider auth/status controls, updates, and save transfer.
+`JsonAppSettingsPersistence` stores these settings atomically in LocalAppData, ignores unknown JSON fields, and safely supplies defaults to older files. Phase 6 adds update notification/check controls, version/About information, save transfer, and diagnostics. Remaining settings gaps are configurable tray content and provider auth/status controls.
 
 ## 11. Notifications
 
@@ -133,11 +133,11 @@ Current upstream supports Korean, English, Japanese, Spanish, French, Portuguese
 
 Both applications start as background/tray apps, enforce one instance, and respond to sleep/resume. Windows checks `SingleInstanceGuard.TryAcquire` before `AppComposition.Create`, so a second process does not create tray, windows, refresh, or power subscriptions. `UsagePollingController` uses `TimeProvider.CreateTimer`, pauses polling and cancels a pending empty retry on suspend, then restores one schedule after the wake refresh. `WindowsPowerModeEventSource` maps system power events, and shutdown disposal is explicit.
 
-macOS additionally supports launch-agent keep-alive and includes logging/crash reporting. Windows now has startup/manual/timed/resume refresh and equivalent polling sleep behavior, but no automatic restart or equivalent diagnostics pipeline.
+macOS additionally supports launch-agent keep-alive and crash reporting. Windows now has startup/manual/timed/resume refresh, equivalent polling sleep behavior, and sanitized copyable support diagnostics, but no automatic restart or crash-capture pipeline.
 
 ## 14. Persistence / Cache
 
-Windows has appropriate native persistence for its implemented scope: LocalAppData JSON for app settings and the complete core companion progression state, position persistence, sprite caching, base-species caching, and Registry auto-start. Claude and Antigravity credentials are discovered read-only from their CLI files; PokeTokenBar neither stores nor overwrites them. macOS also has incremental usage caches, economy state mutation, save export/import, migration from earlier app identity, custom provider roots, and Keychain credential discovery. Windows lacks save transfer and general provider credential/configuration persistence.
+Windows has appropriate native persistence for its implemented scope: LocalAppData JSON for app settings and the complete core companion/economy/collection state, position persistence, sprite caching, base-species caching, Registry auto-start, and versioned export/import with backup and rollback. Claude and Antigravity credentials are discovered read-only from their CLI files; PokeTokenBar neither stores nor exports them. Incremental provider scan caches, legacy app-identity migration, and general provider credential/configuration persistence remain partial or absent.
 
 Neither audit nor any verification modified user `.codex` data.
 
@@ -145,7 +145,7 @@ Neither audit nor any verification modified user `.codex` data.
 
 macOS `UpdateChecker` checks GitHub releases and the UI presents update availability; Homebrew installs can upgrade/relaunch while other installs open the release page. The repository includes macOS packaging/signing scripts.
 
-Windows supports a self-contained Release publish and has release packaging metadata, but no in-app update check, installer/uninstaller UX, Windows signing policy, release-channel UI, or automated update path. A direct `.exe` publish is a valid initial distribution mechanism, but only partial parity with the supported macOS lifecycle.
+Windows uses the same stable GitHub-release meaning: startup/popup checks are debounced to 30 minutes, manual checks bypass the debounce, failures are isolated, and only a validated `https://github.com` release page opens after explicit user action. It never overwrites the running executable or silently launches an installer. `build-release.ps1` produces a versioned self-contained portable directory and verified zip; the per-user Inno source supports Start Menu/optional desktop shortcuts, upgrade, uninstall, and user-data preservation. Installer compilation, real install/uninstall QA, and code signing remain release-environment work.
 
 ## 16. Platform-specific Mapping
 
@@ -160,7 +160,7 @@ Windows supports a self-contained Release publish and has release packaging meta
 | Keychain credential discovery | Read-only Claude and Antigravity CLI credential-file discovery | PARTIAL; file paths are supported without PokeTokenBar writes, but Antigravity Windows OS-store discovery is unverified |
 | Workspace/display sleep notifications | `SystemEvents.PowerModeChanged` | WINDOWS EQUIVALENT |
 | `UNUserNotificationCenter` | `NotifyIcon` balloon plus floating warning bubble | WINDOWS EQUIVALENT |
-| Homebrew/app bundle update | Self-contained publish | PARTIAL; distribution exists, update lifecycle does not |
+| Homebrew/app bundle update | Versioned portable zip plus per-user Inno Setup source and release-page update path | WINDOWS EQUIVALENT; installer compile QA pending |
 | SwiftUI localization environment | Runtime observable seven-language catalog | PARTIAL; major surfaces switch live, some detail copy remains English |
 
 ## 17. Test Coverage Gaps
@@ -172,7 +172,7 @@ The most important missing behavior tests correspond to missing production featu
 1. No Ditto lifecycle tests.
 2. Notification opt-in, threshold, deduplication, re-arm, and event paths are covered; native shell balloon appearance still needs manual OS-level QA.
 3. Major runtime language-switch paths are covered; untranslated detail copy prevents full localization coverage.
-4. No update checking, release selection, update UX, or save export/import tests.
+4. Update checking, release selection, version metadata, save transfer, backup, rollback, and release-script contracts are covered; native dialog and trust-prompt appearance still need OS-level QA.
 5. No warning/burn forecast/provider-status behavior tests.
 
 The macOS suite contains dedicated coverage for these areas, including `CompanionTests`, `RareCandyTests`, `PremiumEggTests`, `ShopTests`, `DittoTests`, `SaveTransferTests`, provider-specific suites, `CustomRootsTests`, `LocalUsageCacheTests`, and `SingleInstanceTests`. Test-count parity alone would be misleading; Windows should add tests only as each missing production slice is ported.
@@ -206,11 +206,11 @@ Counts in section 2 are calculated from this table only.
 | Usage | Stale snapshot preservation | Keeps usable prior data on failure | Keeps daily/period/official prior data | COMPLETE | `UsageStore` refresh phases | `UsageStore.cs` | P0 | — |
 | Usage | Recurring polling | Configurable timer refresh | Native timer with Manual/1/2/5/15-minute schedules | COMPLETE | `UsageStore.reschedule` | `UsagePollingController.cs` | P0 | — |
 | Usage | Empty-result retry | One 20-second retry after successful empty scan | Same; errors, month-only, and official-only are not empty | COMPLETE | `UsageStore.handleEmptyUsageRetry` | `UsagePollingController.EvaluateEmptyRetry` | P1 | — |
-| Usage | Custom scan roots | Per-provider configured roots | Conventional/environment and injectable roots for all local providers; no settings UI/persistence | MISSING | `CustomRoots`; persisted `UsageStore` settings | local provider constructors | P1 | M |
+| Usage | Custom scan roots | Per-provider configured roots | Twelve provider-specific additive roots persist and apply on the next refresh | COMPLETE | `CustomRoots`; persisted `UsageStore` settings | `ConfigurableUsageProvider.cs`; `SettingsViewModel.cs`; `MainWindow.xaml` | P1 | — |
 | Usage | Burn forecast | Computes burn tier/forecast | No production calculation/UI | MISSING | `UsageStore` burn fields | `UsageViewModel.cs` | P2 | M |
 | Usage | Provider status checks | Optional provider health/status | No production status layer | MISSING | `UsageStore` status checks | absent | P2 | M |
 | Limits | Codex official fetch | App-server rate limits | App-server rate limits | COMPLETE | `CodexRateLimitsProvider.swift` | `CodexRateLimitsProvider.cs` | P0 | — |
-| Limits | Remaining percentages | Used/remaining selectable | Remaining values, clamped 0–100 | PARTIAL | `AppSettings.limitDisplayMode` | `UsageViewModel.ApplyOfficialLimits` | P0 | S |
+| Limits | Remaining percentages | Used/remaining selectable | Persisted used/remaining mode with clamped labels and progress bars | COMPLETE | `AppSettings.limitDisplayMode` | `UsageViewModel.ApplyOfficialLimits`; `SettingsViewModel.cs`; `MainWindow.xaml` | P0 | — |
 | Limits | Reset display | Shows reset timestamps | Shows reset timestamps | COMPLETE | `PopoverView.limitRow` | `MainWindow.xaml` | P0 | — |
 | Limits | Multiple Codex buckets | Models/displays bucket set | Parser can see richer data; UI projects primary/secondary only | PARTIAL | `CodexRateLimitsProvider` | `CodexRateLimitsProvider.cs`; `UsageViewModel.ApplyOfficialLimits` | P1 | M |
 | Limits | Plan/credits/spend | Displays plan, credits/spend controls where available | Not exposed in UI | MISSING | `CodexRateLimitsProvider`; `PopoverView` | `UsageViewModel.cs` | P1 | M |
@@ -246,7 +246,7 @@ Counts in section 2 are calculated from this table only.
 | Tray | Animated companion icon | Representative animates in menu bar | Representative static icon synchronizes immediately; tray animation remains absent | PARTIAL | status-item sprite controller | `SystemTrayController.cs`; `NotifyIconTrayIcon.cs` | P1 | S |
 | Tray | Menu-bar token/cost/limit text | Configurable status-item text | Exact menu-bar treatment unavailable in notification area | MAC-ONLY / N/A | `UsageStore.menuBarText` | Windows shell constraint | P3 | — |
 | Tray | Provider switch/manual refresh | Provider tabs and refresh | Selector and refresh command | COMPLETE | `PopoverView` | `MainWindow.xaml`; `UsageViewModel.cs` | P0 | — |
-| Popup | Home usage view | Usage, limits, companion, warnings | Usage, limits, companion header | PARTIAL | `PopoverView` | `MainWindow.xaml` | P0 | M |
+| Popup | Home usage view | Usage, limits, companion, warnings | Usage, official limits, companion progression, warning/error and update banners | COMPLETE | `PopoverView` | `MainWindow.xaml`; `NotificationController.cs`; `SupportViewModel.cs` | P0 | — |
 | Popup | Shop tab | Reachable shop | Reachable catalog with balance, prices, disabled states, and buy actions | COMPLETE | `ShopView.swift`; `PopoverView` | `EconomyViewModel.cs`; `MainWindow.xaml` | P1 | — |
 | Popup | Bag tab | Reachable inventory/actions | Reachable inventory with item counts and use actions | COMPLETE | `BagView.swift`; `PopoverView` | `EconomyViewModel.cs`; `MainWindow.xaml` | P1 | — |
 | Popup | Collection/dex tab | Collection, dex, catch log, representative | Reachable active/graduated collection and representative selection | COMPLETE | `CompanionView.swift`; `PopoverView` | `EconomyViewModel.cs`; `MainWindow.xaml` | P1 | — |
@@ -258,7 +258,7 @@ Counts in section 2 are calculated from this table only.
 | Settings | Floating/animation options | Size, quality, bubble preferences | Same production settings and runtime effects | COMPLETE | `SettingsView` | `SettingsViewModel.cs`; floating/sprite presentation | P2 | — |
 | Settings | Notification/threshold options | Category toggles and 80/95 defaults | Independent limit/companion toggles and persisted ordered thresholds | COMPLETE | `AppSettings` | `AppSettings.cs`; `SettingsViewModel.cs`; `MainWindow.xaml` | P1 | — |
 | Settings | Provider roots/auth controls | Roots, Keychain opt-out, refresh controls | Twelve additive scan-root editors apply on next refresh; auth controls remain absent | PARTIAL | `SettingsView`; `CustomRoots` | `ConfigurableUsageProvider.cs`; `SettingsViewModel.cs`; `MainWindow.xaml` | P1 | M |
-| Localization | Pokémon names/natures | Six languages | API names and some companion strings support six languages | PARTIAL | `Localization.swift`; model helpers | `PokeApiClient.cs`; `CompanionViewModel.cs` | P1 | M |
+| Localization | Pokémon names/natures | Seven current languages | API names/natures follow the persisted seven-language runtime selection | COMPLETE | `Localization.swift`; model helpers | `AppLanguageRules`; `PokeApiClient.cs`; `CompanionViewModel.cs` | P1 | — |
 | Localization | Full application UI | Seven-language UI strings | Major popup/settings/tray/floating/notification strings switch live; some economy detail copy falls back to English | PARTIAL | `Localization.swift` | `LocalizationService.cs`; `MainWindow.xaml`; tray/floating view models | P1 | M |
 | Notifications | Limit warning/critical | Configurable, deduped notifications | Persisted edge-triggered `NotifyIcon` balloon and floating bubble equivalent | WINDOWS EQUIVALENT | app notification routing; `UsageStore` | `NotificationController.cs`; `LimitNotificationEvaluator` | P1 | — |
 | Notifications | Companion events | Hatch/evolve/graduate/reward notifications | Post-mutation `NotifyIcon` balloon equivalent with isolated failures | WINDOWS EQUIVALENT | `PokeTokenBarApp` | `CompanionStore.GameEventOccurred`; `NotificationController.cs` | P1 | — |
@@ -266,16 +266,16 @@ Counts in section 2 are calculated from this table only.
 | Lifecycle | Single instance | Prevents duplicate lifecycle | User-SID named mutex before composition | WINDOWS EQUIVALENT | `SingleInstanceController` | `SingleInstanceGuard.cs`; `App.OnStartup` | P0 | — |
 | Lifecycle | Sleep/resume | Pauses polling/work and refreshes after wake | Pauses polling/retry, preserves pet behavior, refreshes, then restores one schedule | COMPLETE | app sleep handlers | `PowerLifecycleController.cs`; `UsagePollingController.cs` | P0 | — |
 | Lifecycle | Clean shutdown | Releases app resources | Disposes tray/windows/events/mutex | COMPLETE | app termination | `App.xaml.cs` | P0 | — |
-| Lifecycle | Crash diagnostics/keep-alive | Logging/crash reporting and launch-agent behavior | No equivalent diagnostics or restart | MISSING | app/logging/launch-agent code | absent | P2 | L |
+| Lifecycle | Crash diagnostics/keep-alive | Logging/crash reporting and launch-agent behavior | Sanitized copyable support diagnostics exist; crash capture and automatic restart remain absent | PARTIAL | app/logging/launch-agent code | `DiagnosticsReport.cs`; `SupportViewModel.cs` | P2 | M |
 | Persistence | App settings | `UserDefaults` | LocalAppData JSON | WINDOWS EQUIVALENT | `UsageStore.init` and persisted properties | `JsonAppSettingsPersistence.cs` | P0 | — |
 | Persistence | Companion state | Persisted game state | Ledger, egg, active path, traits, dex, and representative persist/restore | COMPLETE | `CompanionStore` | `CompanionStore.cs`; `JsonCompanionPersistence.cs` | P0 | — |
 | Persistence | Sprite/species cache | Cached assets/data | Cached sprites/base index | COMPLETE | sprite/cache services | `PokemonSpriteLoader.cs`; `PokeApiClient.cs` | P1 | — |
 | Persistence | Incremental usage cache | Provider scan/cache support | Codex scans and in-memory snapshots; no equivalent persistent usage cache | PARTIAL | `LocalUsageCache` | `CodexLocalRolloutPipeline.cs`; `UsageStore.cs` | P2 | M |
-| Persistence | Save export/import | Transfer companion save | Absent | MISSING | save transfer service/UI | absent | P2 | M |
-| Updates | Update checking/UI | GitHub release check and banner | Absent | MISSING | `UpdateChecker.swift`; `PopoverView` | absent | P1 | M |
-| Distribution | Packaged release | App bundle/Homebrew flows | Self-contained Windows publish | PARTIAL | packaging scripts | Windows `.csproj`; `README.md` | P0 | M |
-| Distribution | Upgrade/relaunch | Homebrew upgrade or release-page path | No updater/relaunch path | MISSING | `UpdateChecker` | absent | P2 | L |
-| Distribution | Signing/installer policy | macOS signing/package workflow | No equivalent documented automated Windows installer/signing path | MISSING | `scripts/`; package docs | Windows project/release docs | P2 | L |
+| Persistence | Save export/import | Versioned transfer, validation, pre-import backup and device rebase | Versioned settings+companion envelope, validation, backup, rollback and restart-required UI | COMPLETE | `SaveTransfer.swift`; settings UI | `StateTransferService.cs`; `SupportViewModel.cs`; `MainWindow.xaml` | P2 | — |
+| Updates | Update checking/UI | GitHub release check and banner | Stable GitHub release check, 30-minute debounce, manual check and banner | COMPLETE | `UpdateChecker.swift`; `PopoverView` | `GitHubReleaseUpdateChecker.cs`; `SupportViewModel.cs`; `MainWindow.xaml` | P1 | — |
+| Distribution | Packaged release | App bundle/Homebrew flows | Reproducible versioned self-contained portable directory/zip and per-user installer source | COMPLETE | packaging scripts | `scripts/build-release.ps1`; `installer/PokeTokenBar.iss`; `WINDOWS_RELEASE.md` | P0 | — |
+| Distribution | Upgrade/relaunch | Homebrew upgrade or release-page path | User-confirmed validated GitHub release-page path; no running-EXE overwrite | WINDOWS EQUIVALENT | `UpdateChecker` | `GitHubReleaseUpdateChecker.cs`; `WindowsUserInteraction.cs` | P2 | — |
+| Distribution | Signing/installer policy | macOS signing/package workflow | Per-user Inno source and release documentation exist; signing and real installer QA require a release environment | PARTIAL | `scripts/`; package docs | `installer/PokeTokenBar.iss`; `scripts/build-release.ps1`; `WINDOWS_RELEASE.md` | P2 | M |
 
 ## 19. Recommended Porting Roadmap
 
@@ -305,6 +305,6 @@ Completed in Windows Phase 5 with native notification-area balloons, persisted t
 
 ### Phase E — Update and distribution closure
 
-Choose and document a Windows installer/signing/update strategy, add release checking and safe handoff to the chosen updater or release page, then add save export/import and support diagnostics.
+Completed in Windows Phase 6 with stable GitHub release checking, user-confirmed release-page handoff, version/About UI, versioned save export/import with backup and rollback, sanitized diagnostics, reproducible portable packaging, and per-user Inno Setup source. Installer compilation/signing and real install/uninstall QA remain explicitly pending because this machine has no Inno compiler or signing identity.
 
 **Exit criteria:** a non-developer can install, update, recover/export state, and provide actionable diagnostics without altering `.codex` data.

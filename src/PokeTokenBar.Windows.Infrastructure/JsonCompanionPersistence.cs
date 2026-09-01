@@ -6,7 +6,7 @@ namespace PokeTokenBar.Windows.Infrastructure;
 
 public sealed class JsonCompanionPersistence : ICompanionPersistence
 {
-    private static readonly JsonSerializerOptions SerializerOptions = CreateSerializerOptions();
+    internal static readonly JsonSerializerOptions SerializerOptions = CreateSerializerOptions();
 
     public JsonCompanionPersistence(string? filePath = null)
     {
@@ -17,9 +17,7 @@ public sealed class JsonCompanionPersistence : ICompanionPersistence
 
     public static string GetDefaultFilePath()
     {
-        var localApplicationData = Environment.GetFolderPath(
-            Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(localApplicationData, "PokeTokenBar", "companion-state.json");
+        return Path.Combine(PokeTokenBarDataPaths.Root, "companion-state.json");
     }
 
     public CompanionState? Load()
@@ -107,7 +105,7 @@ public sealed class JsonCompanionPersistence : ICompanionPersistence
         }
     }
 
-    private static CompanionState ReadState(JsonElement root) =>
+    internal static CompanionState ReadState(JsonElement root) =>
         new()
         {
             InstallBaselineSet = Read(root, "installBaselineSet", false),
@@ -205,7 +203,8 @@ public sealed class JsonCompanionPersistence : ICompanionPersistence
 
     private static IReadOnlyDictionary<string, long>? ReadClaimedTokens(JsonElement root)
     {
-        if (!root.TryGetProperty("claimedTodayTokensByProvider", out _))
+        if (!root.TryGetProperty("claimedTodayTokensByProvider", out var property) ||
+            property.ValueKind == JsonValueKind.Null)
         {
             return null;
         }

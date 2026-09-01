@@ -41,9 +41,7 @@ public sealed class PokemonSpriteLoader
 
     public static string GetDefaultCacheDirectory()
     {
-        var localApplicationData = Environment.GetFolderPath(
-            Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(localApplicationData, "PokeTokenBar", "sprites");
+        return Path.Combine(PokeTokenBarDataPaths.Root, "sprites");
     }
 
     public Task<PokemonSpriteAsset?> LoadAsync(

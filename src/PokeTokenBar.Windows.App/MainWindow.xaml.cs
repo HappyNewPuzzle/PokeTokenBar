@@ -5,12 +5,15 @@ namespace PokeTokenBar.Windows.App;
 
 public partial class MainWindow : Window, IDisposable
 {
+    private readonly MainViewModel _viewModel;
     private bool _disposed;
 
     public MainWindow(MainViewModel viewModel)
     {
         InitializeComponent();
-        DataContext = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+        _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+        DataContext = viewModel;
+        Activated += OnActivated;
     }
 
     public void Dispose()
@@ -21,7 +24,14 @@ public partial class MainWindow : Window, IDisposable
         }
 
         _disposed = true;
+        Activated -= OnActivated;
         CompanionSprite.Dispose();
+    }
+
+    private void OnActivated(object? sender, EventArgs e)
+    {
+        if (_viewModel.Support is { } support)
+            _ = support.CheckAsync(TimeSpan.FromMinutes(30));
     }
 
     protected override void OnClosed(EventArgs e)

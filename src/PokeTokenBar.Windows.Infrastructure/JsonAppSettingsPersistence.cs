@@ -5,7 +5,7 @@ namespace PokeTokenBar.Windows.Infrastructure;
 
 public sealed class JsonAppSettingsPersistence : IAppSettingsPersistence
 {
-    private static readonly JsonSerializerOptions SerializerOptions =
+    internal static readonly JsonSerializerOptions SerializerOptions =
         new(JsonSerializerDefaults.Web);
 
     public JsonAppSettingsPersistence(string? filePath = null)
@@ -17,9 +17,7 @@ public sealed class JsonAppSettingsPersistence : IAppSettingsPersistence
 
     public static string GetDefaultFilePath()
     {
-        var localApplicationData = Environment.GetFolderPath(
-            Environment.SpecialFolder.LocalApplicationData);
-        return Path.Combine(localApplicationData, "PokeTokenBar", "settings.json");
+        return Path.Combine(PokeTokenBarDataPaths.Root, "settings.json");
     }
 
     public AppSettings? Load()
@@ -85,7 +83,7 @@ public sealed class JsonAppSettingsPersistence : IAppSettingsPersistence
         }
     }
 
-    private static bool IsValid(AppSettings settings) =>
+    internal static bool IsValid(AppSettings settings) =>
         Enum.IsDefined(settings.RefreshInterval) &&
         (settings.Language is null || Enum.IsDefined(settings.Language.Value)) &&
         Enum.IsDefined(settings.LimitDisplayMode) &&

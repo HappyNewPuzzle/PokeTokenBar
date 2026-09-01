@@ -350,6 +350,7 @@ public sealed partial class AppCompositionTests
                 "Settings.FloatingPetSize" or
                 "Settings.SelectedAnimationQuality" or
                 "Settings.FloatingBubbleAlertsEnabled" or
+                "Settings.UpdateNotificationsEnabled" or
                 "Settings.SelectedRootProviderId" or
                 "Settings.CustomRootText" or
                 "Settings.ResetFloatingPetPositionCommand")

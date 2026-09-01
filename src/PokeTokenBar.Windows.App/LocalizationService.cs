@@ -86,6 +86,15 @@ public sealed class LocalizationService : INotifyPropertyChanged
         $"{window}: {percent:0}% 사용", $"{window}: {percent:0}% used", $"{window}: {percent:0}% 使用",
         $"{window}: {percent:0}% usado", $"{window} : {percent:0}% utilisé", $"{window}: {percent:0}% usado", $"{window}: {percent:0}% verbraucht");
 
+    public string About => T("정보", "About", "情報", "Acerca de", "À propos", "Sobre", "Info");
+    public string UpdateNotifications => T("업데이트 알림", "Update notifications", "更新通知", "Avisos de actualización", "Notifications de mise à jour", "Avisos de atualização", "Update-Benachrichtigungen");
+    public string CheckForUpdates => T("업데이트 확인", "Check for updates", "アップデートを確認", "Buscar actualizaciones", "Rechercher des mises à jour", "Buscar atualizações", "Nach Updates suchen");
+    public string DownloadUpdate => T("릴리스 페이지 열기", "Open release page", "リリースページを開く", "Abrir página de versión", "Ouvrir la page de version", "Abrir página da versão", "Release-Seite öffnen");
+    public string Later => T("이 버전 건너뛰기", "Skip this version", "このバージョンをスキップ", "Omitir esta versión", "Ignorer cette version", "Ignorar esta versão", "Diese Version überspringen");
+    public string ExportSave => T("세이브 내보내기", "Export save", "セーブを書き出す", "Exportar partida", "Exporter la sauvegarde", "Exportar save", "Spielstand exportieren");
+    public string ImportSave => T("세이브 불러오기", "Import save", "セーブを読み込む", "Importar partida", "Importer la sauvegarde", "Importar save", "Spielstand importieren");
+    public string CopyDiagnostics => T("진단 정보 복사", "Copy diagnostics", "診断情報をコピー", "Copiar diagnóstico", "Copier le diagnostic", "Copiar diagnóstico", "Diagnose kopieren");
+
     private string T(string ko, string en, string ja, string es, string fr, string pt, string de) =>
         Language switch
         {

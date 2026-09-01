@@ -87,8 +87,19 @@ public static class AppComposition
             usage,
             settings,
             dispatchAsync: usageRefreshDispatcher);
+        SupportViewModel? support = null;
+        if (settingsPersistence is JsonAppSettingsPersistence jsonSettings &&
+            persistence is JsonCompanionPersistence jsonCompanion)
+        {
+            support = new SupportViewModel(
+                new GitHubReleaseUpdateChecker(httpClient, ApplicationVersion.Current),
+                new StateTransferService(jsonSettings, jsonCompanion, ApplicationVersion.Current),
+                settings,
+                usage,
+                new WindowsUserInteraction());
+        }
         return new ApplicationComposition(
-            new MainViewModel(usage, companion, economy, settings),
+            new MainViewModel(usage, companion, economy, settings, support),
             floatingPet,
             usagePolling,
             usageCompanion,

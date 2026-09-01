@@ -37,6 +37,7 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
     private bool _limitNotificationsEnabled;
     private bool _companionNotificationsEnabled;
     private bool _floatingBubbleAlertsEnabled;
+    private bool _updateNotificationsEnabled;
     private string _selectedRootProviderId = "codex";
     private string _customRootText = "";
     private string? _customRootStatus;
@@ -61,6 +62,7 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
         _limitNotificationsEnabled = _settings.LimitNotificationsEnabled;
         _companionNotificationsEnabled = _settings.CompanionNotificationsEnabled;
         _floatingBubbleAlertsEnabled = _settings.FloatingBubbleAlertsEnabled;
+        _updateNotificationsEnabled = _settings.UpdateNotificationsEnabled;
         Localization = new LocalizationService(_selectedLanguage);
         _customRootText = CustomRootValue(_selectedRootProviderId);
         _isLaunchAtStartupEnabled = ReadAutoStartState();
@@ -223,6 +225,17 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
         }
     }
 
+    public bool UpdateNotificationsEnabled
+    {
+        get => _updateNotificationsEnabled;
+        set
+        {
+            if (!SetField(ref _updateNotificationsEnabled, value)) return;
+            _settings = _settings with { UpdateNotificationsEnabled = value };
+            SaveSettings();
+        }
+    }
+
     public double WarningThreshold
     {
         get => _warningThreshold;
@@ -292,6 +305,18 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
 
     internal IReadOnlyList<string> CustomRoots(string providerId) =>
         ParseRoots(CustomRootValue(providerId));
+
+    internal bool HasConfiguredCustomRoot(string providerId) =>
+        !string.IsNullOrWhiteSpace(CustomRootValue(providerId));
+
+    internal string? SkippedUpdateVersion => _settings.SkippedUpdateVersion;
+
+    internal void SkipUpdateVersion(string? version)
+    {
+        if (string.Equals(_settings.SkippedUpdateVersion, version, StringComparison.Ordinal)) return;
+        _settings = _settings with { SkippedUpdateVersion = version };
+        SaveSettings();
+    }
 
     internal string? SelectedProviderId => _settings.SelectedProviderId;
 

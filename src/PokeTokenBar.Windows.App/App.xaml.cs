@@ -94,6 +94,10 @@ public partial class App : System.Windows.Application
         _ = _initialRefresh.StartAsync();
         _composition.UsagePolling.Start();
         _ = _initialCompanion.StartAsync();
+        if (viewModel.Support is { } support)
+        {
+            _ = support.CheckAsync(TimeSpan.FromMinutes(30));
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)

@@ -41,7 +41,9 @@ public sealed record AppSettings(
     bool FloatingBubbleAlertsEnabled = true,
     IReadOnlyDictionary<string, string>? CustomProviderRoots = null,
     IReadOnlyDictionary<string, int>? NotificationTiers = null,
-    string? SelectedProviderId = null)
+    string? SelectedProviderId = null,
+    bool UpdateNotificationsEnabled = true,
+    string? SkippedUpdateVersion = null)
 {
     public static AppSettings Default { get; } = new();
 }
