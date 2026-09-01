@@ -227,9 +227,9 @@ public sealed partial class AppCompositionTests
         var xaml = ReadRepositoryFile(
             "src", "PokeTokenBar.Windows.App", "MainWindow.xaml");
 
-        Assert.Contains("Header=\"Shop\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Header=\"Bag\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Header=\"Collection\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"{Binding Texts.Shop", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"{Binding Texts.Bag", xaml, StringComparison.Ordinal);
+        Assert.Contains("Header=\"{Binding Texts.Collection", xaml, StringComparison.Ordinal);
         Assert.Contains("Economy.BalanceText", xaml, StringComparison.Ordinal);
         Assert.Contains("Economy.ShopProducts", xaml, StringComparison.Ordinal);
         Assert.Contains("PurchaseCommand", xaml, StringComparison.Ordinal);
@@ -341,6 +341,17 @@ public sealed partial class AppCompositionTests
                 "Settings.IsFloatingPetEnabled" or
                 "Settings.IsLaunchAtStartupEnabled" or
                 "Settings.SelectedRefreshInterval" or
+                "Settings.SelectedLanguage" or
+                "Settings.SelectedLimitDisplayMode" or
+                "Settings.LimitNotificationsEnabled" or
+                "Settings.CompanionNotificationsEnabled" or
+                "Settings.WarningThreshold" or
+                "Settings.CriticalThreshold" or
+                "Settings.FloatingPetSize" or
+                "Settings.SelectedAnimationQuality" or
+                "Settings.FloatingBubbleAlertsEnabled" or
+                "Settings.SelectedRootProviderId" or
+                "Settings.CustomRootText" or
                 "Settings.ResetFloatingPetPositionCommand")
             {
                 return;

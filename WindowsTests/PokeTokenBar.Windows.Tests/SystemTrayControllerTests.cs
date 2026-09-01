@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using PokeTokenBar.Windows.App.Tray;
+using PokeTokenBar.Windows.App.Sprites;
 using PokeTokenBar.Windows.App.ViewModels;
 using PokeTokenBar.Windows.Core;
 
@@ -266,12 +267,17 @@ public sealed class SystemTrayControllerTests
         public event EventHandler? ExitRequested;
 
         public bool Visible { get; set; }
+        public string Text { get; set; } = "";
         public int DisposeCalls { get; private set; }
+        public NotificationMessage? LastNotification { get; private set; }
 
         public void RequestToggle() => ToggleRequested?.Invoke(this, EventArgs.Empty);
         public void RequestOpen() => OpenRequested?.Invoke(this, EventArgs.Empty);
         public void RequestRefresh() => RefreshRequested?.Invoke(this, EventArgs.Empty);
         public void RequestExit() => ExitRequested?.Invoke(this, EventArgs.Empty);
+        public void ShowNotification(NotificationMessage message) => LastNotification = message;
+        public void SetMenuText(string open, string refresh, string exit) { }
+        public void SetCompanion(PokemonSpritePresentation? presentation) { }
 
         public void Dispose() => DisposeCalls++;
     }

@@ -87,6 +87,16 @@ public sealed class JsonAppSettingsPersistence : IAppSettingsPersistence
 
     private static bool IsValid(AppSettings settings) =>
         Enum.IsDefined(settings.RefreshInterval) &&
+        (settings.Language is null || Enum.IsDefined(settings.Language.Value)) &&
+        Enum.IsDefined(settings.LimitDisplayMode) &&
+        Enum.IsDefined(settings.AnimationQuality) &&
+        double.IsFinite(settings.WarningThreshold) &&
+        double.IsFinite(settings.CriticalThreshold) &&
+        settings.WarningThreshold is >= 50 and <= 95 &&
+        settings.CriticalThreshold is >= 55 and <= 100 &&
+        settings.WarningThreshold < settings.CriticalThreshold &&
+        double.IsFinite(settings.FloatingPetSize) &&
+        settings.FloatingPetSize is >= 48 and <= 192 &&
         (settings.FloatingPetPosition is not { } position ||
          (double.IsFinite(position.Left) && double.IsFinite(position.Top)));
 

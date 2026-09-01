@@ -8,6 +8,8 @@ public sealed class CompanionStore
     private readonly TimeProvider _timeProvider;
     private readonly SemaphoreSlim _mutationGate = new(1, 1);
 
+    public event EventHandler<CompanionGameEvent>? GameEventOccurred;
+
     public CompanionStore(
         IPokeApiClient provider,
         ICompanionPersistence persistence,
@@ -60,10 +62,13 @@ public sealed class CompanionStore
             return false;
         }
 
+        var previous = State;
         IsHatching = true;
         try
         {
-            return await HatchCoreAsync(baseSpeciesId, cancellationToken).ConfigureAwait(false);
+            var success = await HatchCoreAsync(baseSpeciesId, cancellationToken).ConfigureAwait(false);
+            if (success) PublishCompanionChanges(previous, State);
+            return success;
         }
         finally
         {
@@ -80,10 +85,13 @@ public sealed class CompanionStore
             return false;
         }
 
+        var previous = State;
         IsHatching = true;
         try
         {
-            return await HatchRandomCoreAsync(cancellationToken).ConfigureAwait(false);
+            var success = await HatchRandomCoreAsync(cancellationToken).ConfigureAwait(false);
+            if (success) PublishCompanionChanges(previous, State);
+            return success;
         }
         finally
         {
@@ -270,6 +278,7 @@ public sealed class CompanionStore
             {
                 _persistence.Save(State);
                 RefreshRepresentativeSubject();
+                PublishCompanionChanges(previousState, State);
                 return new ItemUseOutcome(result);
             }
             catch (Exception)
@@ -359,7 +368,13 @@ public sealed class CompanionStore
             inventory[CompanionItemKind.RareCandy.Key()] =
                 inventory.GetValueOrDefault(CompanionItemKind.RareCandy.Key()) + total;
             var next = State with { CandyGrantTier = ledger, Inventory = inventory };
-            return CommitEconomyState(next) ? total : 0;
+            if (!CommitEconomyState(next)) return 0;
+            if (total > 0)
+            {
+                PublishGameEvent(new CompanionGameEvent(
+                    CompanionGameEventKind.Reward, Count: total));
+            }
+            return total;
         }
         finally
         {
@@ -379,6 +394,7 @@ public sealed class CompanionStore
         await _mutationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            var previousState = State;
             var current = todayTokensByProvider.ToDictionary(
                 static pair => pair.Key,
                 static pair => Math.Max(0, pair.Value),
@@ -468,6 +484,7 @@ public sealed class CompanionStore
 
             TrySave();
             await MaintainProgressionAsync(cancellationToken).ConfigureAwait(false);
+            PublishCompanionChanges(previousState, State);
         }
         finally
         {
@@ -1014,6 +1031,37 @@ public sealed class CompanionStore
         catch (Exception)
         {
             return false;
+        }
+    }
+
+    private void PublishCompanionChanges(CompanionState previous, CompanionState current)
+    {
+        CompanionGameEvent? gameEvent = null;
+        if (previous.Active is null && current.Active is { } hatched)
+        {
+            gameEvent = new CompanionGameEvent(CompanionGameEventKind.Hatch, hatched.CurrentId);
+        }
+        else if (previous.Active is { } graduated && current.Active is null &&
+                 current.Dex.Count > previous.Dex.Count)
+        {
+            gameEvent = new CompanionGameEvent(CompanionGameEventKind.Graduation, graduated.CurrentId);
+        }
+        else if (previous.Active is { } before && current.Active is { } after &&
+                 before.CurrentId != after.CurrentId)
+        {
+            gameEvent = new CompanionGameEvent(CompanionGameEventKind.Evolution, after.CurrentId);
+        }
+
+        if (gameEvent is not null) PublishGameEvent(gameEvent);
+    }
+
+    private void PublishGameEvent(CompanionGameEvent gameEvent)
+    {
+        if (GameEventOccurred is not { } handlers) return;
+        foreach (var subscriber in handlers.GetInvocationList())
+        {
+            try { ((EventHandler<CompanionGameEvent>)subscriber)(this, gameEvent); }
+            catch (Exception) { }
         }
     }
 

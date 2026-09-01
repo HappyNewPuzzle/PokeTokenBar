@@ -1,14 +1,17 @@
 using System.ComponentModel;
 using PokeTokenBar.Windows.App.ViewModels;
+using PokeTokenBar.Windows.Core;
 
 namespace PokeTokenBar.Windows.App.Tray;
 
-internal sealed class SystemTrayController : IDisposable
+internal sealed class SystemTrayController : IDisposable, INotificationService
 {
     private readonly ITrayIcon _trayIcon;
     private readonly ITrayWindow _window;
     private readonly UsageViewModel _viewModel;
     private readonly Action _shutdown;
+    private readonly SettingsViewModel? _settings;
+    private readonly CompanionViewModel? _companion;
     private bool _isExiting;
     private bool _disposed;
 
@@ -16,12 +19,16 @@ internal sealed class SystemTrayController : IDisposable
         ITrayIcon trayIcon,
         ITrayWindow window,
         UsageViewModel viewModel,
-        Action shutdown)
+        Action shutdown,
+        SettingsViewModel? settings = null,
+        CompanionViewModel? companion = null)
     {
         _trayIcon = trayIcon ?? throw new ArgumentNullException(nameof(trayIcon));
         _window = window ?? throw new ArgumentNullException(nameof(window));
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         _shutdown = shutdown ?? throw new ArgumentNullException(nameof(shutdown));
+        _settings = settings;
+        _companion = companion;
 
         _trayIcon.ToggleRequested += OnToggleRequested;
         _trayIcon.OpenRequested += OnOpenRequested;
@@ -29,6 +36,10 @@ internal sealed class SystemTrayController : IDisposable
         _trayIcon.ExitRequested += OnExitRequested;
         _window.Closing += OnWindowClosing;
         _window.Deactivated += OnWindowDeactivated;
+        _viewModel.PropertyChanged += OnPresentationChanged;
+        if (_settings is not null) _settings.PropertyChanged += OnPresentationChanged;
+        if (_companion is not null) _companion.PropertyChanged += OnPresentationChanged;
+        UpdatePresentation();
         _trayIcon.Visible = true;
     }
 
@@ -75,6 +86,14 @@ internal sealed class SystemTrayController : IDisposable
         _shutdown();
     }
 
+    public Task ShowAsync(NotificationMessage message, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        try { _trayIcon.ShowNotification(message); }
+        catch (Exception) { }
+        return Task.CompletedTask;
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -89,6 +108,9 @@ internal sealed class SystemTrayController : IDisposable
         _trayIcon.ExitRequested -= OnExitRequested;
         _window.Closing -= OnWindowClosing;
         _window.Deactivated -= OnWindowDeactivated;
+        _viewModel.PropertyChanged -= OnPresentationChanged;
+        if (_settings is not null) _settings.PropertyChanged -= OnPresentationChanged;
+        if (_companion is not null) _companion.PropertyChanged -= OnPresentationChanged;
         _trayIcon.Visible = false;
         _trayIcon.Dispose();
     }
@@ -119,4 +141,14 @@ internal sealed class SystemTrayController : IDisposable
     private void OnRefreshRequested(object? sender, EventArgs e) => Refresh();
 
     private void OnExitRequested(object? sender, EventArgs e) => Exit();
+
+    private void OnPresentationChanged(object? sender, PropertyChangedEventArgs args) => UpdatePresentation();
+
+    private void UpdatePresentation()
+    {
+        var text = _settings?.Localization;
+        _trayIcon.SetMenuText(text?.Open ?? "Open", text?.Refresh ?? "Refresh", text?.Exit ?? "Exit");
+        _trayIcon.Text = $"PokeTokenBar · {text?.Today ?? "Today"} {_viewModel.TotalTodayTokensText}";
+        _trayIcon.SetCompanion(_companion?.Sprite);
+    }
 }

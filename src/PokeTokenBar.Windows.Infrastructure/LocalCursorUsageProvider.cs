@@ -27,6 +27,11 @@ public sealed class LocalCursorUsageProvider : IUsageProvider
     {
     }
 
+    public LocalCursorUsageProvider(HttpClient httpClient, IEnumerable<string> roots)
+        : this(httpClient, roots, credential: null)
+    {
+    }
+
     internal LocalCursorUsageProvider(
         HttpClient httpClient,
         IEnumerable<string> roots,

@@ -18,8 +18,8 @@ public sealed class FloatingPokemonWindowContractTests
         Assert.Contains("ResizeMode=\"NoResize\"", xaml, StringComparison.Ordinal);
         Assert.Contains("Topmost=\"True\"", xaml, StringComparison.Ordinal);
         Assert.Contains("WindowStartupLocation=\"Manual\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Width=\"96\"", xaml, StringComparison.Ordinal);
-        Assert.Contains("Height=\"96\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Width=\"{Binding Size, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("Height=\"{Binding Size, Mode=OneWay}\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -84,8 +84,8 @@ public sealed class FloatingPokemonWindowContractTests
         Assert.Contains("OnMouseMove", code, StringComparison.Ordinal);
         Assert.Contains("OnMouseLeftButtonUp", code, StringComparison.Ordinal);
         Assert.Contains("CommitPosition()", code, StringComparison.Ordinal);
-        Assert.Contains("Open Token Bar", code, StringComparison.Ordinal);
-        Assert.Contains("Hide Floating Pokémon", code, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.OpenText", code, StringComparison.Ordinal);
+        Assert.Contains("_viewModel.HideText", code, StringComparison.Ordinal);
     }
 
     [Fact]

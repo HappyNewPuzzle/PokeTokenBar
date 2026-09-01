@@ -41,15 +41,26 @@ public static class AppComposition
         ArgumentNullException.ThrowIfNull(settingsPersistence);
         ArgumentNullException.ThrowIfNull(autoStartService);
 
-        var usage = CreateUsageViewModel(httpClient);
         var api = new PokeApiClient(httpClient);
         var companionStore = new CompanionStore(api, persistence);
+        var settings = new SettingsViewModel(
+            settingsPersistence, autoStartService, companionStore.State.Language);
+        var usage = CreateUsageViewModel(httpClient, settings.CustomRoots);
+        usage.SelectedProviderId = settings.SelectedProviderId;
+        usage.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(UsageViewModel.SelectedProviderId))
+            {
+                settings.SaveSelectedProvider(usage.SelectedProviderId);
+            }
+        };
         var spriteLoader = new PokemonSpriteLoader(httpClient);
         var companion = new CompanionViewModel(
             companionStore,
             spriteLoader,
             new WpfPokemonSpriteDecoder());
-        var economy = new EconomyViewModel(companionStore, companion.RefreshAsync);
+        var economy = new EconomyViewModel(
+            companionStore, companion.RefreshAsync, settings.Localization);
         var usageCompanion = new UsageCompanionController(
             usage,
             companionStore,
@@ -58,8 +69,20 @@ public static class AppComposition
                 await companion.RefreshAsync(cancellationToken);
                 economy.Refresh();
             });
-        var floatingPet = new FloatingPetViewModel(companion);
-        var settings = new SettingsViewModel(settingsPersistence, autoStartService);
+        var floatingPet = new FloatingPetViewModel(companion, settings, usage);
+        settings.LanguageChanged += language =>
+        {
+            companionStore.SetLanguage(language);
+            _ = RefreshLanguageAsync(companion, economy);
+        };
+        settings.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(SettingsViewModel.SelectedLimitDisplayMode))
+            {
+                usage.SetLimitDisplayMode(settings.SelectedLimitDisplayMode);
+            }
+        };
+        usage.SetLimitDisplayMode(settings.SelectedLimitDisplayMode);
         var usagePolling = new UsagePollingController(
             usage,
             settings,
@@ -69,28 +92,28 @@ public static class AppComposition
             floatingPet,
             usagePolling,
             usageCompanion,
+            companionStore,
             httpClient);
     }
 
-    public static UsageViewModel CreateUsageViewModel(HttpClient? httpClient = null)
+    public static UsageViewModel CreateUsageViewModel(HttpClient? httpClient = null) =>
+        CreateUsageViewModel(httpClient, null);
+
+    internal static UsageViewModel CreateUsageViewModel(
+        HttpClient? httpClient,
+        Func<string, IReadOnlyList<string>>? customRoots)
     {
-        IUsageProvider[] providers =
-        [
-            new LocalCodexUsageProvider(),
-            new LocalClaudeUsageProvider(),
-            new LocalGeminiUsageProvider(),
-            new LocalAntigravityUsageProvider(),
-            httpClient is null
-                ? new LocalCursorUsageProvider()
-                : new LocalCursorUsageProvider(httpClient),
-            new LocalOpenCodeUsageProvider(),
-            new LocalHermesUsageProvider(),
-            new LocalGrokUsageProvider(),
-            new LocalCopilotUsageProvider(),
-            new LocalKiroUsageProvider(),
-            new LocalPiUsageProvider(),
-            new LocalOmpUsageProvider(),
-        ];
+        IUsageProvider[] providers = customRoots is null
+            ?
+            [
+                new LocalCodexUsageProvider(), new LocalClaudeUsageProvider(),
+                new LocalGeminiUsageProvider(), new LocalAntigravityUsageProvider(),
+                httpClient is null ? new LocalCursorUsageProvider() : new LocalCursorUsageProvider(httpClient),
+                new LocalOpenCodeUsageProvider(), new LocalHermesUsageProvider(),
+                new LocalGrokUsageProvider(), new LocalCopilotUsageProvider(),
+                new LocalKiroUsageProvider(), new LocalPiUsageProvider(), new LocalOmpUsageProvider(),
+            ]
+            : CreateConfiguredProviders(httpClient ?? new HttpClient(), customRoots);
         ICodexRateLimitsProvider codexRateLimitsProvider = new CodexRateLimitsProvider();
         IClaudeRateLimitsProvider claudeRateLimitsProvider = new ClaudeRateLimitsProvider();
         IAntigravityRateLimitsProvider antigravityRateLimitsProvider =
@@ -101,5 +124,54 @@ public static class AppComposition
             claudeRateLimitsProvider: claudeRateLimitsProvider,
             antigravityRateLimitsProvider: antigravityRateLimitsProvider);
         return new UsageViewModel(store);
+    }
+
+    private static IUsageProvider[] CreateConfiguredProviders(
+        HttpClient httpClient,
+        Func<string, IReadOnlyList<string>> customRoots) =>
+    [
+        Configured("codex", "Codex", true, CodexSessionLocator.GetDefaultRoots, customRoots,
+            roots => new LocalCodexUsageProvider(roots)),
+        Configured("claude_code", "Claude Code", true, () => LocalClaudeUsageProvider.GetDefaultRoots(), customRoots,
+            roots => new LocalClaudeUsageProvider(roots)),
+        Configured("gemini", "Gemini", true, () => LocalGeminiUsageProvider.GetDefaultRoots(), customRoots,
+            roots => new LocalGeminiUsageProvider(roots)),
+        Configured("antigravity", "Antigravity", false, () => LocalAntigravityUsageProvider.GetDefaultRoots(), customRoots,
+            roots => new LocalAntigravityUsageProvider(roots)),
+        Configured("cursor", "Cursor", false, () => LocalCursorUsageProvider.GetDefaultRoots(), customRoots,
+            roots => new LocalCursorUsageProvider(httpClient, roots)),
+        Configured("opencode", "OpenCode", true, () => LocalOpenCodeUsageProvider.GetDefaultRoots(), customRoots,
+            roots => new LocalOpenCodeUsageProvider(roots)),
+        Configured("hermes", "Hermes Agent", true, () => LocalHermesUsageProvider.GetDefaultRoots(), customRoots,
+            roots => new LocalHermesUsageProvider(roots)),
+        Configured("grok", "Grok", true, () => LocalGrokUsageProvider.GetDefaultRoots(), customRoots,
+            roots => new LocalGrokUsageProvider(roots)),
+        Configured("copilot", "Copilot", false, () => LocalCopilotUsageProvider.GetDefaultRoots(), customRoots,
+            roots => new LocalCopilotUsageProvider(roots)),
+        Configured("kiro", "Kiro", false, () => LocalKiroUsageProvider.GetDefaultRoots(), customRoots,
+            roots => new LocalKiroUsageProvider(roots)),
+        Configured("pi", "Pi", false, () => LocalPiUsageProvider.GetDefaultRoots(), customRoots,
+            roots => new LocalPiUsageProvider(roots)),
+        Configured("omp", "omp", true, () => LocalOmpUsageProvider.GetDefaultRoots(), customRoots,
+            roots => new LocalOmpUsageProvider(roots)),
+    ];
+
+    private static IUsageProvider Configured(
+        string id,
+        string name,
+        bool reportsCost,
+        Func<IReadOnlyList<string>> defaults,
+        Func<string, IReadOnlyList<string>> customRoots,
+        Func<IReadOnlyList<string>, IUsageProvider> factory) =>
+        new ConfigurableUsageProvider(
+            id, name, reportsCost, defaults,
+            () => customRoots(id), factory);
+
+    private static async Task RefreshLanguageAsync(
+        CompanionViewModel companion,
+        EconomyViewModel economy)
+    {
+        await companion.RefreshAsync();
+        economy.Refresh();
     }
 }

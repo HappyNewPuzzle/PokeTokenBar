@@ -24,6 +24,8 @@ public sealed class MainViewModel : IDisposable
 
     public SettingsViewModel Settings { get; }
 
+    public LocalizationService Texts => Settings.Localization;
+
     public void Dispose()
     {
         if (_disposed)

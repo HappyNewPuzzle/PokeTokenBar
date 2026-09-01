@@ -21,12 +21,17 @@ public partial class FloatingPokemonWindow : Window, IFloatingPetWindow
     private System.Drawing.Point? _mouseDownScreen;
     private Point _originAtMouseDown;
     private bool _didDrag;
+    private readonly FloatingPetViewModel _viewModel;
+    private readonly MenuItem _openMenuItem;
+    private readonly MenuItem _hideMenuItem;
 
     public FloatingPokemonWindow(FloatingPetViewModel viewModel)
     {
         InitializeComponent();
-        DataContext = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
-        ContextMenu = CreateContextMenu();
+        _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
+        DataContext = viewModel;
+        (_openMenuItem, _hideMenuItem, ContextMenu) = CreateContextMenu();
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
     }
 
     public event EventHandler? OpenRequested;
@@ -45,7 +50,7 @@ public partial class FloatingPokemonWindow : Window, IFloatingPetWindow
         var workingAreas = Forms.Screen.AllScreens
             .Select(screen => ToDips(screen.WorkingArea, scaleX, scaleY))
             .ToArray();
-        var preferredSize = new Size(SpriteSize, SpriteSize);
+        var preferredSize = new Size(_viewModel.Size, _viewModel.Size);
         var placement = position is null
             ? FloatingPetPositioner.Calculate(fallbackArea, preferredSize)
             : FloatingPetPositioner.Restore(
@@ -78,6 +83,7 @@ public partial class FloatingPokemonWindow : Window, IFloatingPetWindow
         }
 
         _disposed = true;
+        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         FloatingSprite.Dispose();
     }
 
@@ -147,16 +153,16 @@ public partial class FloatingPokemonWindow : Window, IFloatingPetWindow
         e.Handled = true;
     }
 
-    private ContextMenu CreateContextMenu()
+    private (MenuItem Open, MenuItem Hide, ContextMenu Menu) CreateContextMenu()
     {
         var menu = new ContextMenu();
-        var open = new MenuItem { Header = "Open Token Bar" };
-        var hide = new MenuItem { Header = "Hide Floating Pokémon" };
+        var open = new MenuItem { Header = _viewModel.OpenText };
+        var hide = new MenuItem { Header = _viewModel.HideText };
         open.Click += (_, _) => OpenRequested?.Invoke(this, EventArgs.Empty);
         hide.Click += (_, _) => HideRequested?.Invoke(this, EventArgs.Empty);
         menu.Items.Add(open);
         menu.Items.Add(hide);
-        return menu;
+        return (open, hide, menu);
     }
 
     private void ClampToCurrentMonitor()
@@ -169,7 +175,7 @@ public partial class FloatingPokemonWindow : Window, IFloatingPetWindow
         ApplyPlacement(FloatingPetPositioner.Clamp(
             area,
             new Point(Left, Top),
-            new Size(SpriteSize, SpriteSize)));
+            new Size(_viewModel.Size, _viewModel.Size)));
     }
 
     private void ApplyPlacement(FloatingPetPlacement placement)
@@ -184,6 +190,28 @@ public partial class FloatingPokemonWindow : Window, IFloatingPetWindow
         PositionCommitted?.Invoke(
             this,
             new FloatingPetPositionEventArgs(new FloatingPetPosition(Left, Top)));
+
+    private void OnViewModelPropertyChanged(
+        object? sender,
+        System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(FloatingPetViewModel.Size))
+        {
+            Width = _viewModel.Size;
+            Height = _viewModel.Size;
+            if (IsVisible)
+            {
+                ClampToCurrentMonitor();
+                CommitPosition();
+            }
+        }
+        else if (args.PropertyName is nameof(FloatingPetViewModel.OpenText) or
+                 nameof(FloatingPetViewModel.HideText))
+        {
+            _openMenuItem.Header = _viewModel.OpenText;
+            _hideMenuItem.Header = _viewModel.HideText;
+        }
+    }
 
     private static Rect ToDips(
         System.Drawing.Rectangle area,

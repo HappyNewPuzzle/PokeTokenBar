@@ -1,6 +1,7 @@
 using System.Net.Http;
 using PokeTokenBar.Windows.App.Lifecycle;
 using PokeTokenBar.Windows.App.ViewModels;
+using PokeTokenBar.Windows.Core;
 
 namespace PokeTokenBar.Windows.App;
 
@@ -14,12 +15,14 @@ public sealed class ApplicationComposition : IDisposable
         FloatingPetViewModel floatingPet,
         UsagePollingController usagePolling,
         UsageCompanionController usageCompanion,
+        CompanionStore companionStore,
         HttpClient httpClient)
     {
         ViewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         FloatingPet = floatingPet ?? throw new ArgumentNullException(nameof(floatingPet));
         UsagePolling = usagePolling ?? throw new ArgumentNullException(nameof(usagePolling));
         UsageCompanion = usageCompanion ?? throw new ArgumentNullException(nameof(usageCompanion));
+        CompanionStore = companionStore ?? throw new ArgumentNullException(nameof(companionStore));
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
     }
 
@@ -30,6 +33,8 @@ public sealed class ApplicationComposition : IDisposable
     internal UsagePollingController UsagePolling { get; }
 
     internal UsageCompanionController UsageCompanion { get; }
+
+    internal CompanionStore CompanionStore { get; }
 
     public void Dispose()
     {

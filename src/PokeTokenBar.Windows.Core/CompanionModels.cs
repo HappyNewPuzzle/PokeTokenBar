@@ -22,6 +22,7 @@ public enum AppLanguage
     Es,
     Fr,
     Pt,
+    De,
 }
 
 public static class AppLanguageRules
@@ -38,6 +39,7 @@ public static class AppLanguageRules
                 "es" => AppLanguage.Es,
                 "fr" => AppLanguage.Fr,
                 "pt" => AppLanguage.Pt,
+                "de" => AppLanguage.De,
                 _ => AppLanguage.En,
             };
         }
@@ -52,6 +54,7 @@ public static class AppLanguageRules
             AppLanguage.Es => ["es"],
             AppLanguage.Fr => ["fr"],
             AppLanguage.Pt => ["pt"],
+            AppLanguage.De => ["de"],
             _ => ["en"],
         };
 

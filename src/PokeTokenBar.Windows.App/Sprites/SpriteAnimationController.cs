@@ -16,6 +16,7 @@ internal sealed class SpriteAnimationController : INotifyPropertyChanged, IDispo
     private bool _isActive;
     private bool _isAnimating;
     private bool _disposed;
+    private TimeSpan _minimumFrameDuration = DefaultFrameDuration;
 
     public SpriteAnimationController(ISpriteAnimationTimerFactory timerFactory)
     {
@@ -83,6 +84,17 @@ internal sealed class SpriteAnimationController : INotifyPropertyChanged, IDispo
         if (active)
         {
             StartTimerIfAnimated();
+        }
+    }
+
+    public void SetMinimumFrameDuration(TimeSpan duration)
+    {
+        duration = duration > TimeSpan.Zero ? duration : DefaultFrameDuration;
+        if (_disposed || duration == _minimumFrameDuration) return;
+        _minimumFrameDuration = duration;
+        if (_timer is not null && _presentation is { Frames.Count: > 0 })
+        {
+            _timer.Interval = Normalize(_presentation.Frames[_frameIndex].Duration);
         }
     }
 
@@ -158,8 +170,8 @@ internal sealed class SpriteAnimationController : INotifyPropertyChanged, IDispo
         IsAnimating = false;
     }
 
-    private static TimeSpan Normalize(TimeSpan duration) =>
-        duration > TimeSpan.Zero ? duration : DefaultFrameDuration;
+    private TimeSpan Normalize(TimeSpan duration) =>
+        duration > _minimumFrameDuration ? duration : _minimumFrameDuration;
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));

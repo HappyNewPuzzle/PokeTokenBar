@@ -10,6 +10,7 @@ public sealed class EconomyViewModel : INotifyPropertyChanged
 {
     private readonly CompanionStore _store;
     private readonly Func<CancellationToken, Task> _refreshCompanion;
+    private readonly LocalizationService? _localization;
     private IReadOnlyList<ShopProductViewModel> _shopProducts = [];
     private IReadOnlyList<BagItemViewModel> _bagItems = [];
     private IReadOnlyList<CollectionEntryViewModel> _collectionEntries = [];
@@ -17,10 +18,12 @@ public sealed class EconomyViewModel : INotifyPropertyChanged
 
     public EconomyViewModel(
         CompanionStore store,
-        Func<CancellationToken, Task> refreshCompanion)
+        Func<CancellationToken, Task> refreshCompanion,
+        LocalizationService? localization = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _refreshCompanion = refreshCompanion ?? throw new ArgumentNullException(nameof(refreshCompanion));
+        _localization = localization;
         ClearRepresentativeCommand = new AsyncCommand(ClearRepresentativeAsync);
         Refresh();
     }
@@ -62,6 +65,7 @@ public sealed class EconomyViewModel : INotifyPropertyChanged
                 product,
                 ProductName(product),
                 CanPurchase(product),
+                _localization?.Buy ?? "Buy",
                 token => PurchaseAsync(product, token))).ToArray());
         BagItems = new ReadOnlyCollection<BagItemViewModel>(
             _store.OwnedItems.Select(item => new BagItemViewModel(
@@ -70,6 +74,7 @@ public sealed class EconomyViewModel : INotifyPropertyChanged
                 item.Count,
                 CanUse(item.Kind),
                 item.Kind.IsPassive(),
+                _localization?.Use ?? "Use",
                 token => UseAsync(item.Kind, token))).ToArray());
         CollectionEntries = new ReadOnlyCollection<CollectionEntryViewModel>(BuildCollection().ToArray());
         OnPropertyChanged(nameof(BalanceText));
@@ -195,6 +200,7 @@ public sealed class EconomyViewModel : INotifyPropertyChanged
             current,
             _store.State.RepresentativeSpeciesId == speciesId,
             caughtAt,
+            _localization?.Represent ?? "Represent",
             token => SelectRepresentativeAsync(speciesId, token));
 
     private static string ProductName(ShopProduct product) => product.ProductKind switch
@@ -234,11 +240,13 @@ public sealed class ShopProductViewModel
         ShopProduct product,
         string name,
         bool canPurchase,
+        string buyText,
         Func<CancellationToken, Task> purchase)
     {
         Product = product;
         Name = name;
         CanPurchase = canPurchase;
+        BuyText = buyText;
         PurchaseCommand = new AsyncCommand(purchase, () => CanPurchase);
     }
 
@@ -246,6 +254,7 @@ public sealed class ShopProductViewModel
     public string Name { get; }
     public string PriceText => $"{Product.Price:N0} tokens";
     public bool CanPurchase { get; }
+    public string BuyText { get; }
     public AsyncCommand PurchaseCommand { get; }
 }
 
@@ -257,6 +266,7 @@ public sealed class BagItemViewModel
         int count,
         bool canUse,
         bool isPassive,
+        string useText,
         Func<CancellationToken, Task> use)
     {
         Kind = kind;
@@ -264,6 +274,7 @@ public sealed class BagItemViewModel
         Count = count;
         CanUse = canUse;
         IsPassive = isPassive;
+        UseText = useText;
         UseCommand = new AsyncCommand(use, () => CanUse);
     }
 
@@ -272,6 +283,7 @@ public sealed class BagItemViewModel
     public int Count { get; }
     public bool CanUse { get; }
     public bool IsPassive { get; }
+    public string UseText { get; }
     public string StatusText => IsPassive ? "Active" : $"×{Count}";
     public AsyncCommand UseCommand { get; }
 }
@@ -287,6 +299,7 @@ public sealed class CollectionEntryViewModel
         bool isCurrent,
         bool isRepresentative,
         DateTimeOffset? caughtAt,
+        string representText,
         Func<CancellationToken, Task> selectRepresentative)
     {
         SpeciesId = speciesId;
@@ -297,6 +310,7 @@ public sealed class CollectionEntryViewModel
         IsCurrent = isCurrent;
         IsRepresentative = isRepresentative;
         CaughtAt = caughtAt;
+        RepresentText = representText;
         SelectRepresentativeCommand = new AsyncCommand(selectRepresentative);
     }
 
@@ -309,6 +323,7 @@ public sealed class CollectionEntryViewModel
     public bool IsCurrent { get; }
     public bool IsRepresentative { get; }
     public DateTimeOffset? CaughtAt { get; }
+    public string RepresentText { get; }
     public string RoleText => IsCurrent ? "Current" : IsRepresentative ? "Representative" : "Caught";
     public string? CaughtText => CaughtAt?.ToLocalTime().ToString("g");
     public AsyncCommand SelectRepresentativeCommand { get; }

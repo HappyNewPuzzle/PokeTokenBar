@@ -14,7 +14,7 @@
         WindowStyle="ToolWindow"
         Topmost="True">
     <TabControl>
-        <TabItem Header="Home">
+        <TabItem Header="{Binding Texts.Home, Mode=OneWay}">
             <ScrollViewer HorizontalScrollBarVisibility="Auto"
                           VerticalScrollBarVisibility="Auto">
         <Grid Margin="28">
@@ -62,7 +62,7 @@
                     </Grid>
 
                     <StackPanel Grid.Column="1" Margin="12,0,0,0">
-                        <TextBlock Text="Companion"
+                        <TextBlock Text="{Binding Texts.Companion, Mode=OneWay}"
                                    FontSize="12"
                                    Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                         <StackPanel Margin="0,3,0,0" Orientation="Horizontal">
@@ -195,7 +195,7 @@
                     BorderThickness="1"
                     CornerRadius="8">
                 <StackPanel>
-                    <TextBlock Text="Today" FontSize="14" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Texts.Today, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" />
                     <StackPanel Margin="0,8,0,0" Orientation="Horizontal">
                         <TextBlock Text="{Binding Usage.TodayTokensText, Mode=OneWay, TargetNullValue=—}"
                                    FontSize="34"
@@ -216,11 +216,11 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0">
-                            <TextBlock Text="Input" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                            <TextBlock Text="{Binding Texts.Input, Mode=OneWay}" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                             <TextBlock Margin="0,4,0,0" Text="{Binding Usage.InputTokensText, Mode=OneWay, TargetNullValue=—}" FontWeight="SemiBold" />
                         </StackPanel>
                         <StackPanel Grid.Column="1">
-                            <TextBlock Text="Output" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                            <TextBlock Text="{Binding Texts.Output, Mode=OneWay}" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                             <TextBlock Margin="0,4,0,0" Text="{Binding Usage.OutputTokensText, Mode=OneWay, TargetNullValue=—}" FontWeight="SemiBold" />
                         </StackPanel>
                         <StackPanel Grid.Column="2">
@@ -250,15 +250,15 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0">
-                            <TextBlock Text="Recent 5 hours" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                            <TextBlock Text="{Binding Texts.RecentFiveHours, Mode=OneWay}" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                             <TextBlock Margin="0,4,0,0" Text="{Binding Usage.RecentFiveHourTokensText, Mode=OneWay, TargetNullValue=—}" FontSize="18" FontWeight="SemiBold" />
                         </StackPanel>
                         <StackPanel Grid.Column="1">
-                            <TextBlock Text="This week" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                            <TextBlock Text="{Binding Texts.ThisWeek, Mode=OneWay}" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                             <TextBlock Margin="0,4,0,0" Text="{Binding Usage.WeekTokensText, Mode=OneWay, TargetNullValue=—}" FontSize="18" FontWeight="SemiBold" />
                         </StackPanel>
                         <StackPanel Grid.Column="2">
-                            <TextBlock Text="This month" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                            <TextBlock Text="{Binding Texts.ThisMonth, Mode=OneWay}" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                             <TextBlock Margin="0,4,0,0" Text="{Binding Usage.MonthTokensText, Mode=OneWay, TargetNullValue=—}" FontSize="18" FontWeight="SemiBold" />
                         </StackPanel>
                     </Grid>
@@ -282,7 +282,7 @@
                     </Style>
                 </Border.Style>
                 <StackPanel>
-                    <TextBlock Text="Limits (official)" FontSize="14" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Texts.OfficialLimits, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" />
                     <TextBlock Margin="0,4,0,0"
                                Text="{Binding Usage.OfficialLimitsMetadataText, Mode=OneWay}"
                                FontSize="11"
@@ -334,7 +334,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="5-hour session" />
+                            <TextBlock Text="{Binding Texts.FiveHourSession, Mode=OneWay}" />
                             <TextBlock Grid.Column="1"
                                        Text="{Binding Usage.FiveHourRemainingText, Mode=OneWay}"
                                        FontWeight="SemiBold" />
@@ -366,7 +366,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Text="Weekly" />
+                            <TextBlock Text="{Binding Texts.Weekly, Mode=OneWay}" />
                             <TextBlock Grid.Column="1"
                                        Text="{Binding Usage.WeeklyRemainingText, Mode=OneWay}"
                                        FontWeight="SemiBold" />
@@ -391,12 +391,12 @@
                     BorderThickness="1"
                     CornerRadius="8">
                 <StackPanel>
-                    <TextBlock Text="Settings" FontSize="14" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Texts.Settings, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" />
                     <CheckBox Margin="0,14,0,0"
-                              Content="Show Floating Pokémon"
+                              Content="{Binding Texts.ShowFloating, Mode=OneWay}"
                               IsChecked="{Binding Settings.IsFloatingPetEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     <CheckBox Margin="0,10,0,0"
-                              Content="Launch at startup"
+                              Content="{Binding Texts.LaunchAtStartup, Mode=OneWay}"
                               IsChecked="{Binding Settings.IsLaunchAtStartupEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                               IsEnabled="{Binding Settings.IsLaunchAtStartupAvailable, Mode=OneWay}" />
                     <Grid Margin="0,10,0,0">
@@ -404,7 +404,7 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock VerticalAlignment="Center" Text="Refresh interval" />
+                        <TextBlock VerticalAlignment="Center" Text="{Binding Texts.RefreshInterval, Mode=OneWay}" />
                         <ComboBox Grid.Column="1"
                                   Width="120"
                                   ItemsSource="{Binding Settings.RefreshIntervalOptions, Mode=OneWay}"
@@ -412,10 +412,71 @@
                                   SelectedValuePath="Value"
                                   SelectedValue="{Binding Settings.SelectedRefreshInterval, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     </Grid>
+                    <Grid Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="{Binding Texts.LanguageLabel, Mode=OneWay}" />
+                        <ComboBox Grid.Column="1" Width="140"
+                                  ItemsSource="{Binding Settings.LanguageOptions, Mode=OneWay}"
+                                  DisplayMemberPath="Label" SelectedValuePath="Value"
+                                  SelectedValue="{Binding Settings.SelectedLanguage, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </Grid>
+                    <Grid Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="{Binding Texts.LimitDisplay, Mode=OneWay}" />
+                        <ComboBox Grid.Column="1" Width="140"
+                                  ItemsSource="{Binding Settings.LimitDisplayOptions, Mode=OneWay}"
+                                  DisplayMemberPath="Label" SelectedValuePath="Value"
+                                  SelectedValue="{Binding Settings.SelectedLimitDisplayMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </Grid>
+                    <CheckBox Margin="0,14,0,0" Content="{Binding Texts.LimitNotifications, Mode=OneWay}"
+                              IsChecked="{Binding Settings.LimitNotificationsEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <CheckBox Margin="0,8,0,0" Content="{Binding Texts.CompanionNotifications, Mode=OneWay}"
+                              IsChecked="{Binding Settings.CompanionNotificationsEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /><ColumnDefinition Width="42" /></Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="{Binding Texts.Warning, Mode=OneWay}" />
+                        <Slider Grid.Column="1" Minimum="50" Maximum="95" TickFrequency="5" IsSnapToTickEnabled="True"
+                                Value="{Binding Settings.WarningThreshold, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Grid.Column="2" Text="{Binding Settings.WarningThreshold, StringFormat={}{0:0}%, Mode=OneWay}" HorizontalAlignment="Right" />
+                    </Grid>
+                    <Grid Margin="0,6,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /><ColumnDefinition Width="42" /></Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="{Binding Texts.Critical, Mode=OneWay}" />
+                        <Slider Grid.Column="1" Minimum="55" Maximum="100" TickFrequency="5" IsSnapToTickEnabled="True"
+                                Value="{Binding Settings.CriticalThreshold, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Grid.Column="2" Text="{Binding Settings.CriticalThreshold, StringFormat={}{0:0}%, Mode=OneWay}" HorizontalAlignment="Right" />
+                    </Grid>
+                    <Grid Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /><ColumnDefinition Width="48" /></Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="{Binding Texts.FloatingSize, Mode=OneWay}" />
+                        <Slider Grid.Column="1" Minimum="48" Maximum="192" TickFrequency="8" IsSnapToTickEnabled="True"
+                                Value="{Binding Settings.FloatingPetSize, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Grid.Column="2" Text="{Binding Settings.FloatingPetSize, StringFormat={}{0:0}px, Mode=OneWay}" HorizontalAlignment="Right" />
+                    </Grid>
+                    <Grid Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBlock VerticalAlignment="Center" Text="{Binding Texts.AnimationQuality, Mode=OneWay}" />
+                        <ComboBox Grid.Column="1" Width="140"
+                                  ItemsSource="{Binding Settings.AnimationQualityOptions, Mode=OneWay}"
+                                  DisplayMemberPath="Label" SelectedValuePath="Value"
+                                  SelectedValue="{Binding Settings.SelectedAnimationQuality, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </Grid>
+                    <CheckBox Margin="0,8,0,0" Content="{Binding Texts.BubbleAlerts, Mode=OneWay}"
+                              IsChecked="{Binding Settings.FloatingBubbleAlertsEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Margin="0,14,0,0" Text="{Binding Texts.ProviderRoots, Mode=OneWay}" FontWeight="SemiBold" />
+                    <ComboBox Margin="0,6,0,0"
+                              ItemsSource="{Binding Settings.ProviderRootOptions, Mode=OneWay}"
+                              DisplayMemberPath="Label" SelectedValuePath="Id"
+                              SelectedValue="{Binding Settings.SelectedRootProviderId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBox Margin="0,6,0,0" MinHeight="48" AcceptsReturn="True" TextWrapping="Wrap"
+                             Text="{Binding Settings.CustomRootText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                    <TextBlock Margin="0,4,0,0" Text="{Binding Texts.CustomRootsHint, Mode=OneWay}" FontSize="10"
+                               Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Settings.CustomRootStatus, Mode=OneWay}" FontSize="10" Foreground="#FFC62828" TextWrapping="Wrap" />
                     <Button Margin="0,12,0,0"
                             HorizontalAlignment="Left"
                             Padding="12,5"
-                            Content="Reset Floating Position"
+                            Content="{Binding Texts.ResetFloatingPosition, Mode=OneWay}"
                             Command="{Binding Settings.ResetFloatingPetPositionCommand}" />
                     <TextBlock Margin="0,8,0,0"
                                Text="{Binding Settings.ErrorMessage, Mode=OneWay}"
@@ -461,15 +522,15 @@
             </ScrollViewer>
         </TabItem>
 
-        <TabItem Header="Shop">
+        <TabItem Header="{Binding Texts.Shop, Mode=OneWay}">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="28">
-                    <TextBlock Text="Shop" FontSize="22" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Texts.Shop, Mode=OneWay}" FontSize="22" FontWeight="SemiBold" />
                     <TextBlock Margin="0,6,0,0"
                                Text="Spend the tokens earned since installation. Purchases do not reduce growth."
                                Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                                TextWrapping="Wrap" />
-                    <TextBlock Margin="0,14,0,0" Text="Balance" FontWeight="SemiBold" />
+                    <TextBlock Margin="0,14,0,0" Text="{Binding Texts.Balance, Mode=OneWay}" FontWeight="SemiBold" />
                     <TextBlock Margin="0,3,0,0" Text="{Binding Economy.BalanceText, Mode=OneWay}" FontSize="20" />
                     <ItemsControl Margin="0,12,0,0" ItemsSource="{Binding Economy.ShopProducts, Mode=OneWay}">
                         <ItemsControl.ItemTemplate>
@@ -487,7 +548,7 @@
                                             <TextBlock Margin="0,3,0,0" Text="{Binding PriceText, Mode=OneWay}"
                                                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                                         </StackPanel>
-                                        <Button Grid.Column="1" Padding="12,5" Content="Buy"
+                                        <Button Grid.Column="1" Padding="12,5" Content="{Binding BuyText, Mode=OneWay}"
                                                 IsEnabled="{Binding CanPurchase, Mode=OneWay}"
                                                 Command="{Binding PurchaseCommand, Mode=OneWay}" />
                                     </Grid>
@@ -500,10 +561,10 @@
             </ScrollViewer>
         </TabItem>
 
-        <TabItem Header="Bag">
+        <TabItem Header="{Binding Texts.Bag, Mode=OneWay}">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="28">
-                    <TextBlock Text="Bag" FontSize="22" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Texts.Bag, Mode=OneWay}" FontSize="22" FontWeight="SemiBold" />
                     <TextBlock Margin="0,6,0,0" Text="Items persist across restarts."
                                Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                     <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding Economy.BagItems, Mode=OneWay}">
@@ -522,7 +583,7 @@
                                             <TextBlock Margin="0,3,0,0" Text="{Binding StatusText, Mode=OneWay}"
                                                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                                         </StackPanel>
-                                        <Button Grid.Column="1" Padding="12,5" Content="Use"
+                                        <Button Grid.Column="1" Padding="12,5" Content="{Binding UseText, Mode=OneWay}"
                                                 IsEnabled="{Binding CanUse, Mode=OneWay}"
                                                 Command="{Binding UseCommand, Mode=OneWay}" />
                                     </Grid>
@@ -535,7 +596,7 @@
             </ScrollViewer>
         </TabItem>
 
-        <TabItem Header="Collection">
+        <TabItem Header="{Binding Texts.Collection, Mode=OneWay}">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="28">
                     <Grid>
@@ -543,8 +604,8 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Collection" FontSize="22" FontWeight="SemiBold" />
-                        <Button Grid.Column="1" Padding="10,4" Content="Follow current"
+                        <TextBlock Text="{Binding Texts.Collection, Mode=OneWay}" FontSize="22" FontWeight="SemiBold" />
+                        <Button Grid.Column="1" Padding="10,4" Content="{Binding Texts.FollowCurrent, Mode=OneWay}"
                                 Command="{Binding Economy.ClearRepresentativeCommand, Mode=OneWay}" />
                     </Grid>
                     <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding Economy.CollectionEntries, Mode=OneWay}">
@@ -572,7 +633,7 @@
                                             <TextBlock Text="{Binding CaughtText, Mode=OneWay}"
                                                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                                         </StackPanel>
-                                        <Button Grid.Column="1" Padding="10,4" Content="Represent"
+                                        <Button Grid.Column="1" Padding="10,4" Content="{Binding RepresentText, Mode=OneWay}"
                                                 Command="{Binding SelectRepresentativeCommand, Mode=OneWay}" />
                                     </Grid>
                                 </Border>

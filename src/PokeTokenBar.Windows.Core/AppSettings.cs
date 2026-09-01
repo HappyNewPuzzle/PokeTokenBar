@@ -12,11 +12,36 @@ public enum RefreshIntervalMode
     FifteenMinutes = 900,
 }
 
+public enum LimitDisplayMode
+{
+    Used,
+    Remaining,
+}
+
+public enum AnimationQuality
+{
+    PowerSaver,
+    Balanced,
+    Smooth,
+}
+
 public sealed record AppSettings(
     bool FloatingPetEnabled = false,
     FloatingPetPosition? FloatingPetPosition = null,
     bool LaunchAtStartup = false,
-    RefreshIntervalMode RefreshInterval = RefreshIntervalMode.TwoMinutes)
+    RefreshIntervalMode RefreshInterval = RefreshIntervalMode.TwoMinutes,
+    AppLanguage? Language = null,
+    bool LimitNotificationsEnabled = true,
+    bool CompanionNotificationsEnabled = true,
+    double WarningThreshold = 80,
+    double CriticalThreshold = 95,
+    LimitDisplayMode LimitDisplayMode = LimitDisplayMode.Remaining,
+    double FloatingPetSize = 96,
+    AnimationQuality AnimationQuality = AnimationQuality.PowerSaver,
+    bool FloatingBubbleAlertsEnabled = true,
+    IReadOnlyDictionary<string, string>? CustomProviderRoots = null,
+    IReadOnlyDictionary<string, int>? NotificationTiers = null,
+    string? SelectedProviderId = null)
 {
     public static AppSettings Default { get; } = new();
 }

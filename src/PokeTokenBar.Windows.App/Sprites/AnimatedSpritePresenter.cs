@@ -12,6 +12,13 @@ public sealed class AnimatedSpritePresenter : System.Windows.Controls.Image, IDi
             typeof(AnimatedSpritePresenter),
             new PropertyMetadata(null, OnPresentationChanged));
 
+    public static readonly DependencyProperty MinimumFrameDurationProperty =
+        DependencyProperty.Register(
+            nameof(MinimumFrameDuration),
+            typeof(TimeSpan),
+            typeof(AnimatedSpritePresenter),
+            new PropertyMetadata(TimeSpan.FromMilliseconds(400), OnMinimumFrameDurationChanged));
+
     private readonly SpriteAnimationController _controller;
     private bool _disposed;
 
@@ -31,6 +38,12 @@ public sealed class AnimatedSpritePresenter : System.Windows.Controls.Image, IDi
     {
         get => (PokemonSpritePresentation?)GetValue(PresentationProperty);
         set => SetValue(PresentationProperty, value);
+    }
+
+    public TimeSpan MinimumFrameDuration
+    {
+        get => (TimeSpan)GetValue(MinimumFrameDurationProperty);
+        set => SetValue(MinimumFrameDurationProperty, value);
     }
 
     public void Dispose()
@@ -56,6 +69,12 @@ public sealed class AnimatedSpritePresenter : System.Windows.Controls.Image, IDi
         presenter._controller.SetPresentation((PokemonSpritePresentation?)args.NewValue);
         presenter.Source = presenter._controller.CurrentImage;
     }
+
+    private static void OnMinimumFrameDurationChanged(
+        DependencyObject dependencyObject,
+        DependencyPropertyChangedEventArgs args) =>
+        ((AnimatedSpritePresenter)dependencyObject)._controller
+            .SetMinimumFrameDuration((TimeSpan)args.NewValue);
 
     private void OnControllerPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {

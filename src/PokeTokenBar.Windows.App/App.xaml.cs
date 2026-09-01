@@ -14,6 +14,7 @@ public partial class App : System.Windows.Application
     private InitialRefreshController? _initialRefresh;
     private InitialCompanionController? _initialCompanion;
     private PowerLifecycleController? _powerLifecycle;
+    private NotificationController? _notifications;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -39,7 +40,15 @@ public partial class App : System.Windows.Application
                 new NotifyIconTrayIcon(),
                 new WpfTrayWindow(mainWindow),
                 viewModel.Usage,
-                Shutdown);
+                Shutdown,
+                viewModel.Settings,
+                viewModel.Companion);
+            _notifications = new NotificationController(
+                viewModel.Usage,
+                viewModel.Settings,
+                _composition.FloatingPet,
+                _trayController,
+                _composition.CompanionStore);
         }
         catch (Exception)
         {
@@ -90,6 +99,7 @@ public partial class App : System.Windows.Application
     protected override void OnExit(ExitEventArgs e)
     {
         _powerLifecycle?.Dispose();
+        _notifications?.Dispose();
         _trayController?.Dispose();
         _floatingPet?.Dispose();
         _initialCompanion?.Dispose();

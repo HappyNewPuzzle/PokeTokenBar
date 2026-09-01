@@ -50,6 +50,7 @@ public sealed class UsageViewModel : INotifyPropertyChanged
     private string? _weeklyResetText;
     private string? _officialLimitsMetadataText;
     private IReadOnlyList<OfficialLimitRow> _antigravityLimitRows = Array.Empty<OfficialLimitRow>();
+    private LimitDisplayMode _limitDisplayMode = LimitDisplayMode.Remaining;
 
     public UsageViewModel(
         UsageStore store,
@@ -147,6 +148,25 @@ public sealed class UsageViewModel : INotifyPropertyChanged
 
     internal static LimitWindowClass WindowClass(int? minutes) =>
         minutes is > 1440 ? LimitWindowClass.Weekly : LimitWindowClass.Session;
+
+    internal IReadOnlyList<LimitNotificationWindow> NotificationWindows =>
+        CandyEligibleWindows.Select(window => new LimitNotificationWindow(
+            window.Key, window.Name, window.Utilization)).ToArray();
+
+    internal void SetLimitDisplayMode(LimitDisplayMode mode)
+    {
+        if (_limitDisplayMode == mode) return;
+        _limitDisplayMode = mode;
+        ApplyOfficialLimits(SelectedProviderId);
+    }
+
+    public static int DisplayPercent(double? usedPercent, LimitDisplayMode mode)
+    {
+        var used = (int)Math.Round(
+            Math.Clamp(usedPercent ?? 100, 0, 100),
+            MidpointRounding.AwayFromZero);
+        return mode == LimitDisplayMode.Remaining ? 100 - used : used;
+    }
 
     public AsyncCommand RefreshCommand { get; }
 
@@ -672,28 +692,29 @@ public sealed class UsageViewModel : INotifyPropertyChanged
             AntigravityLimitRows = _store.AntigravityRateLimits?.Groups
                 .SelectMany(group => group.Buckets.Select(bucket => new OfficialLimitRow(
                     $"{group.DisplayName} · {bucket.DisplayName}",
-                    bucket.RemainingPercent,
-                    $"{bucket.RemainingPercent}% remaining",
+                    DisplayPercent(bucket.UsedPercent, _limitDisplayMode),
+                    LimitText(bucket.UsedPercent),
                     FormatReset(bucket.ResetsAt))))
                 .ToArray() ?? Array.Empty<OfficialLimitRow>();
         }
 
         HasFiveHourLimit = primaryUsed is not null;
-        FiveHourRemainingPercent = RemainingPercent(primaryUsed);
-        FiveHourRemainingText = primaryUsed is null ? null : $"{FiveHourRemainingPercent}% remaining";
+        FiveHourRemainingPercent = DisplayPercent(primaryUsed, _limitDisplayMode);
+        FiveHourRemainingText = primaryUsed is null ? null : LimitText(primaryUsed.Value);
         FiveHourResetText = FormatReset(primaryReset);
 
         HasWeeklyLimit = secondaryUsed is not null;
-        WeeklyRemainingPercent = RemainingPercent(secondaryUsed);
-        WeeklyRemainingText = secondaryUsed is null ? null : $"{WeeklyRemainingPercent}% remaining";
+        WeeklyRemainingPercent = DisplayPercent(secondaryUsed, _limitDisplayMode);
+        WeeklyRemainingText = secondaryUsed is null ? null : LimitText(secondaryUsed.Value);
         WeeklyResetText = FormatReset(secondaryReset);
         HasCodexRateLimits = HasFiveHourLimit || HasWeeklyLimit || HasAntigravityLimitRows;
     }
 
-    private static int RemainingPercent(double? usedPercent) =>
-        100 - (int)Math.Round(
-            Math.Clamp(usedPercent ?? 100, 0, 100),
-            MidpointRounding.AwayFromZero);
+    private string LimitText(double usedPercent)
+    {
+        var suffix = _limitDisplayMode == LimitDisplayMode.Remaining ? "remaining" : "used";
+        return $"{DisplayPercent(usedPercent, _limitDisplayMode)}% {suffix}";
+    }
 
     private string? FormatReset(DateTimeOffset? timestamp)
     {

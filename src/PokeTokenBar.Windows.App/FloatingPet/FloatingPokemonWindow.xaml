@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:sprites="clr-namespace:PokeTokenBar.Windows.App.Sprites"
         Title="PokeTokenBar Floating Pet"
-        Width="96"
-        Height="96"
+        Width="{Binding Size, Mode=OneWay}"
+        Height="{Binding Size, Mode=OneWay}"
         AllowsTransparency="True"
         Background="Transparent"
         WindowStyle="None"
@@ -13,7 +13,23 @@
         WindowStartupLocation="Manual"
         ResizeMode="NoResize"
         Topmost="True">
-    <Grid Background="Transparent">
+    <Grid Background="Transparent" ToolTip="{Binding HoverText, Mode=OneWay}">
+        <Popup Placement="Top"
+               AllowsTransparency="True"
+               StaysOpen="True"
+               IsOpen="{Binding IsBubbleVisible, Mode=OneWay}">
+            <Border Width="180" Margin="4" Padding="9"
+                    CornerRadius="10"
+                    Background="{DynamicResource {x:Static SystemColors.WindowBrushKey}}"
+                    BorderBrush="{DynamicResource {x:Static SystemColors.ActiveBorderBrushKey}}"
+                    BorderThickness="1">
+                <StackPanel>
+                    <TextBlock Text="{Binding BubbleTitle, Mode=OneWay}" FontSize="11" FontWeight="Bold" />
+                    <TextBlock Margin="0,2,0,0" Text="{Binding BubbleBody, Mode=OneWay}"
+                               FontSize="10" TextWrapping="Wrap" MaxHeight="32" />
+                </StackPanel>
+            </Border>
+        </Popup>
         <TextBlock Text="&#x1F95A;"
                    FontSize="60"
                    HorizontalAlignment="Center"
@@ -31,6 +47,7 @@
         </TextBlock>
         <sprites:AnimatedSpritePresenter x:Name="FloatingSprite"
                                           Presentation="{Binding Sprite, Mode=OneWay}"
+                                          MinimumFrameDuration="{Binding MinimumFrameDuration, Mode=OneWay}"
                                           RenderOptions.BitmapScalingMode="NearestNeighbor" />
     </Grid>
 </Window>
