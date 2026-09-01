@@ -60,8 +60,12 @@ if ($BuildInstaller) {
     $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
     $isccPath = if ($iscc) { $iscc.Source } else { $null }
     if (-not $isccPath) {
-        $candidate = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
-        if (Test-Path -LiteralPath $candidate) { $isccPath = $candidate }
+        $candidates = @()
+        if (${env:ProgramFiles(x86)}) { $candidates += Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe' }
+        if ($env:ProgramFiles) { $candidates += Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe' }
+        if ($env:LOCALAPPDATA) { $candidates += Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe' }
+
+        $isccPath = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
     }
     if ($isccPath) {
         & $isccPath "/DMyAppVersion=$version" "/DSourceDir=$publishDir" "/DOutputDir=$releaseRoot" (Join-Path $repoRoot 'installer\PokeTokenBar.iss')
