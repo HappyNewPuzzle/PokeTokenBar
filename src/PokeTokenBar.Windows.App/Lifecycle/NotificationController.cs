@@ -46,7 +46,7 @@ internal sealed class NotificationController : IDisposable
     private void OnCompanionEvent(object? sender, CompanionGameEvent gameEvent)
     {
         if (_disposed || !_settings.CompanionNotificationsEnabled) return;
-        _ = NotifyCompanionAsync(gameEvent, _cancellation.Token);
+        AppReliability.Run(NotifyCompanionAsync(gameEvent, _cancellation.Token));
     }
 
     private async Task NotifyCompanionAsync(
@@ -114,7 +114,7 @@ internal sealed class NotificationController : IDisposable
 
             if (_settings.IsFloatingPetEnabled && _settings.FloatingBubbleAlertsEnabled)
             {
-                _ = _floatingPet.ShowBubbleAsync(title, body);
+                AppReliability.Run(_floatingPet.ShowBubbleAsync(title, body));
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }

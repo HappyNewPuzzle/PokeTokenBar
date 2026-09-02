@@ -51,7 +51,7 @@ internal sealed class SystemTrayController : IDisposable, INotificationService
         if (_companion is not null) _companion.PropertyChanged += OnPresentationChanged;
         _trayAnimation.PropertyChanged += OnTrayAnimationChanged;
         _trayAnimation.SetActive(true);
-        UpdatePresentation();
+        TryUpdatePresentation();
         _trayIcon.Visible = true;
     }
 
@@ -85,7 +85,7 @@ internal sealed class SystemTrayController : IDisposable, INotificationService
         ShowWindow();
     }
 
-    public void Refresh() => _ = _viewModel.RefreshCommand.ExecuteAsync();
+    public void Refresh() => AppReliability.Run(_viewModel.RefreshCommand.ExecuteAsync());
 
     public void Exit()
     {
@@ -161,12 +161,22 @@ internal sealed class SystemTrayController : IDisposable, INotificationService
 
     private void OnExitRequested(object? sender, EventArgs e) => Exit();
 
-    private void OnPresentationChanged(object? sender, PropertyChangedEventArgs args) => UpdatePresentation();
+    private void OnPresentationChanged(object? sender, PropertyChangedEventArgs args) =>
+        TryUpdatePresentation();
 
     private void OnTrayAnimationChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (args.PropertyName == nameof(SpriteAnimationController.CurrentImage))
-            _trayIcon.SetCompanionFrame(_trayAnimation.CurrentImage);
+        {
+            try { _trayIcon.SetCompanionFrame(_trayAnimation.CurrentImage); }
+            catch (Exception) { }
+        }
+    }
+
+    private void TryUpdatePresentation()
+    {
+        try { UpdatePresentation(); }
+        catch (Exception) { }
     }
 
     private void UpdatePresentation()

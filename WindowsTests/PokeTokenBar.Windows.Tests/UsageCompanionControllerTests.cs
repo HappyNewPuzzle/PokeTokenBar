@@ -90,11 +90,55 @@ public sealed class UsageCompanionControllerTests
         Assert.Equal(1, persistence.State?.Inventory["rareCandy"]);
     }
 
-    private static Fixture Create(long tokens)
+    [Fact]
+    public void PersistentCacheSeedDoesNotTriggerCompanionGrowth()
+    {
+        var fixture = Create(100, UsageCache(100));
+        using var controller = fixture.Controller;
+
+        Assert.Equal(0, fixture.Store.State.EggUsage);
+        Assert.Null(fixture.Store.State.ClaimedTodayTokensByProvider);
+    }
+
+    [Fact]
+    public async Task RestartDuplicateSnapshotDoesNotGrantGrowthAgain()
+    {
+        var state = ClaimedState(100);
+        var fixture = Create(100, UsageCache(100), state);
+        using var controller = fixture.Controller;
+
+        await fixture.Usage.RefreshAsync();
+        await controller.LastUpdate;
+
+        Assert.Equal(0, fixture.Store.State.EggUsage);
+        Assert.Equal(100, fixture.Store.State.ClaimedTodayTokensByProvider!["codex"]);
+    }
+
+    [Fact]
+    public async Task RealIncreaseAfterCacheRestoreGrantsOnlyDelta()
+    {
+        var fixture = Create(100, UsageCache(100), ClaimedState(100));
+        using var controller = fixture.Controller;
+        await fixture.Usage.RefreshAsync();
+        await controller.LastUpdate;
+
+        fixture.Provider.Tokens = 110;
+        await fixture.Usage.RefreshAsync();
+        await controller.LastUpdate;
+
+        Assert.Equal(10, fixture.Store.State.EggUsage);
+        Assert.Equal(110, fixture.Store.State.ClaimedTodayTokensByProvider!["codex"]);
+    }
+
+    private static Fixture Create(
+        long tokens,
+        UsageSnapshotCache? usageCache = null,
+        CompanionState? companionState = null)
     {
         var provider = new MutableUsageProvider { Tokens = tokens };
-        var usage = new UsageViewModel(new UsageStore([provider]));
-        var store = new CompanionStore(new UnusedPokeApi(), new MemoryPersistence());
+        var usage = new UsageViewModel(new UsageStore(
+            [provider], snapshotPersistence: new MemoryUsagePersistence(usageCache)));
+        var store = new CompanionStore(new UnusedPokeApi(), new MemoryPersistence(companionState));
         var companion = new CompanionViewModel(
             store,
             (_, _, _) => Task.FromResult<PokemonSpriteAsset?>(null),
@@ -106,6 +150,26 @@ public sealed class UsageCompanionControllerTests
             companion,
             new UsageCompanionController(usage, store, companion.RefreshAsync));
     }
+
+    private static UsageSnapshotCache UsageCache(long tokens) => new(
+        DateTimeOffset.Now.AddMinutes(-5),
+        [new CachedProviderUsage(
+            "codex",
+            new DailyUsage(
+                DateTimeOffset.Now.ToString("yyyy-MM-dd"),
+                tokens, 0, 0, 0, tokens, 0),
+            null, null, null,
+            DateTimeOffset.Now.AddMinutes(-5))]);
+
+    private static CompanionState ClaimedState(long tokens) => new()
+    {
+        InstallBaselineSet = true,
+        LastDate = DateTimeOffset.Now.ToString("yyyy-MM-dd"),
+        ClaimedTodayTokensByProvider = new Dictionary<string, long>
+        {
+            ["codex"] = tokens,
+        },
+    };
 
     private sealed record Fixture(
         MutableUsageProvider Provider,
@@ -145,6 +209,17 @@ public sealed class UsageCompanionControllerTests
         public CompanionState? Load() => State;
         public void Save(CompanionState state) => State = state;
         public void Delete() => State = null;
+    }
+
+    private sealed class MemoryUsagePersistence(UsageSnapshotCache? cache) : IUsageSnapshotPersistence
+    {
+        private UsageSnapshotCache? _cache = cache;
+
+        public UsageSnapshotCacheLoadResult Load() => _cache is null
+            ? new(UsageCacheLoadStatus.Missing)
+            : new(UsageCacheLoadStatus.Available, _cache);
+
+        public void Save(UsageSnapshotCache cache) => _cache = cache;
     }
 
     private sealed class FixedClaudeLimits : IClaudeRateLimitsProvider

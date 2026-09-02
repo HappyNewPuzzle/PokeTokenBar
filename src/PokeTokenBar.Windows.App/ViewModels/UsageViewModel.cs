@@ -93,6 +93,8 @@ public sealed class UsageViewModel : INotifyPropertyChanged
 
     internal bool HasRefreshError => !string.IsNullOrWhiteSpace(_store.LastErrorDescription);
 
+    internal UsageCacheLoadStatus UsageCacheStatus => _store.UsageCacheStatus;
+
     internal bool LimitsReady =>
         _store.ClaudeRateLimits is not null ||
         _store.CodexRateLimits is not null ||

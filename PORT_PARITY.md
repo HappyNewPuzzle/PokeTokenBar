@@ -8,7 +8,7 @@ This is a code-based parity audit, not an implementation plan disguised as compl
 |---|---|
 | Audit date | 2026-09-02 |
 | Windows branch | `windows-port` |
-| Windows commit | `514e9d9` plus the Phase 7A working tree |
+| Windows commit | `c99d268` plus the Phase 7C working tree |
 | macOS baseline | `upstream/main` at `37763d3c367068492c18f6e51b45977c2d27f6d5` |
 | Merge base | `4c29ca0fa28c1fb67929517542d4e58d802171f8` |
 | Initial `git status --short` | Existing unrelated `.gitignore` change and two untracked Korean documentation files |
@@ -32,8 +32,8 @@ The full matrix in section 18 contains **93 atomic feature rows**:
 
 | Status | Count | Share |
 |---|---:|---:|
-| COMPLETE | 74 | 79.6% |
-| PARTIAL | 5 | 5.4% |
+| COMPLETE | 76 | 81.7% |
+| PARTIAL | 3 | 3.2% |
 | MISSING | 1 | 1.1% |
 | WINDOWS EQUIVALENT | 12 | 12.9% |
 | MAC-ONLY / N/A | 1 | 1.1% |
@@ -145,11 +145,11 @@ Current upstream supports Korean, English, Japanese, Spanish, French, Portuguese
 
 Both applications start as background/tray apps, enforce one instance, and respond to sleep/resume. Windows checks `SingleInstanceGuard.TryAcquire` before `AppComposition.Create`, so a second process does not create tray, windows, refresh, or power subscriptions. `UsagePollingController` uses `TimeProvider.CreateTimer`, pauses polling and cancels a pending empty retry on suspend, then restores one schedule after the wake refresh. `WindowsPowerModeEventSource` maps system power events, and shutdown disposal is explicit.
 
-macOS additionally supports launch-agent keep-alive and crash reporting. Windows now has startup/manual/timed/resume refresh, equivalent polling sleep behavior, and sanitized copyable support diagnostics, but no automatic restart or crash-capture pipeline.
+Windows observes background tasks, contains provider/notification/tray/cache failures at their owning boundaries, and handles known recoverable dispatcher failures without swallowing fatal runtime errors. Popup/floating-window closure still leaves the tray lifecycle running; explicit Exit, OS shutdown, and a rejected second instance retain their existing shutdown behavior. A separate watchdog or automatic-restart process is intentionally not used.
 
 ## 14. Persistence / Cache
 
-Windows has appropriate native persistence for its implemented scope: LocalAppData JSON for app settings and the complete core companion/economy/collection state, position persistence, sprite caching, base-species caching, Registry auto-start, and versioned export/import with backup and rollback. Claude and Antigravity credentials are discovered read-only from their CLI files; PokeTokenBar neither stores nor exports them. Incremental provider scan caches, legacy app-identity migration, and general provider credential/configuration persistence remain partial or absent.
+Windows has appropriate native persistence for its implemented scope: LocalAppData JSON for app settings, the complete core companion/economy/collection state, and a versioned atomic `usage-cache.json` containing only provider IDs and presentation snapshots. Cached snapshots seed the UI as stale, roll Today/5h/week/month forward independently, are replaced only by successful provider refreshes, and never restore authentication or trigger Companion/economy rewards. Position persistence, sprite/base-species caching, Registry auto-start, and versioned export/import with backup and rollback remain unchanged. Claude and Antigravity credentials are discovered read-only from their CLI files; PokeTokenBar neither stores nor exports them.
 
 Neither audit nor any verification modified user `.codex` data.
 
@@ -178,6 +178,8 @@ Windows uses the same stable GitHub-release meaning: startup/popup checks are de
 ## 17. Test Coverage Gaps
 
 Windows has strong tests around all twelve registered providers, including JSON/JSONL and SQLite/protobuf fixtures, roots, malformed records, token/cost semantics, deduplication, multi-session and daily/period aggregation, dashboard auth/pagination/fallback, WAL-safe reads, stale preservation, coalescing, official-limit parsing, multi-bucket quota projection, remaining percentages, and provider visibility. It also tests tray placement/lifecycle seams, power behavior, single instance, persistence, sprite loading, PokeAPI behavior, and the usage-to-companion ledger/hatch/evolution/graduation cycle.
+
+Phase 7C adds focused coverage for recoverable/fatal exception boundaries, tray and background-task containment, atomic cache persistence and corruption handling, all twelve canonical IDs, independent period rollover, offline stale preservation, fresh replacement, and restart-safe Companion/economy ledgers.
 
 The most important missing behavior tests correspond to missing production features:
 
@@ -278,11 +280,11 @@ Counts in section 2 are calculated from this table only.
 | Lifecycle | Single instance | Prevents duplicate lifecycle | User-SID named mutex before composition | WINDOWS EQUIVALENT | `SingleInstanceController` | `SingleInstanceGuard.cs`; `App.OnStartup` | P0 | — |
 | Lifecycle | Sleep/resume | Pauses polling/work and refreshes after wake | Pauses polling/retry, preserves pet behavior, refreshes, then restores one schedule | COMPLETE | app sleep handlers | `PowerLifecycleController.cs`; `UsagePollingController.cs` | P0 | — |
 | Lifecycle | Clean shutdown | Releases app resources | Disposes tray/windows/events/mutex | COMPLETE | app termination | `App.xaml.cs` | P0 | — |
-| Lifecycle | Crash diagnostics/keep-alive | Logging/crash reporting and launch-agent behavior | Sanitized copyable support diagnostics exist; crash capture and automatic restart remain absent | PARTIAL | app/logging/launch-agent code | `DiagnosticsReport.cs`; `SupportViewModel.cs` | P2 | M |
+| Lifecycle | Crash diagnostics/keep-alive | Logging/crash reporting and launch-agent behavior | Recoverable dispatcher/background/provider/notification/tray failures are contained; tray lifetime and sanitized diagnostics remain available without a watchdog | COMPLETE | app/logging/launch-agent code | `AppReliability.cs`; `App.xaml.cs`; lifecycle/tray controllers; `DiagnosticsReport.cs` | P2 | — |
 | Persistence | App settings | `UserDefaults` | LocalAppData JSON | WINDOWS EQUIVALENT | `UsageStore.init` and persisted properties | `JsonAppSettingsPersistence.cs` | P0 | — |
 | Persistence | Companion state | Persisted game state | Ledger, egg, active path, traits, dex, and representative persist/restore | COMPLETE | `CompanionStore` | `CompanionStore.cs`; `JsonCompanionPersistence.cs` | P0 | — |
 | Persistence | Sprite/species cache | Cached assets/data | Cached sprites/base index | COMPLETE | sprite/cache services | `PokemonSpriteLoader.cs`; `PokeApiClient.cs` | P1 | — |
-| Persistence | Incremental usage cache | Provider scan/cache support | Codex scans and in-memory snapshots; no equivalent persistent usage cache | PARTIAL | `LocalUsageCache` | `CodexLocalRolloutPipeline.cs`; `UsageStore.cs` | P2 | M |
+| Persistence | Incremental usage cache | Provider scan/cache support | Versioned atomic snapshot cache restores all twelve providers stale, applies period rollover, preserves failures, and excludes credentials/raw sessions | COMPLETE | `LocalUsageCache` | `UsageStore.cs`; `JsonUsageSnapshotPersistence.cs` | P2 | — |
 | Persistence | Save export/import | Versioned transfer, validation, pre-import backup and device rebase | Versioned settings+companion envelope, validation, backup, rollback and restart-required UI | COMPLETE | `SaveTransfer.swift`; settings UI | `StateTransferService.cs`; `SupportViewModel.cs`; `MainWindow.xaml` | P2 | — |
 | Updates | Update checking/UI | GitHub release check and banner | Stable GitHub release check, 30-minute debounce, manual check and banner | COMPLETE | `UpdateChecker.swift`; `PopoverView` | `GitHubReleaseUpdateChecker.cs`; `SupportViewModel.cs`; `MainWindow.xaml` | P1 | — |
 | Distribution | Packaged release | App bundle/Homebrew flows | Reproducible versioned self-contained portable directory/zip and per-user installer source | COMPLETE | packaging scripts | `scripts/build-release.ps1`; `installer/PokeTokenBar.iss`; `WINDOWS_RELEASE.md` | P0 | — |

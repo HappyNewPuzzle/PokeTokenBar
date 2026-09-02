@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Threading;
 using PokeTokenBar.Windows.App.FloatingPet;
 using PokeTokenBar.Windows.App.Lifecycle;
 using PokeTokenBar.Windows.App.Tray;
@@ -15,6 +16,12 @@ public partial class App : System.Windows.Application
     private InitialCompanionController? _initialCompanion;
     private PowerLifecycleController? _powerLifecycle;
     private NotificationController? _notifications;
+
+    public App()
+    {
+        DispatcherUnhandledException += OnDispatcherUnhandledException;
+        TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
+    }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -91,12 +98,12 @@ public partial class App : System.Windows.Application
 
         _initialRefresh = new InitialRefreshController(viewModel.Usage);
         _initialCompanion = new InitialCompanionController(viewModel.Companion);
-        _ = _initialRefresh.StartAsync();
+        AppReliability.Run(_initialRefresh.StartAsync());
         _composition.UsagePolling.Start();
-        _ = _initialCompanion.StartAsync();
+        AppReliability.Run(_initialCompanion.StartAsync());
         if (viewModel.Support is { } support)
         {
-            _ = support.CheckAsync(TimeSpan.FromMinutes(30));
+            AppReliability.Run(support.CheckAsync(TimeSpan.FromMinutes(30)));
         }
     }
 
@@ -110,6 +117,22 @@ public partial class App : System.Windows.Application
         (MainWindow as IDisposable)?.Dispose();
         _composition?.Dispose();
         _singleInstance?.Dispose();
+        DispatcherUnhandledException -= OnDispatcherUnhandledException;
+        TaskScheduler.UnobservedTaskException -= OnUnobservedTaskException;
         base.OnExit(e);
+    }
+
+    private static void OnDispatcherUnhandledException(
+        object sender,
+        DispatcherUnhandledExceptionEventArgs args)
+    {
+        if (AppReliability.IsRecoverableDispatcherException(args.Exception)) args.Handled = true;
+    }
+
+    private static void OnUnobservedTaskException(
+        object? sender,
+        UnobservedTaskExceptionEventArgs args)
+    {
+        if (!AppReliability.IsFatal(args.Exception)) args.SetObserved();
     }
 }

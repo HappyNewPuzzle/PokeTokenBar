@@ -21,6 +21,7 @@ internal static class DiagnosticsReport
             .AppendLine("companionStateFormat=compatible")
             .AppendLine("dataPath=%LOCALAPPDATA%\\PokeTokenBar")
             .AppendLine("spriteCache=%LOCALAPPDATA%\\PokeTokenBar\\sprites")
+            .AppendLine($"usageCache={usage.UsageCacheStatus.ToString().ToLowerInvariant()}")
             .AppendLine($"refreshStatus={(usage.LastUpdated is null ? "never" : usage.HasRefreshError ? "error" : "ok")}");
         var active = usage.Providers.Select(provider => provider.ProviderId).ToHashSet(StringComparer.Ordinal);
         foreach (var id in usage.RegisteredProviderIds)

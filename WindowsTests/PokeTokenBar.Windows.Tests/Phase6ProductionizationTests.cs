@@ -263,6 +263,7 @@ public sealed class Phase6ProductionizationTests : IDisposable
         Assert.Contains("runtime=.NET", report);
         Assert.Contains("provider.codex.available=false", report);
         Assert.Contains("%LOCALAPPDATA%\\PokeTokenBar", report);
+        Assert.Contains("usageCache=missing", report);
     }
 
     [Fact]

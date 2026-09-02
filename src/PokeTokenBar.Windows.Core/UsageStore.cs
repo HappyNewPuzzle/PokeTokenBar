@@ -11,7 +11,10 @@ public sealed class UsageStore
     private readonly ICodexRateLimitsProvider? _codexRateLimitsProvider;
     private readonly IClaudeRateLimitsProvider? _claudeRateLimitsProvider;
     private readonly IAntigravityRateLimitsProvider? _antigravityRateLimitsProvider;
+    private readonly IUsageSnapshotPersistence? _snapshotPersistence;
     private readonly object _stateLock = new();
+    private readonly Dictionary<string, CachedProviderUsage> _cachedProviders =
+        new(StringComparer.Ordinal);
 
     private IReadOnlyList<ProviderSnapshot> _snapshots = Array.Empty<ProviderSnapshot>();
     private DateTimeOffset? _lastUpdated;
@@ -25,13 +28,15 @@ public sealed class UsageStore
     private AntigravityRateLimitStatus? _antigravityRateLimits;
     private DateTimeOffset? _antigravityRateLimitsUpdatedAt;
     private IReadOnlyList<ProviderStatusSnapshot> _providerStatuses = Array.Empty<ProviderStatusSnapshot>();
+    private UsageCacheLoadStatus _usageCacheStatus = UsageCacheLoadStatus.Missing;
 
     public UsageStore(
         IEnumerable<IUsageProvider> providers,
         TimeProvider? timeProvider = null,
         ICodexRateLimitsProvider? codexRateLimitsProvider = null,
         IClaudeRateLimitsProvider? claudeRateLimitsProvider = null,
-        IAntigravityRateLimitsProvider? antigravityRateLimitsProvider = null)
+        IAntigravityRateLimitsProvider? antigravityRateLimitsProvider = null,
+        IUsageSnapshotPersistence? snapshotPersistence = null)
     {
         ArgumentNullException.ThrowIfNull(providers);
 
@@ -50,6 +55,19 @@ public sealed class UsageStore
         _codexRateLimitsProvider = codexRateLimitsProvider;
         _claudeRateLimitsProvider = claudeRateLimitsProvider;
         _antigravityRateLimitsProvider = antigravityRateLimitsProvider;
+        _snapshotPersistence = snapshotPersistence;
+        RestoreCachedSnapshots();
+    }
+
+    public UsageCacheLoadStatus UsageCacheStatus
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _usageCacheStatus;
+            }
+        }
     }
 
     public IReadOnlyList<ProviderSnapshot> Snapshots
@@ -308,7 +326,7 @@ public sealed class UsageStore
 
             if (runPendingRefresh)
             {
-                _ = RefreshAsync();
+                await RefreshAsync().ConfigureAwait(false);
             }
         }
     }
@@ -382,6 +400,11 @@ public sealed class UsageStore
                     Now(),
                     provider.ReportsCost));
             }
+            else if (failedIds.Contains(provider.Id) && previous is not null)
+            {
+                var preserved = previous with { Today = previousToday };
+                if (HasLocalData(preserved)) newSnapshots.Add(preserved);
+            }
         }
 
         CommitDailyPhase(newSnapshots, errors);
@@ -399,12 +422,13 @@ public sealed class UsageStore
             .ToArray();
 
         cancellationToken.ThrowIfCancellationRequested();
-        CommitEnrichmentPhase(enrichmentOutcomes);
+        CommitEnrichmentPhase(enrichmentOutcomes, previousSnapshots);
         var officialResults = await Task.WhenAll(
             RefreshCodexRateLimitsAsync(cancellationToken),
             RefreshClaudeRateLimitsAsync(cancellationToken),
             RefreshAntigravityRateLimitsAsync(cancellationToken)).ConfigureAwait(false);
         UpdateProviderStatuses(failedIds, officialResults);
+        PersistSuccessfulSnapshots(dailyOutcomes, enrichmentOutcomes);
     }
 
     private async Task<bool> RefreshCodexRateLimitsAsync(CancellationToken cancellationToken)
@@ -679,7 +703,8 @@ public sealed class UsageStore
     }
 
     private void CommitEnrichmentPhase(
-        IReadOnlyList<EnrichmentOutcome> outcomes)
+        IReadOnlyList<EnrichmentOutcome> outcomes,
+        IReadOnlyList<ProviderSnapshot> previousSnapshots)
     {
         lock (_stateLock)
         {
@@ -689,6 +714,21 @@ public sealed class UsageStore
                 var index = snapshots.FindIndex(snapshot => snapshot.ProviderId == outcome.Id);
                 if (index < 0)
                 {
+                    if (!outcome.Succeeded)
+                    {
+                        var previous = previousSnapshots.FirstOrDefault(snapshot =>
+                            snapshot.ProviderId == outcome.Id);
+                        if (previous is not null)
+                        {
+                            var preserved = previous with
+                            {
+                                Today = previous.Today?.Date == TodayKey() ? previous.Today : null,
+                            };
+                            if (HasLocalData(preserved)) snapshots.Add(preserved);
+                        }
+                        continue;
+                    }
+
                     var hasActiveBlock =
                         outcome.Enrichment.BlocksOK &&
                         outcome.Enrichment.ActiveBlock is not null;
@@ -746,6 +786,152 @@ public sealed class UsageStore
         }
     }
 
+    private void RestoreCachedSnapshots()
+    {
+        if (_snapshotPersistence is null) return;
+
+        UsageSnapshotCacheLoadResult loaded;
+        try
+        {
+            loaded = _snapshotPersistence.Load();
+        }
+        catch (Exception exception) when (IsRecoverable(exception))
+        {
+            loaded = new(UsageCacheLoadStatus.Corrupt);
+        }
+
+        _usageCacheStatus = loaded.Status;
+        if (loaded.Status != UsageCacheLoadStatus.Available || loaded.Cache is null) return;
+
+        var snapshots = new List<ProviderSnapshot>();
+        foreach (var cached in loaded.Cache.Providers)
+        {
+            var provider = _providers.FirstOrDefault(candidate => candidate.Id == cached.ProviderId);
+            if (provider is null || _cachedProviders.ContainsKey(cached.ProviderId)) continue;
+
+            var snapshot = SanitizeCachedSnapshot(cached, provider);
+            if (!HasLocalData(snapshot)) continue;
+            _cachedProviders.Add(cached.ProviderId, ToCached(snapshot));
+            snapshots.Add(snapshot);
+        }
+
+        _snapshots = Array.AsReadOnly(snapshots.ToArray());
+        if (_snapshots.Count > 0) _lastUpdated = loaded.Cache.SavedAt;
+        _providerStatuses = Array.AsReadOnly(_providers.Select(provider =>
+            new ProviderStatusSnapshot(
+                provider.Id,
+                provider.DisplayName,
+                _snapshots.Any(snapshot => snapshot.ProviderId == provider.Id)
+                    ? ProviderRuntimeStatus.Stale
+                    : ProviderRuntimeStatus.NoSessions,
+                ProviderAuthStatus.NotApplicable)).ToArray());
+    }
+
+    private void PersistSuccessfulSnapshots(
+        IReadOnlyList<DailyOutcome> dailyOutcomes,
+        IReadOnlyList<EnrichmentOutcome> enrichmentOutcomes)
+    {
+        if (_snapshotPersistence is null) return;
+
+        var successfulIds = dailyOutcomes
+            .Where(outcome => outcome.ErrorDescription is null)
+            .Select(outcome => outcome.Id)
+            .Intersect(
+                enrichmentOutcomes.Where(outcome => outcome.Succeeded).Select(outcome => outcome.Id),
+                StringComparer.Ordinal)
+            .ToHashSet(StringComparer.Ordinal);
+        if (successfulIds.Count == 0) return;
+
+        UsageSnapshotCache cache;
+        lock (_stateLock)
+        {
+            foreach (var id in successfulIds)
+            {
+                var snapshot = _snapshots.FirstOrDefault(candidate =>
+                    candidate.ProviderId == id && HasLocalData(candidate));
+                if (snapshot is null) _cachedProviders.Remove(id);
+                else _cachedProviders[id] = ToCached(snapshot);
+            }
+
+            cache = new UsageSnapshotCache(
+                Now(),
+                _registeredProviders
+                    .Select(provider => _cachedProviders.GetValueOrDefault(provider.Id))
+                    .Where(static provider => provider is not null)
+                    .Cast<CachedProviderUsage>()
+                    .ToArray());
+        }
+
+        try
+        {
+            _snapshotPersistence.Save(cache);
+            lock (_stateLock) _usageCacheStatus = UsageCacheLoadStatus.Available;
+        }
+        catch (Exception exception) when (IsRecoverable(exception))
+        {
+            // Cache persistence is best effort; in-memory usage remains authoritative.
+        }
+    }
+
+    private ProviderSnapshot SanitizeCachedSnapshot(
+        CachedProviderUsage cached,
+        IUsageProvider provider)
+    {
+        var today = DateOnly.FromDateTime(_timeProvider.GetLocalNow().DateTime);
+        var todayValue = cached.Today?.Date == TodayKey() ? cached.Today : null;
+        var activeBlock = cached.ActiveBlock is { IsActive: true } block &&
+                          DateTimeOffset.TryParse(
+                              block.EndTime,
+                              CultureInfo.InvariantCulture,
+                              DateTimeStyles.AssumeUniversal,
+                              out var end) && end > Now()
+            ? block
+            : null;
+        var week = cached.WeekTotal is { } weekValue &&
+                   DateOnly.TryParseExact(
+                       weekValue.Period,
+                       "yyyy-MM-dd",
+                       CultureInfo.InvariantCulture,
+                       DateTimeStyles.None,
+                       out var weekStart) &&
+                   weekStart <= today && today <= weekStart.AddDays(6)
+            ? weekValue
+            : null;
+        var month = cached.MonthTotal?.Period == today.ToString("yyyy-MM", CultureInfo.InvariantCulture)
+            ? cached.MonthTotal
+            : null;
+        return new ProviderSnapshot(
+            provider.Id,
+            provider.DisplayName,
+            todayValue,
+            activeBlock,
+            week,
+            month,
+            cached.FetchedAt,
+            provider.ReportsCost);
+    }
+
+    private static CachedProviderUsage ToCached(ProviderSnapshot snapshot) => new(
+        snapshot.ProviderId,
+        snapshot.Today,
+        snapshot.ActiveBlock,
+        snapshot.WeekTotal,
+        snapshot.MonthTotal,
+        snapshot.FetchedAt);
+
+    private static bool HasLocalData(ProviderSnapshot snapshot) =>
+        snapshot.Today is not null ||
+        snapshot.ActiveBlock is not null ||
+        (snapshot.WeekTotal?.TotalTokens ?? 0) > 0 ||
+        (snapshot.WeekTotal?.TotalCost ?? 0) > 0 ||
+        (snapshot.MonthTotal?.TotalTokens ?? 0) > 0 ||
+        (snapshot.MonthTotal?.TotalCost ?? 0) > 0;
+
+    private static bool IsRecoverable(Exception exception) =>
+        exception is not OutOfMemoryException and
+        not StackOverflowException and
+        not AccessViolationException;
+
     private static async Task<DailyOutcome> FetchDailyOutcomeAsync(
         IUsageProvider provider,
         Func<int> getCompletionSequence,
@@ -798,7 +984,8 @@ public sealed class UsageStore
             return new EnrichmentOutcome(
                 provider.Id,
                 new ProviderEnrichment(),
-                getCompletionSequence());
+                getCompletionSequence(),
+                Succeeded: false);
         }
     }
 
@@ -816,5 +1003,6 @@ public sealed class UsageStore
     private sealed record EnrichmentOutcome(
         string Id,
         ProviderEnrichment Enrichment,
-        int CompletionSequence);
+        int CompletionSequence,
+        bool Succeeded = true);
 }

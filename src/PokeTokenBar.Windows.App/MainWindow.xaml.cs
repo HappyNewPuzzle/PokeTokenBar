@@ -31,7 +31,7 @@ public partial class MainWindow : Window, IDisposable
     private void OnActivated(object? sender, EventArgs e)
     {
         if (_viewModel.Support is { } support)
-            _ = support.CheckAsync(TimeSpan.FromMinutes(30));
+            AppReliability.Run(support.CheckAsync(TimeSpan.FromMinutes(30)));
     }
 
     protected override void OnClosed(EventArgs e)

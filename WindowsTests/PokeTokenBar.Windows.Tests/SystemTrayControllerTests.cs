@@ -241,6 +241,19 @@ public sealed class SystemTrayControllerTests
         Assert.Equal(1, provider.DailyCalls);
     }
 
+    [Fact]
+    public void PresentationFailureDoesNotTearDownTrayLifecycle()
+    {
+        var tray = new FakeTrayIcon { ThrowOnPresentation = true };
+        var window = new FakeTrayWindow();
+
+        using var controller = CreateController(tray, window);
+
+        Assert.True(tray.Visible);
+        tray.RequestOpen();
+        Assert.True(window.IsVisible);
+    }
+
     private static SystemTrayController CreateController(
         FakeTrayIcon tray,
         FakeTrayWindow window,
@@ -268,7 +281,17 @@ public sealed class SystemTrayControllerTests
         public event EventHandler? ExitRequested;
 
         public bool Visible { get; set; }
-        public string Text { get; set; } = "";
+        private string _text = "";
+        public string Text
+        {
+            get => _text;
+            set
+            {
+                if (ThrowOnPresentation) throw new InvalidOperationException("shell unavailable");
+                _text = value;
+            }
+        }
+        public bool ThrowOnPresentation { get; init; }
         public int DisposeCalls { get; private set; }
         public NotificationMessage? LastNotification { get; private set; }
 
@@ -277,8 +300,14 @@ public sealed class SystemTrayControllerTests
         public void RequestRefresh() => RefreshRequested?.Invoke(this, EventArgs.Empty);
         public void RequestExit() => ExitRequested?.Invoke(this, EventArgs.Empty);
         public void ShowNotification(NotificationMessage message) => LastNotification = message;
-        public void SetMenuText(string open, string refresh, string exit) { }
-        public void SetCompanionFrame(BitmapSource? frame) { }
+        public void SetMenuText(string open, string refresh, string exit)
+        {
+            if (ThrowOnPresentation) throw new InvalidOperationException("shell unavailable");
+        }
+        public void SetCompanionFrame(BitmapSource? frame)
+        {
+            if (ThrowOnPresentation) throw new InvalidOperationException("shell unavailable");
+        }
 
         public void Dispose() => DisposeCalls++;
     }

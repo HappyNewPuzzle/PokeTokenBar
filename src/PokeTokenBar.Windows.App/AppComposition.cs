@@ -20,7 +20,8 @@ public static class AppComposition
                 new JsonAppSettingsPersistence(),
                 new WindowsAutoStartService(),
                 operation => System.Windows.Application.Current.Dispatcher
-                    .InvokeAsync(operation).Task.Unwrap());
+                    .InvokeAsync(operation).Task.Unwrap(),
+                new JsonUsageSnapshotPersistence());
         }
         catch
         {
@@ -34,7 +35,8 @@ public static class AppComposition
         ICompanionPersistence persistence,
         IAppSettingsPersistence settingsPersistence,
         IAutoStartService autoStartService,
-        Func<Func<Task>, Task>? usageRefreshDispatcher = null)
+        Func<Func<Task>, Task>? usageRefreshDispatcher = null,
+        IUsageSnapshotPersistence? usageSnapshotPersistence = null)
     {
         ArgumentNullException.ThrowIfNull(httpClient);
         ArgumentNullException.ThrowIfNull(persistence);
@@ -45,7 +47,11 @@ public static class AppComposition
         var companionStore = new CompanionStore(api, persistence);
         var settings = new SettingsViewModel(
             settingsPersistence, autoStartService, companionStore.State.Language);
-        var usage = CreateUsageViewModel(httpClient, settings.CustomRoots, settings.Localization);
+        var usage = CreateUsageViewModel(
+            httpClient,
+            settings.CustomRoots,
+            settings.Localization,
+            usageSnapshotPersistence);
         usage.SelectedProviderId = settings.SelectedProviderId;
         settings.UpdateProviderStatuses(usage.ProviderStatuses);
         usage.PropertyChanged += (_, args) =>
@@ -79,7 +85,7 @@ public static class AppComposition
         {
             companionStore.SetLanguage(language);
             usage.RefreshPresentation();
-            _ = RefreshLanguageAsync(companion, economy);
+            AppReliability.Run(RefreshLanguageAsync(companion, economy));
         };
         settings.PropertyChanged += (_, args) =>
         {
@@ -119,7 +125,8 @@ public static class AppComposition
     internal static UsageViewModel CreateUsageViewModel(
         HttpClient? httpClient,
         Func<string, IReadOnlyList<string>>? customRoots,
-        LocalizationService? localization = null)
+        LocalizationService? localization = null,
+        IUsageSnapshotPersistence? snapshotPersistence = null)
     {
         IUsageProvider[] providers = customRoots is null
             ?
@@ -140,7 +147,8 @@ public static class AppComposition
             providers,
             codexRateLimitsProvider: codexRateLimitsProvider,
             claudeRateLimitsProvider: claudeRateLimitsProvider,
-            antigravityRateLimitsProvider: antigravityRateLimitsProvider);
+            antigravityRateLimitsProvider: antigravityRateLimitsProvider,
+            snapshotPersistence: snapshotPersistence);
         return new UsageViewModel(store, localization: localization);
     }
 
