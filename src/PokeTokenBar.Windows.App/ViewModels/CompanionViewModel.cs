@@ -523,7 +523,7 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
         IsFinalStage = active is not null && IsCurrentFinalStage(active);
 
         DisplayName = active is null || _store.CurrentLine is null
-            ? "Token Egg"
+            ? CompanionDisplayTexts.EggName(Language)
             : _store.CurrentLine.LocalizedName(active.CurrentId, Language);
 
         OnPropertyChanged(nameof(RarityText));

@@ -1,5 +1,5 @@
 using PokeTokenBar.Windows.Core;
-using PokeTokenBar.Windows.App.Sprites;
+using System.Windows.Media.Imaging;
 
 namespace PokeTokenBar.Windows.App.Tray;
 
@@ -21,5 +21,5 @@ internal interface ITrayIcon : IDisposable
 
     void SetMenuText(string open, string refresh, string exit);
 
-    void SetCompanion(PokemonSpritePresentation? presentation);
+    void SetCompanionFrame(BitmapSource? frame);
 }

@@ -3,6 +3,7 @@ using PokeTokenBar.Windows.App.Tray;
 using PokeTokenBar.Windows.App.Sprites;
 using PokeTokenBar.Windows.App.ViewModels;
 using PokeTokenBar.Windows.Core;
+using System.Windows.Media.Imaging;
 
 namespace PokeTokenBar.Windows.Tests;
 
@@ -277,7 +278,7 @@ public sealed class SystemTrayControllerTests
         public void RequestExit() => ExitRequested?.Invoke(this, EventArgs.Empty);
         public void ShowNotification(NotificationMessage message) => LastNotification = message;
         public void SetMenuText(string open, string refresh, string exit) { }
-        public void SetCompanion(PokemonSpritePresentation? presentation) { }
+        public void SetCompanionFrame(BitmapSource? frame) { }
 
         public void Dispose() => DisposeCalls++;
     }

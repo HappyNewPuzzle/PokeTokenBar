@@ -18,7 +18,8 @@ public sealed class SupportViewModel : INotifyPropertyChanged, IDisposable
     private readonly SemaphoreSlim _checkGate = new(1, 1);
     private DateTimeOffset? _lastChecked;
     private UpdateCheckResult? _update;
-    private string _updateStatus = "Not checked";
+    private string _updateStatus = "";
+    private Func<LocalizationService, string> _statusText = text => text.NotChecked;
     private bool _isChecking;
     private bool _disposed;
 
@@ -36,6 +37,7 @@ public sealed class SupportViewModel : INotifyPropertyChanged, IDisposable
         _usage = usage;
         _interaction = interaction;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _updateStatus = _statusText(_settings.Localization);
         CheckForUpdatesCommand = new AsyncCommand(
             token => CheckAsync(TimeSpan.Zero, true, token), onException: ShowError);
         OpenUpdateCommand = new AsyncCommand(token =>
@@ -47,7 +49,7 @@ public sealed class SupportViewModel : INotifyPropertyChanged, IDisposable
         {
             _settings.SkipUpdateVersion(_update?.LatestVersion);
             _update = null;
-            UpdateStatus = "This version will not be shown again.";
+            SetStatus(text => text.VersionSkipped);
             RaiseUpdateState();
             return Task.CompletedTask;
         }, () => HasUpdate, ShowError);
@@ -56,22 +58,23 @@ public sealed class SupportViewModel : INotifyPropertyChanged, IDisposable
         CopyDiagnosticsCommand = new AsyncCommand(token =>
         {
             _interaction.CopyText(DiagnosticsReport.Create(CurrentVersion, _settings, _usage));
-            UpdateStatus = "Diagnostics copied.";
+            SetStatus(text => text.DiagnosticsCopied);
             return Task.CompletedTask;
         }, onException: ShowError);
         _settings.PropertyChanged += OnSettingsChanged;
+        _settings.Localization.PropertyChanged += OnLocalizationChanged;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public string AppName => "PokeTokenBar";
     public string CurrentVersion => _updateChecker.CurrentVersion;
-    public string VersionText => $"Version {CurrentVersion}";
+    public string VersionText => _settings.Localization.Version(CurrentVersion);
     public bool IsChecking { get => _isChecking; private set => SetField(ref _isChecking, value); }
     public string UpdateStatus { get => _updateStatus; private set => SetField(ref _updateStatus, value); }
     public bool HasUpdate => _update?.Status == UpdateCheckStatus.Available;
     public bool ShowUpdateBanner => HasUpdate && _settings.UpdateNotificationsEnabled;
-    public string UpdateBannerText => HasUpdate ? $"PokeTokenBar {_update!.LatestVersion} is available." : "";
+    public string UpdateBannerText => HasUpdate ? _settings.Localization.UpdateBanner(_update!.LatestVersion!) : "";
 
     public AsyncCommand CheckForUpdatesCommand { get; }
     public AsyncCommand OpenUpdateCommand { get; }
@@ -95,13 +98,13 @@ public sealed class SupportViewModel : INotifyPropertyChanged, IDisposable
             _update = result.Status == UpdateCheckStatus.Available &&
                       !string.Equals(result.LatestVersion, _settings.SkippedUpdateVersion, StringComparison.Ordinal)
                 ? result : null;
-            UpdateStatus = result.Status switch
+            SetStatus(result.Status switch
             {
-                UpdateCheckStatus.Available when _update is not null => $"Version {result.LatestVersion} is available.",
-                UpdateCheckStatus.Failed => "Update check failed. Try again later.",
-                _ => $"PokeTokenBar {CurrentVersion} is up to date.",
-            };
-            if (!manual && result.Status == UpdateCheckStatus.Failed) UpdateStatus = "Not checked";
+                UpdateCheckStatus.Available when _update is not null => text => text.UpdateAvailable(result.LatestVersion!),
+                UpdateCheckStatus.Failed => text => text.UpdateCheckFailed,
+                _ => text => text.UpToDate(CurrentVersion),
+            });
+            if (!manual && result.Status == UpdateCheckStatus.Failed) SetStatus(text => text.NotChecked);
             RaiseUpdateState();
         }
         finally
@@ -116,7 +119,7 @@ public sealed class SupportViewModel : INotifyPropertyChanged, IDisposable
         var path = _interaction.ChooseExportPath(_transfer.SuggestedFileName);
         if (path is null) return Task.CompletedTask;
         _transfer.ExportTo(path);
-        _interaction.ShowMessage("Export save", "The PokeTokenBar save was exported.");
+        _interaction.ShowMessage(_settings.Localization.ExportSave, _settings.Localization.ExportDone);
         return Task.CompletedTask;
     }
 
@@ -128,8 +131,7 @@ public sealed class SupportViewModel : INotifyPropertyChanged, IDisposable
         var preview = _transfer.Preview(data);
         if (!_interaction.ConfirmImport(preview, _transfer.CurrentSummary)) return Task.CompletedTask;
         _transfer.Import(data, _usage.TodayTokensByProvider, _usage.TodayDate, _usage.HasUsageData);
-        _interaction.ShowMessage("Import save",
-            "Import completed and a pre-import backup was saved. Restart PokeTokenBar to load the imported state.");
+        _interaction.ShowMessage(_settings.Localization.ImportSave, _settings.Localization.ImportDone);
         return Task.CompletedTask;
     }
 
@@ -139,11 +141,25 @@ public sealed class SupportViewModel : INotifyPropertyChanged, IDisposable
             OnPropertyChanged(nameof(ShowUpdateBanner));
     }
 
+    private void OnLocalizationChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        UpdateStatus = _statusText(_settings.Localization);
+        OnPropertyChanged(nameof(VersionText));
+        OnPropertyChanged(nameof(UpdateBannerText));
+    }
+
     private void ShowError(Exception exception)
     {
-        UpdateStatus = exception is StateTransferException transfer
-            ? transfer.Message : "The operation could not be completed.";
+        SetStatus(exception is StateTransferException transfer
+            ? text => text.TransferError(transfer.Reason)
+            : text => text.OperationFailed);
         _interaction.ShowMessage("PokeTokenBar", UpdateStatus, true);
+    }
+
+    private void SetStatus(Func<LocalizationService, string> text)
+    {
+        _statusText = text;
+        UpdateStatus = text(_settings.Localization);
     }
 
     private void RaiseUpdateState()
@@ -160,6 +176,7 @@ public sealed class SupportViewModel : INotifyPropertyChanged, IDisposable
         if (_disposed) return;
         _disposed = true;
         _settings.PropertyChanged -= OnSettingsChanged;
+        _settings.Localization.PropertyChanged -= OnLocalizationChanged;
     }
 
     private bool SetField<T>(ref T field, T value, [CallerMemberName] string? name = null)

@@ -2,7 +2,6 @@ using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows.Media.Imaging;
-using PokeTokenBar.Windows.App.Sprites;
 using PokeTokenBar.Windows.Core;
 using Forms = System.Windows.Forms;
 
@@ -17,7 +16,6 @@ internal sealed class NotifyIconTrayIcon : ITrayIcon
     private readonly Forms.ToolStripMenuItem _exitItem;
     private bool _disposed;
     private Icon? _companionIcon;
-    private PokemonSpritePresentation? _lastPresentation;
 
     public NotifyIconTrayIcon()
     {
@@ -77,11 +75,9 @@ internal sealed class NotifyIconTrayIcon : ITrayIcon
         _exitItem.Text = exit;
     }
 
-    public void SetCompanion(PokemonSpritePresentation? presentation)
+    public void SetCompanionFrame(BitmapSource? source)
     {
-        if (ReferenceEquals(_lastPresentation, presentation)) return;
-        _lastPresentation = presentation;
-        if (presentation?.StaticImage is not { } source)
+        if (source is null)
         {
             _notifyIcon.Icon = SystemIcons.Application;
             Interlocked.Exchange(ref _companionIcon, null)?.Dispose();
@@ -122,7 +118,7 @@ internal sealed class NotifyIconTrayIcon : ITrayIcon
         _refreshItem.Click -= OnRefreshClicked;
         _exitItem.Click -= OnExitClicked;
         _notifyIcon.Dispose();
-        _companionIcon?.Dispose();
+        Interlocked.Exchange(ref _companionIcon, null)?.Dispose();
         _menu.Dispose();
     }
 

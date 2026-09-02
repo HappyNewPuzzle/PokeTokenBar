@@ -102,7 +102,7 @@ public static class AppComposition
                 new StateTransferService(jsonSettings, jsonCompanion, ApplicationVersion.Current),
                 settings,
                 usage,
-                new WindowsUserInteraction());
+                new WindowsUserInteraction(settings.Localization));
         }
         return new ApplicationComposition(
             new MainViewModel(usage, companion, economy, settings, support),

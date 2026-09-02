@@ -23,7 +23,11 @@ public sealed class FloatingPetViewModel : INotifyPropertyChanged, IDisposable
         _settings = settings;
         _usage = usage;
         _companion.PropertyChanged += OnCompanionPropertyChanged;
-        if (_settings is not null) _settings.PropertyChanged += OnSettingsPropertyChanged;
+        if (_settings is not null)
+        {
+            _settings.PropertyChanged += OnSettingsPropertyChanged;
+            _settings.Localization.PropertyChanged += OnLocalizationChanged;
+        }
         if (_usage is not null) _usage.PropertyChanged += OnUsagePropertyChanged;
     }
 
@@ -94,7 +98,11 @@ public sealed class FloatingPetViewModel : INotifyPropertyChanged, IDisposable
         _disposed = true;
         Interlocked.Exchange(ref _bubbleCancellation, null)?.Cancel();
         _companion.PropertyChanged -= OnCompanionPropertyChanged;
-        if (_settings is not null) _settings.PropertyChanged -= OnSettingsPropertyChanged;
+        if (_settings is not null)
+        {
+            _settings.PropertyChanged -= OnSettingsPropertyChanged;
+            _settings.Localization.PropertyChanged -= OnLocalizationChanged;
+        }
         if (_usage is not null) _usage.PropertyChanged -= OnUsagePropertyChanged;
     }
 
@@ -131,6 +139,14 @@ public sealed class FloatingPetViewModel : INotifyPropertyChanged, IDisposable
     {
         if (args.PropertyName is nameof(UsageViewModel.TotalTodayTokens) or
             nameof(UsageViewModel.FiveHourRemainingText)) Changed(nameof(HoverText));
+    }
+
+    private void OnLocalizationChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        Changed(nameof(HoverText));
+        Changed(nameof(OpenText));
+        Changed(nameof(HideText));
+        BubbleTitle = null;
     }
 
     private void Changed(string propertyName) =>

@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using PokeTokenBar.Windows.Core;
 
 namespace PokeTokenBar.Windows.App;
@@ -43,6 +44,9 @@ public sealed class LocalizationService : INotifyPropertyChanged
     public string OfficialLimits => T("공식 한도", "Limits (official)", "公式上限", "Límites oficiales", "Limites officielles", "Limites oficiais", "Offizielle Limits");
     public string FiveHourSession => T("5시간 세션", "5-hour session", "5時間セッション", "Sesión de 5 horas", "Session de 5 heures", "Sessão de 5 horas", "5-Stunden-Sitzung");
     public string Weekly => T("주간", "Weekly", "週間", "Semanal", "Hebdomadaire", "Semanal", "Wöchentlich");
+    public string Session => T("세션", "session", "セッション", "sesión", "session", "sessão", "Sitzung");
+    public string ClaudeFiveHour => T("Claude 5시간 세션", "Claude 5-hour session", "Claude 5時間セッション", "Sesión de 5 horas de Claude", "Session de 5 h de Claude", "Sessão de 5 horas do Claude", "Claude-5-Stunden-Sitzung");
+    public string ClaudeWeekly => T("Claude 주간", "Claude weekly", "Claude 週間", "Semanal de Claude", "Claude hebdo", "Semanal do Claude", "Claude – wöchentlich");
     public string ShowFloating => T("플로팅 Pokémon 표시", "Show Floating Pokémon", "フローティングPokémonを表示", "Mostrar Pokémon flotante", "Afficher le Pokémon flottant", "Mostrar Pokémon flutuante", "Schwebendes Pokémon anzeigen");
     public string LaunchAtStartup => T("시작 시 실행", "Launch at startup", "起動時に実行", "Iniciar al arrancar", "Lancer au démarrage", "Iniciar com o sistema", "Beim Start ausführen");
     public string RefreshInterval => T("새로고침 간격", "Refresh interval", "更新間隔", "Intervalo de actualización", "Intervalle d’actualisation", "Intervalo de atualização", "Aktualisierungsintervall");
@@ -138,6 +142,94 @@ public sealed class LocalizationService : INotifyPropertyChanged
     public string ExportSave => T("세이브 내보내기", "Export save", "セーブを書き出す", "Exportar partida", "Exporter la sauvegarde", "Exportar save", "Spielstand exportieren");
     public string ImportSave => T("세이브 불러오기", "Import save", "セーブを読み込む", "Importar partida", "Importer la sauvegarde", "Importar save", "Spielstand importieren");
     public string CopyDiagnostics => T("진단 정보 복사", "Copy diagnostics", "診断情報をコピー", "Copiar diagnóstico", "Copier le diagnostic", "Copiar diagnóstico", "Diagnose kopieren");
+
+    public string LastUpdated => T("마지막 갱신", "Last updated", "最終更新", "Última actualización", "Dernière actualisation", "Última atualização", "Zuletzt aktualisiert");
+    public string CacheWrite => T("캐시 쓰기", "Cache write", "キャッシュ書き込み", "Escritura de caché", "Écriture cache", "Gravação de cache", "Cache-Schreibvorgänge");
+    public string CacheRead => T("캐시 읽기", "Cache read", "キャッシュ読み取り", "Lectura de caché", "Lecture cache", "Leitura de cache", "Cache-Lesevorgänge");
+    public string UsagePeriods => T("사용 기간", "Usage periods", "使用期間", "Períodos de uso", "Périodes d’utilisation", "Períodos de uso", "Nutzungszeiträume");
+    public string ShopIntro => T("사용한 토큰으로 아이템을 살 수 있어요. 구매해도 성장량은 줄지 않아요.", "Spend the tokens you've used on items. Purchases do not reduce growth.", "使ったトークンでアイテムを購入できます。購入しても成長量は減りません。", "Usa los tokens consumidos para comprar objetos. Las compras no reducen el progreso.", "Dépense les tokens consommés en objets. Les achats ne réduisent pas la progression.", "Compre itens com os tokens usados. As compras não reduzem o progresso.", "Kaufe Gegenstände mit deinen verbrauchten Tokens. Käufe verringern den Fortschritt nicht.");
+    public string BagIntro => T("아이템은 앱을 다시 시작해도 유지돼요.", "Items persist across restarts.", "アイテムは再起動後も保持されます。", "Los objetos se conservan al reiniciar.", "Les objets sont conservés après redémarrage.", "Os itens continuam disponíveis após reiniciar.", "Gegenstände bleiben nach einem Neustart erhalten.");
+    public string Active => T("적용 중", "Active", "適用中", "Activo", "Actif", "Ativo", "Aktiv");
+    public string Current => T("현재", "Current", "現在", "Actual", "Actuel", "Atual", "Aktuell");
+    public string Representative => T("대표", "Representative", "代表", "Representante", "Représentatif", "Representante", "Repräsentativ");
+    public string Caught => T("포획", "Caught", "捕獲済み", "Capturado", "Capturé", "Capturado", "Gefangen");
+    public string Shiny => T("이로치", "Shiny", "色違い", "Variocolor", "Chromatique", "Shiny", "Schillernd");
+    public string Normal => T("일반", "Normal", "通常", "Normal", "Normal", "Normal", "Normal");
+    public string UnknownNature => T("성격 미상", "Unknown nature", "性格不明", "Naturaleza desconocida", "Nature inconnue", "Natureza desconhecida", "Unbekanntes Wesen");
+    public string TokenEgg => T("Token Egg", "Token Egg", "Token Egg", "Token Egg", "Token Egg", "Token Egg", "Token Egg");
+    public string Mint => T("민트", "Mint", "ミント", "Menta", "Menthe", "Menta", "Minze");
+    public string RareCandy => T("이상한 사탕", "Rare Candy", "ふしぎなアメ", "Caramelo Raro", "Super Bonbon", "Doce Raro", "Sonderbonbon");
+    public string ShinyCharm => T("이로치 부적", "Shiny Charm", "ひかるおまもり", "Amuleto Iris", "Charme Chroma", "Amuleto Shiny", "Schillerpin");
+    public string FreshEgg => T("포켓몬 알", "Pokémon Egg", "ポケモンのタマゴ", "Huevo Pokémon", "Œuf Pokémon", "Ovo Pokémon", "Pokémon-Ei");
+    public string Tokens(long value) => T($"{value:N0} 토큰", $"{value:N0} tokens", $"{value:N0}トークン", $"{value:N0} tokens", $"{value:N0} tokens", $"{value:N0} tokens", $"{value:N0} Tokens");
+    public string RarityEgg(PokemonRarity rarity) => rarity switch
+    {
+        PokemonRarity.Uncommon => T("고급 알", "Uncommon Egg", "アンコモンのタマゴ", "Huevo poco común", "Œuf peu commun", "Ovo incomum", "Ungewöhnliches Ei"),
+        PokemonRarity.Rare => T("희귀 알", "Rare Egg", "レアのタマゴ", "Huevo raro", "Œuf rare", "Ovo raro", "Seltenes Ei"),
+        PokemonRarity.Legendary => T("전설 알", "Legendary Egg", "でんせつのタマゴ", "Huevo legendario", "Œuf légendaire", "Ovo lendário", "Legendäres Ei"),
+        _ => FreshEgg,
+    };
+    public string Purchased(string name) => T($"{name} 구매 완료.", $"Purchased {name}.", $"{name}を購入しました。", $"Has comprado {name}.", $"{name} acheté.", $"{name} comprado.", $"{name} gekauft.");
+    public string NotEnoughTokens => T("토큰이 부족해요.", "Not enough tokens.", "トークンが足りません。", "No tienes suficientes tokens.", "Pas assez de tokens.", "Tokens insuficientes.", "Nicht genug Tokens.");
+    public string AlreadyOwned => T("이미 보유 중이에요.", "Already owned.", "すでに所持しています。", "Ya lo tienes.", "Déjà possédé.", "Você já tem este item.", "Bereits im Beutel.");
+    public string PurchaseUnavailable => T("지금은 구매할 수 없어요.", "This purchase is not available now.", "今は購入できません。", "Esta compra no está disponible ahora.", "Cet achat n’est pas disponible maintenant.", "Esta compra não está disponível agora.", "Dieser Kauf ist derzeit nicht verfügbar.");
+    public string PurchaseSaveFailed => T("구매를 저장하지 못했어요.", "Could not save the purchase.", "購入を保存できませんでした。", "No se pudo guardar la compra.", "Impossible d’enregistrer l’achat.", "Não foi possível salvar a compra.", "Der Kauf konnte nicht gespeichert werden.");
+    public string UnknownProduct => T("알 수 없는 상품이에요.", "Unknown product.", "不明な商品です。", "Producto desconocido.", "Produit inconnu.", "Produto desconhecido.", "Unbekanntes Produkt.");
+    public string ProgressIncreased => T("성장량이 올랐어요.", "Progress increased.", "成長しました。", "El progreso aumentó.", "La progression a augmenté.", "O progresso aumentou.", "Der Fortschritt ist gestiegen.");
+    public string PokemonEvolved => T("포켓몬이 진화했어요.", "Your Pokémon evolved.", "ポケモンが進化しました。", "Tu Pokémon evolucionó.", "Ton Pokémon a évolué.", "Seu Pokémon evoluiu.", "Dein Pokémon hat sich entwickelt.");
+    public string PokemonGraduated => T("포켓몬이 졸업했어요.", "Your Pokémon graduated.", "ポケモンが卒業しました。", "Tu Pokémon se graduó.", "Ton Pokémon a été diplômé.", "Seu Pokémon se formou.", "Dein Pokémon wurde verabschiedet.");
+    public string NatureChanged(string nature) => T($"성격이 {nature}(으)로 바뀌었어요.", $"Nature changed to {nature}.", $"性格が{nature}に変わりました。", $"La naturaleza cambió a {nature}.", $"La nature est devenue {nature}.", $"A natureza mudou para {nature}.", $"Das Wesen wurde zu {nature} geändert.");
+    public string ItemSaveFailed => T("아이템 사용을 저장하지 못했어요.", "Could not save the item use.", "アイテムの使用を保存できませんでした。", "No se pudo guardar el uso del objeto.", "Impossible d’enregistrer l’utilisation de l’objet.", "Não foi possível salvar o uso do item.", "Die Verwendung konnte nicht gespeichert werden.");
+    public string ItemUnavailable => T("지금은 이 아이템을 사용할 수 없어요.", "This item cannot be used now.", "今はこのアイテムを使えません。", "Este objeto no se puede usar ahora.", "Cet objet ne peut pas être utilisé maintenant.", "Este item não pode ser usado agora.", "Dieser Gegenstand kann derzeit nicht verwendet werden.");
+    public string RepresentativeUpdated => T("대표 포켓몬을 바꿨어요.", "Representative updated.", "代表ポケモンを変更しました。", "Representante actualizado.", "Pokémon représentatif mis à jour.", "Pokémon representativo atualizado.", "Repräsentatives Pokémon aktualisiert.");
+    public string SpeciesNotInCollection => T("해당 종은 컬렉션에 없어요.", "That species is not in the collection.", "その種はコレクションにありません。", "Esa especie no está en la colección.", "Cette espèce n’est pas dans la collection.", "Essa espécie não está na coleção.", "Diese Spezies ist nicht in der Sammlung.");
+    public string RepresentativeFollowsCurrent => T("대표 포켓몬이 현재 컴패니언을 따라가요.", "Representative follows the current companion.", "代表ポケモンは現在のコンパニオンに従います。", "El representante sigue al compañero actual.", "Le représentant suit le compagnon actuel.", "O representante segue o companheiro atual.", "Das repräsentative Pokémon folgt dem aktuellen Begleiter.");
+    public string Manual => T("수동", "Manual", "手動", "Manual", "Manuel", "Manual", "Manuell");
+    public string Minutes(int value) => T($"{value}분", $"{value} minute{(value == 1 ? "" : "s")}", $"{value}分", $"{value} minuto{(value == 1 ? "" : "s")}", $"{value} minute{(value == 1 ? "" : "s")}", $"{value} minuto{(value == 1 ? "" : "s")}", $"{value} Minute{(value == 1 ? "" : "n")}");
+    public string InvalidPaths(string paths) => T($"무시된 잘못된 경로: {paths}", $"Ignored invalid paths: {paths}", $"無効なパスを無視しました: {paths}", $"Rutas no válidas ignoradas: {paths}", $"Chemins non valides ignorés : {paths}", $"Caminhos inválidos ignorados: {paths}", $"Ungültige Pfade ignoriert: {paths}");
+    public string StartupSettingNotRetained => T("Windows가 요청한 시작 설정을 유지하지 않았어요.", "Windows did not retain the requested startup setting.", "Windowsが要求された起動設定を保持しませんでした。", "Windows no conservó la configuración de inicio solicitada.", "Windows n’a pas conservé le réglage de démarrage demandé.", "O Windows não manteve a configuração de inicialização solicitada.", "Windows hat die gewünschte Autostart-Einstellung nicht übernommen.");
+    public string ResetDue => T("재설정 예정 시각 지남", "Reset due", "リセット時刻を過ぎました", "Reinicio pendiente", "Réinitialisation imminente", "Redefinição pendente", "Zurücksetzung fällig");
+    public string ResetsIn(string value) => T($"{value} 후 재설정", $"Resets in {value}", $"{value}後にリセット", $"Se reinicia en {value}", $"Réinitialisation dans {value}", $"Redefine em {value}", $"Zurücksetzung in {value}");
+    public string JustNow => T("방금", "just now", "たった今", "ahora mismo", "à l’instant", "agora", "gerade eben");
+    public string MinutesAgo(int value) => T($"{value}분 전", $"{value} minute{(value == 1 ? "" : "s")} ago", $"{value}分前", $"hace {value} minuto{(value == 1 ? "" : "s")}", $"il y a {value} minute{(value == 1 ? "" : "s")}", $"há {value} minuto{(value == 1 ? "" : "s")}", $"vor {value} Minute{(value == 1 ? "" : "n")}");
+    public string HoursAgo(int value) => T($"{value}시간 전", $"{value} hour{(value == 1 ? "" : "s")} ago", $"{value}時間前", $"hace {value} hora{(value == 1 ? "" : "s")}", $"il y a {value} heure{(value == 1 ? "" : "s")}", $"há {value} hora{(value == 1 ? "" : "s")}", $"vor {value} Stunde{(value == 1 ? "" : "n")}");
+    public string DaysAgo(int value) => T($"{value}일 전", $"{value} day{(value == 1 ? "" : "s")} ago", $"{value}日前", $"hace {value} día{(value == 1 ? "" : "s")}", $"il y a {value} jour{(value == 1 ? "" : "s")}", $"há {value} dia{(value == 1 ? "" : "s")}", $"vor {value} Tag{(value == 1 ? "" : "en")}");
+    public string NotChecked => T("확인하지 않음", "Not checked", "未確認", "Sin comprobar", "Non vérifié", "Não verificado", "Nicht geprüft");
+    public string Version(string version) => T($"버전 {version}", $"Version {version}", $"バージョン {version}", $"Versión {version}", $"Version {version}", $"Versão {version}", $"Version {version}");
+    public string VersionSkipped => T("이 버전은 다시 표시하지 않아요.", "This version will not be shown again.", "このバージョンは今後表示しません。", "Esta versión no volverá a mostrarse.", "Cette version ne sera plus affichée.", "Esta versão não será exibida novamente.", "Diese Version wird nicht erneut angezeigt.");
+    public string DiagnosticsCopied => T("진단 정보를 복사했어요.", "Diagnostics copied.", "診断情報をコピーしました。", "Diagnóstico copiado.", "Diagnostic copié.", "Diagnóstico copiado.", "Diagnose kopiert.");
+    public string UpdateAvailable(string version) => T($"버전 {version}을 사용할 수 있어요.", $"Version {version} is available.", $"バージョン {version} が利用可能です。", $"La versión {version} está disponible.", $"La version {version} est disponible.", $"A versão {version} está disponível.", $"Version {version} ist verfügbar.");
+    public string UpdateCheckFailed => T("업데이트 확인에 실패했어요. 나중에 다시 시도하세요.", "Update check failed. Try again later.", "アップデートの確認に失敗しました。後でもう一度お試しください。", "No se pudo buscar actualizaciones. Inténtalo más tarde.", "La recherche de mise à jour a échoué. Réessaie plus tard.", "Falha ao buscar atualizações. Tente novamente mais tarde.", "Die Updateprüfung ist fehlgeschlagen. Versuche es später erneut.");
+    public string UpToDate(string version) => T($"PokeTokenBar {version}은 최신 버전이에요.", $"PokeTokenBar {version} is up to date.", $"PokeTokenBar {version} は最新です。", $"PokeTokenBar {version} está actualizado.", $"PokeTokenBar {version} est à jour.", $"PokeTokenBar {version} está atualizado.", $"PokeTokenBar {version} ist aktuell.");
+    public string UpdateBanner(string version) => T($"PokeTokenBar {version}을 사용할 수 있어요.", $"PokeTokenBar {version} is available.", $"PokeTokenBar {version} が利用可能です。", $"PokeTokenBar {version} está disponible.", $"PokeTokenBar {version} est disponible.", $"PokeTokenBar {version} está disponível.", $"PokeTokenBar {version} ist verfügbar.");
+    public string ExportDone => T("PokeTokenBar 세이브를 내보냈어요.", "The PokeTokenBar save was exported.", "PokeTokenBarのセーブを書き出しました。", "La partida de PokeTokenBar se exportó.", "La sauvegarde PokeTokenBar a été exportée.", "O save do PokeTokenBar foi exportado.", "Der PokeTokenBar-Spielstand wurde exportiert.");
+    public string ImportDone => T("불러오기를 완료하고 이전 상태를 백업했어요. 가져온 상태를 적용하려면 PokeTokenBar를 다시 시작하세요.", "Import completed and a pre-import backup was saved. Restart PokeTokenBar to load the imported state.", "読み込みが完了し、読み込み前のバックアップを保存しました。反映するにはPokeTokenBarを再起動してください。", "La importación terminó y se guardó una copia previa. Reinicia PokeTokenBar para cargar el estado importado.", "L’importation est terminée et une sauvegarde préalable a été créée. Redémarre PokeTokenBar pour charger l’état importé.", "A importação foi concluída e um backup anterior foi salvo. Reinicie o PokeTokenBar para carregar o estado importado.", "Der Import ist abgeschlossen und eine Sicherung wurde erstellt. Starte PokeTokenBar neu, um den importierten Stand zu laden.");
+    public string OperationFailed => T("작업을 완료하지 못했어요.", "The operation could not be completed.", "操作を完了できませんでした。", "No se pudo completar la operación.", "L’opération n’a pas pu être effectuée.", "Não foi possível concluir a operação.", "Der Vorgang konnte nicht abgeschlossen werden.");
+    public string ExportDialogTitle => T("PokeTokenBar 세이브 내보내기", "Export PokeTokenBar save", "PokeTokenBarのセーブを書き出す", "Exportar partida de PokeTokenBar", "Exporter la sauvegarde PokeTokenBar", "Exportar save do PokeTokenBar", "PokeTokenBar-Spielstand exportieren");
+    public string ImportDialogTitle => T("PokeTokenBar 세이브 불러오기", "Import PokeTokenBar save", "PokeTokenBarのセーブを読み込む", "Importar partida de PokeTokenBar", "Importer la sauvegarde PokeTokenBar", "Importar save do PokeTokenBar", "PokeTokenBar-Spielstand importieren");
+    public string SaveFileFilter => T("PokeTokenBar 세이브 (*.json)|*.json", "PokeTokenBar save (*.json)|*.json", "PokeTokenBar セーブ (*.json)|*.json", "Partida de PokeTokenBar (*.json)|*.json", "Sauvegarde PokeTokenBar (*.json)|*.json", "Save do PokeTokenBar (*.json)|*.json", "PokeTokenBar-Spielstand (*.json)|*.json");
+    public string ImportConfirm(StateTransferPreview incoming, StateTransferSummary current) => T(
+        $"현재 진행을 대체할까요?\n\n불러올 세이브: 도감 {incoming.State.DexCount}종, 누적 {incoming.State.LifetimeTokens:N0} 토큰\n현재: 도감 {current.DexCount}종, 누적 {current.LifetimeTokens:N0} 토큰\n\n먼저 로컬 백업을 만들어요.",
+        $"Replace the current progress?\n\nIncoming: {incoming.State.DexCount} Dex, {incoming.State.LifetimeTokens:N0} tokens\nCurrent: {current.DexCount} Dex, {current.LifetimeTokens:N0} tokens\n\nA local backup will be created first.",
+        $"現在の進行を置き換えますか？\n\n読み込むセーブ: 図鑑{incoming.State.DexCount}種、累計{incoming.State.LifetimeTokens:N0}トークン\n現在: 図鑑{current.DexCount}種、累計{current.LifetimeTokens:N0}トークン\n\n先にローカルバックアップを作成します。",
+        $"¿Reemplazar el progreso actual?\n\nEntrante: {incoming.State.DexCount} en la Pokédex, {incoming.State.LifetimeTokens:N0} tokens\nActual: {current.DexCount} en la Pokédex, {current.LifetimeTokens:N0} tokens\n\nPrimero se creará una copia local.",
+        $"Remplacer la progression actuelle ?\n\nÀ importer : {incoming.State.DexCount} au Pokédex, {incoming.State.LifetimeTokens:N0} tokens\nActuel : {current.DexCount} au Pokédex, {current.LifetimeTokens:N0} tokens\n\nUne sauvegarde locale sera d’abord créée.",
+        $"Substituir o progresso atual?\n\nA importar: {incoming.State.DexCount} na Pokédex, {incoming.State.LifetimeTokens:N0} tokens\nAtual: {current.DexCount} na Pokédex, {current.LifetimeTokens:N0} tokens\n\nUm backup local será criado primeiro.",
+        $"Aktuellen Fortschritt ersetzen?\n\nImport: {incoming.State.DexCount} im Pokédex, {incoming.State.LifetimeTokens:N0} Tokens\nAktuell: {current.DexCount} im Pokédex, {current.LifetimeTokens:N0} Tokens\n\nZuerst wird eine lokale Sicherung erstellt.");
+    public string TransferError(StateTransferError reason) => reason switch
+    {
+        StateTransferError.NotASaveFile => T("유효한 PokeTokenBar 세이브가 아니에요.", "The selected file is not a valid PokeTokenBar save.", "有効なPokeTokenBarのセーブではありません。", "El archivo no es una partida válida de PokeTokenBar.", "Le fichier n’est pas une sauvegarde PokeTokenBar valide.", "O arquivo não é um save válido do PokeTokenBar.", "Die Datei ist kein gültiger PokeTokenBar-Spielstand."),
+        StateTransferError.NewerFormat => T("더 새로운 버전에서 만든 세이브예요.", "This save requires a newer PokeTokenBar.", "新しいバージョンのPokeTokenBarが必要です。", "Esta partida requiere una versión más reciente de PokeTokenBar.", "Cette sauvegarde nécessite une version plus récente de PokeTokenBar.", "Este save exige uma versão mais recente do PokeTokenBar.", "Dieser Spielstand benötigt eine neuere PokeTokenBar-Version."),
+        StateTransferError.FileTooLarge => T("세이브 파일이 너무 커요.", "The save file is too large.", "セーブファイルが大きすぎます。", "El archivo de partida es demasiado grande.", "Le fichier de sauvegarde est trop volumineux.", "O arquivo de save é grande demais.", "Die Spielstandsdatei ist zu groß."),
+        StateTransferError.BackupFailed => T("불러오기 전 백업을 만들지 못했어요.", "Could not create the pre-import backup.", "読み込み前のバックアップを作成できませんでした。", "No se pudo crear la copia previa a la importación.", "Impossible de créer la sauvegarde avant importation.", "Não foi possível criar o backup antes da importação.", "Die Sicherung vor dem Import konnte nicht erstellt werden."),
+        StateTransferError.CommitFailed => T("불러오기를 되돌렸어요.", "The import was rolled back.", "読み込みをロールバックしました。", "La importación se revirtió.", "L’importation a été annulée.", "A importação foi revertida.", "Der Import wurde zurückgesetzt."),
+        _ => OperationFailed,
+    };
+    public string LocalDate(DateTimeOffset value) => value.ToLocalTime().ToString("g", CultureInfo.GetCultureInfo(Language switch
+    {
+        AppLanguage.Ko => "ko-KR", AppLanguage.Ja => "ja-JP", AppLanguage.Es => "es-ES",
+        AppLanguage.Fr => "fr-FR", AppLanguage.Pt => "pt-BR", AppLanguage.De => "de-DE", _ => "en-US",
+    }));
 
     private string T(string ko, string en, string ja, string es, string fr, string pt, string de) =>
         Language switch

@@ -32,8 +32,8 @@ The full matrix in section 18 contains **93 atomic feature rows**:
 
 | Status | Count | Share |
 |---|---:|---:|
-| COMPLETE | 72 | 77.4% |
-| PARTIAL | 7 | 7.5% |
+| COMPLETE | 74 | 79.6% |
+| PARTIAL | 5 | 5.4% |
 | MISSING | 1 | 1.1% |
 | WINDOWS EQUIVALENT | 12 | 12.9% |
 | MAC-ONLY / N/A | 1 | 1.1% |
@@ -117,7 +117,7 @@ Windows now exposes the upstream 48–192 size range, 2.5/5/10fps animation floo
 
 `SystemTrayController`/`NotifyIconTrayIcon` and the WPF popup provide the important Windows-equivalent behavior: startup hidden, left-click toggle, Open/Refresh/Exit menu, cursor-monitor/DPI-aware placement, deactivation-to-hide, and no taskbar entry. Provider selection and manual refresh are reachable.
 
-macOS additionally animates the representative in the `NSStatusItem` and can show configurable token/cost/limit text in the menu bar. Windows now synchronizes the representative as a static notification-area icon and exposes live usage through the localized tray tooltip; animated tray frames remain partial because the shell surface differs.
+macOS animates the representative in the `NSStatusItem`; Windows now renders the same decoded GIF/static/egg subjects through a `NotifyIcon` adapter, shares the 2.5/5/10fps quality floors, pauses while the popup is visible, synchronizes representative changes immediately, and exposes provider/today usage through the localized shell tooltip. Exact configurable menu-bar text remains macOS-only because the Windows notification area has no equivalent text surface.
 
 ## 10. Settings
 
@@ -139,7 +139,7 @@ macOS uses `UNUserNotificationCenter`; the unpackaged Windows build uses the sta
 
 ## 12. Localization
 
-Current upstream supports Korean, English, Japanese, Spanish, French, Portuguese, and German. Windows now exposes the same seven-language selector, persists it, switches major popup/settings/tray/floating/notification strings at runtime, and refreshes Pokémon names through the production companion path. A smaller set of economy detail/result copy still falls back to English, so full-UI localization remains partial.
+Current upstream supports Korean, English, Japanese, Spanish, French, Portuguese, and German. Windows exposes the same persisted selector and now routes popup, Shop, Bag, Collection, Settings, provider/limit status, tray/floating, notifications, update, save transfer, item/result, nature/rarity, reset, and relative-time copy through the seven-language production catalog. Runtime changes refresh visible surfaces and dismiss an already-visible translated bubble so the next notification cannot retain the previous language.
 
 ## 13. Lifecycle / Background
 
@@ -183,7 +183,7 @@ The most important missing behavior tests correspond to missing production featu
 
 1. No Ditto lifecycle tests.
 2. Notification opt-in, threshold, deduplication, re-arm, and event paths are covered; native shell balloon appearance still needs manual OS-level QA.
-3. Major runtime language-switch paths are covered; untranslated detail copy prevents full localization coverage.
+3. Seven-language catalog, detailed economy/settings/support copy, runtime switching, and selected-view hardcoded-string guards are covered.
 4. Update checking, release selection, version metadata, save transfer, backup, rollback, and release-script contracts are covered; native dialog and trust-prompt appearance still need OS-level QA.
 5. Burn forecast, provider status/failure isolation, Codex multi-bucket, credits/spend, and localization behavior are covered; vendor status-page appearance still lacks OS-level QA.
 
@@ -255,7 +255,7 @@ Counts in section 2 are calculated from this table only.
 | Tray | Tray presence/actions | `NSStatusItem` opens app controls | `NotifyIcon` with Open/Refresh/Exit | WINDOWS EQUIVALENT | `PokeTokenBarApp` status item | `SystemTrayController.cs`; `NotifyIconTrayIcon.cs` | P0 | — |
 | Tray | Popup behavior | Transient popover closes outside | Tool window closes on deactivation | WINDOWS EQUIVALENT | `PopoverView`; app delegate | `MainWindow.xaml.cs` | P0 | — |
 | Tray | Multi-monitor placement | Native popover placement | Cursor-monitor and DPI-aware placement | COMPLETE | AppKit popover | `PopupPositioner.cs` | P0 | — |
-| Tray | Animated companion icon | Representative animates in menu bar | Representative static icon synchronizes immediately; tray animation remains absent | PARTIAL | status-item sprite controller | `SystemTrayController.cs`; `NotifyIconTrayIcon.cs` | P1 | S |
+| Tray | Animated companion icon | Representative animates in menu bar | Decoded GIF/static/egg frames animate through `NotifyIcon`, share quality floors, pause with the popup, and synchronize representative changes | COMPLETE | status-item sprite controller | `SystemTrayController.cs`; `NotifyIconTrayIcon.cs`; `SpriteAnimationController.cs` | P1 | — |
 | Tray | Menu-bar token/cost/limit text | Configurable status-item text | Exact menu-bar treatment unavailable in notification area | MAC-ONLY / N/A | `UsageStore.menuBarText` | Windows shell constraint | P3 | — |
 | Tray | Provider switch/manual refresh | Provider tabs and refresh | Selector and refresh command | COMPLETE | `PopoverView` | `MainWindow.xaml`; `UsageViewModel.cs` | P0 | — |
 | Popup | Home usage view | Usage, limits, companion, warnings | Usage, official limits, companion progression, warning/error and update banners | COMPLETE | `PopoverView` | `MainWindow.xaml`; `NotificationController.cs`; `SupportViewModel.cs` | P0 | — |
@@ -271,7 +271,7 @@ Counts in section 2 are calculated from this table only.
 | Settings | Notification/threshold options | Category toggles and 80/95 defaults | Independent limit/companion toggles and persisted ordered thresholds | COMPLETE | `AppSettings` | `AppSettings.cs`; `SettingsViewModel.cs`; `MainWindow.xaml` | P1 | — |
 | Settings | Provider roots/auth controls | Roots, Keychain opt-out, refresh controls | Twelve additive roots plus read-only runtime/auth/quota/custom-root status; credential controls remain absent | PARTIAL | `SettingsView`; `CustomRoots` | `ConfigurableUsageProvider.cs`; `ProviderStatusModels.cs`; `SettingsViewModel.cs`; `MainWindow.xaml` | P1 | M |
 | Localization | Pokémon names/natures | Seven current languages | API names/natures follow the persisted seven-language runtime selection | COMPLETE | `Localization.swift`; model helpers | `AppLanguageRules`; `PokeApiClient.cs`; `CompanionViewModel.cs` | P1 | — |
-| Localization | Full application UI | Seven-language UI strings | Major popup/settings/tray/floating/notification strings switch live; some economy detail copy falls back to English | PARTIAL | `Localization.swift` | `LocalizationService.cs`; `MainWindow.xaml`; tray/floating view models | P1 | M |
+| Localization | Full application UI | Seven-language UI strings | Popup, economy, settings, tray/floating, notifications, update and save-transfer copy use the seven-language runtime catalog | COMPLETE | `Localization.swift` | `LocalizationService.cs`; `MainWindow.xaml`; tray/floating/economy/support view models | P1 | — |
 | Notifications | Limit warning/critical | Configurable, deduped notifications | Persisted edge-triggered `NotifyIcon` balloon and floating bubble equivalent | WINDOWS EQUIVALENT | app notification routing; `UsageStore` | `NotificationController.cs`; `LimitNotificationEvaluator` | P1 | — |
 | Notifications | Companion events | Hatch/evolve/graduate/reward notifications | Post-mutation `NotifyIcon` balloon equivalent with isolated failures | WINDOWS EQUIVALENT | `PokeTokenBarApp` | `CompanionStore.GameEventOccurred`; `NotificationController.cs` | P1 | — |
 | Lifecycle | Start hidden/background | Accessory tray app | WPF tray app starts hidden | WINDOWS EQUIVALENT | `PokeTokenBarApp` | `App.xaml.cs` | P0 | — |

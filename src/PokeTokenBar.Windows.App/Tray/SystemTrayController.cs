@@ -1,4 +1,9 @@
 using System.ComponentModel;
+using System.Globalization;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+using PokeTokenBar.Windows.App.Sprites;
 using PokeTokenBar.Windows.App.ViewModels;
 using PokeTokenBar.Windows.Core;
 
@@ -12,6 +17,7 @@ internal sealed class SystemTrayController : IDisposable, INotificationService
     private readonly Action _shutdown;
     private readonly SettingsViewModel? _settings;
     private readonly CompanionViewModel? _companion;
+    private readonly SpriteAnimationController _trayAnimation;
     private bool _isExiting;
     private bool _disposed;
 
@@ -21,7 +27,8 @@ internal sealed class SystemTrayController : IDisposable, INotificationService
         UsageViewModel viewModel,
         Action shutdown,
         SettingsViewModel? settings = null,
-        CompanionViewModel? companion = null)
+        CompanionViewModel? companion = null,
+        ISpriteAnimationTimerFactory? animationTimerFactory = null)
     {
         _trayIcon = trayIcon ?? throw new ArgumentNullException(nameof(trayIcon));
         _window = window ?? throw new ArgumentNullException(nameof(window));
@@ -29,6 +36,8 @@ internal sealed class SystemTrayController : IDisposable, INotificationService
         _shutdown = shutdown ?? throw new ArgumentNullException(nameof(shutdown));
         _settings = settings;
         _companion = companion;
+        _trayAnimation = new SpriteAnimationController(
+            animationTimerFactory ?? new DispatcherSpriteAnimationTimerFactory(Dispatcher.CurrentDispatcher));
 
         _trayIcon.ToggleRequested += OnToggleRequested;
         _trayIcon.OpenRequested += OnOpenRequested;
@@ -38,7 +47,10 @@ internal sealed class SystemTrayController : IDisposable, INotificationService
         _window.Deactivated += OnWindowDeactivated;
         _viewModel.PropertyChanged += OnPresentationChanged;
         if (_settings is not null) _settings.PropertyChanged += OnPresentationChanged;
+        if (_settings is not null) _settings.Localization.PropertyChanged += OnPresentationChanged;
         if (_companion is not null) _companion.PropertyChanged += OnPresentationChanged;
+        _trayAnimation.PropertyChanged += OnTrayAnimationChanged;
+        _trayAnimation.SetActive(true);
         UpdatePresentation();
         _trayIcon.Visible = true;
     }
@@ -58,6 +70,7 @@ internal sealed class SystemTrayController : IDisposable, INotificationService
         }
 
         _window.Activate();
+        _trayAnimation.SetActive(false);
     }
 
     public void ToggleWindow()
@@ -65,6 +78,7 @@ internal sealed class SystemTrayController : IDisposable, INotificationService
         if (_window.IsVisible)
         {
             _window.Hide();
+            _trayAnimation.SetActive(true);
             return;
         }
 
@@ -110,7 +124,10 @@ internal sealed class SystemTrayController : IDisposable, INotificationService
         _window.Deactivated -= OnWindowDeactivated;
         _viewModel.PropertyChanged -= OnPresentationChanged;
         if (_settings is not null) _settings.PropertyChanged -= OnPresentationChanged;
+        if (_settings is not null) _settings.Localization.PropertyChanged -= OnPresentationChanged;
         if (_companion is not null) _companion.PropertyChanged -= OnPresentationChanged;
+        _trayAnimation.PropertyChanged -= OnTrayAnimationChanged;
+        _trayAnimation.Dispose();
         _trayIcon.Visible = false;
         _trayIcon.Dispose();
     }
@@ -124,6 +141,7 @@ internal sealed class SystemTrayController : IDisposable, INotificationService
 
         e.Cancel = true;
         _window.Hide();
+        _trayAnimation.SetActive(true);
     }
 
     private void OnWindowDeactivated(object? sender, EventArgs e)
@@ -131,6 +149,7 @@ internal sealed class SystemTrayController : IDisposable, INotificationService
         if (!_isExiting)
         {
             _window.Hide();
+            _trayAnimation.SetActive(true);
         }
     }
 
@@ -144,11 +163,45 @@ internal sealed class SystemTrayController : IDisposable, INotificationService
 
     private void OnPresentationChanged(object? sender, PropertyChangedEventArgs args) => UpdatePresentation();
 
+    private void OnTrayAnimationChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(SpriteAnimationController.CurrentImage))
+            _trayIcon.SetCompanionFrame(_trayAnimation.CurrentImage);
+    }
+
     private void UpdatePresentation()
     {
         var text = _settings?.Localization;
         _trayIcon.SetMenuText(text?.Open ?? "Open", text?.Refresh ?? "Refresh", text?.Exit ?? "Exit");
-        _trayIcon.Text = $"PokeTokenBar · {text?.Today ?? "Today"} {_viewModel.TotalTodayTokensText}";
-        _trayIcon.SetCompanion(_companion?.Sprite);
+        _trayIcon.Text = $"PokeTokenBar · {_viewModel.ProviderName ?? text?.NoUsageData ?? "No usage data"} · {text?.Today ?? "Today"} {_viewModel.TotalTodayTokensText}";
+        _trayAnimation.SetMinimumFrameDuration((_settings?.SelectedAnimationQuality ?? AnimationQuality.PowerSaver) switch
+        {
+            AnimationQuality.Smooth => TimeSpan.FromMilliseconds(100),
+            AnimationQuality.Balanced => TimeSpan.FromMilliseconds(200),
+            _ => TimeSpan.FromMilliseconds(400),
+        });
+        _trayAnimation.SetPresentation(_companion?.Sprite ?? EggPresentation);
+    }
+
+    internal static PokemonSpritePresentation EggPresentation { get; } = new(
+        EggFrame(0),
+        [new(EggFrame(0), TimeSpan.FromMilliseconds(500)),
+         new(EggFrame(-1), TimeSpan.FromMilliseconds(500))],
+        true);
+
+    private static BitmapSource EggFrame(double y)
+    {
+        var visual = new DrawingVisual();
+        using (var drawing = visual.RenderOpen())
+        {
+            var text = new FormattedText("🥚", CultureInfo.GetCultureInfo("en-US"),
+                System.Windows.FlowDirection.LeftToRight, new Typeface("Segoe UI Emoji"),
+                22, System.Windows.Media.Brushes.White, 1);
+            drawing.DrawText(text, new System.Windows.Point((32 - text.Width) / 2, y));
+        }
+        var image = new RenderTargetBitmap(32, 32, 96, 96, PixelFormats.Pbgra32);
+        image.Render(visual);
+        image.Freeze();
+        return image;
     }
 }

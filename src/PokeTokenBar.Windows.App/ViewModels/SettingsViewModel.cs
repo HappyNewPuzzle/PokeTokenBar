@@ -13,15 +13,6 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
     public sealed record EnumOption<T>(T Value, string Label) where T : struct, Enum;
     public sealed record ProviderRootOption(string Id, string Label);
 
-    private static readonly IReadOnlyList<RefreshIntervalOption> IntervalOptions =
-    [
-        new(RefreshIntervalMode.Manual, "Manual"),
-        new(RefreshIntervalMode.OneMinute, "1 minute"),
-        new(RefreshIntervalMode.TwoMinutes, "2 minutes"),
-        new(RefreshIntervalMode.FiveMinutes, "5 minutes"),
-        new(RefreshIntervalMode.FifteenMinutes, "15 minutes"),
-    ];
-
     private readonly IAppSettingsPersistence _persistence;
     private readonly IAutoStartService _autoStart;
     private AppSettings _settings;
@@ -88,7 +79,14 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
 
     public LocalizationService Localization { get; }
 
-    public IReadOnlyList<RefreshIntervalOption> RefreshIntervalOptions => IntervalOptions;
+    public IReadOnlyList<RefreshIntervalOption> RefreshIntervalOptions =>
+    [
+        new(RefreshIntervalMode.Manual, Localization.Manual),
+        new(RefreshIntervalMode.OneMinute, Localization.Minutes(1)),
+        new(RefreshIntervalMode.TwoMinutes, Localization.Minutes(2)),
+        new(RefreshIntervalMode.FiveMinutes, Localization.Minutes(5)),
+        new(RefreshIntervalMode.FifteenMinutes, Localization.Minutes(15)),
+    ];
 
     public IReadOnlyList<LanguageOption> LanguageOptions { get; } =
     [
@@ -154,6 +152,9 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
             SaveSettings();
             OnPropertyChanged(nameof(LimitDisplayOptions));
             OnPropertyChanged(nameof(AnimationQualityOptions));
+            OnPropertyChanged(nameof(RefreshIntervalOptions));
+            CustomRootStatus = InvalidRoots(CustomRootText) is { Count: > 0 } invalid
+                ? Localization.InvalidPaths(string.Join(", ", invalid)) : null;
             RefreshProviderStatusRows();
             LanguageChanged?.Invoke(value);
         }
@@ -293,7 +294,7 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
             else roots[SelectedRootProviderId] = value;
             _settings = _settings with { CustomProviderRoots = roots };
             CustomRootStatus = InvalidRoots(value) is { Count: > 0 } invalid
-                ? $"Ignored invalid paths: {string.Join(", ", invalid)}"
+                ? Localization.InvalidPaths(string.Join(", ", invalid))
                 : null;
             SaveSettings();
             RefreshProviderStatusRows();
@@ -402,7 +403,7 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
                 _settings = _settings with { LaunchAtStartup = actual };
                 ErrorMessage = actual == value
                     ? null
-                    : "Windows did not retain the requested startup setting.";
+                    : Localization.StartupSettingNotRetained;
                 SaveSettings();
             }
             catch (Exception exception)

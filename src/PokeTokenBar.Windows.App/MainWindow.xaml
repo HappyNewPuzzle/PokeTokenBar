@@ -137,7 +137,7 @@
                     <TextBlock Text="PokeTokenBar"
                                FontSize="24"
                                FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding Usage.ProviderName, Mode=OneWay, TargetNullValue=No usage data}"
+                    <TextBlock Text="{Binding Usage.ProviderNameText, Mode=OneWay}"
                                Margin="0,6,0,0"
                                FontSize="16"
                                Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
@@ -150,7 +150,8 @@
                     </TextBlock>
                     <TextBlock Margin="0,4,0,0"
                                Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}">
-                        <Run Text="Last updated: " />
+                        <Run Text="{Binding Texts.LastUpdated, Mode=OneWay}" />
+                        <Run Text=": " />
                         <Run Text="{Binding Usage.LastUpdatedText, Mode=OneWay, TargetNullValue=—}" />
                     </TextBlock>
                 </StackPanel>
@@ -163,10 +164,10 @@
                         Command="{Binding Usage.RefreshCommand}">
                     <Button.Style>
                         <Style TargetType="Button">
-                            <Setter Property="Content" Value="Refresh" />
+                            <Setter Property="Content" Value="{Binding Texts.Refresh, Mode=OneWay}" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding Usage.IsRefreshing, Mode=OneWay}" Value="True">
-                                    <Setter Property="Content" Value="Refreshing…" />
+                                    <Setter Property="Content" Value="{Binding Texts.Refreshing, Mode=OneWay}" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
@@ -231,11 +232,11 @@
                             <TextBlock Margin="0,4,0,0" Text="{Binding Usage.OutputTokensText, Mode=OneWay, TargetNullValue=—}" FontWeight="SemiBold" />
                         </StackPanel>
                         <StackPanel Grid.Column="2">
-                            <TextBlock Text="Cache write" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                            <TextBlock Text="{Binding Texts.CacheWrite, Mode=OneWay}" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                             <TextBlock Margin="0,4,0,0" Text="{Binding Usage.CacheWriteTokensText, Mode=OneWay, TargetNullValue=—}" FontWeight="SemiBold" />
                         </StackPanel>
                         <StackPanel Grid.Column="3">
-                            <TextBlock Text="Cache read" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                            <TextBlock Text="{Binding Texts.CacheRead, Mode=OneWay}" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                             <TextBlock Margin="0,4,0,0" Text="{Binding Usage.CacheReadTokensText, Mode=OneWay, TargetNullValue=—}" FontWeight="SemiBold" />
                         </StackPanel>
                     </Grid>
@@ -249,7 +250,7 @@
                     BorderThickness="1"
                     CornerRadius="8">
                 <StackPanel>
-                    <TextBlock Text="Usage periods" FontSize="14" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Texts.UsagePeriods, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" />
                     <Grid Margin="0,14,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -546,7 +547,7 @@
                 <StackPanel Margin="28">
                     <TextBlock Text="{Binding Texts.Shop, Mode=OneWay}" FontSize="22" FontWeight="SemiBold" />
                     <TextBlock Margin="0,6,0,0"
-                               Text="Spend the tokens earned since installation. Purchases do not reduce growth."
+                               Text="{Binding Texts.ShopIntro, Mode=OneWay}"
                                Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
                                TextWrapping="Wrap" />
                     <TextBlock Margin="0,14,0,0" Text="{Binding Texts.Balance, Mode=OneWay}" FontWeight="SemiBold" />
@@ -584,8 +585,9 @@
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="28">
                     <TextBlock Text="{Binding Texts.Bag, Mode=OneWay}" FontSize="22" FontWeight="SemiBold" />
-                    <TextBlock Margin="0,6,0,0" Text="Items persist across restarts."
-                               Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                    <TextBlock Margin="0,6,0,0" Text="{Binding Texts.BagIntro, Mode=OneWay}"
+                               Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                               TextWrapping="Wrap" />
                     <ItemsControl Margin="0,14,0,0" ItemsSource="{Binding Economy.BagItems, Mode=OneWay}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -645,7 +647,7 @@
                                             <TextBlock Margin="0,3,0,0">
                                                 <Run Text="{Binding Rarity, Mode=OneWay}" /><Run Text=" · " />
                                                 <Run Text="{Binding ShinyText, Mode=OneWay}" /><Run Text=" · " />
-                                                <Run Text="{Binding Nature, Mode=OneWay, TargetNullValue=Unknown nature}" />
+                                                <Run Text="{Binding Nature, Mode=OneWay}" />
                                             </TextBlock>
                                             <TextBlock Text="{Binding RoleText, Mode=OneWay}"
                                                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />

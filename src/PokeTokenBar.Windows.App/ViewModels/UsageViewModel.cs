@@ -106,14 +106,14 @@ public sealed class UsageViewModel : INotifyPropertyChanged
             if (_store.ClaudeRateLimits?.FiveHour is { } fiveHour)
             {
                 windows.Add(new CandyWindow(
-                    "claude.fiveHour", "Claude 5-hour session",
+                    "claude.fiveHour", _localization.ClaudeFiveHour,
                     LimitWindowClass.Session, fiveHour.UsedPercent));
             }
 
             if (_store.ClaudeRateLimits?.SevenDay is { } sevenDay)
             {
                 windows.Add(new CandyWindow(
-                    "claude.sevenDay", "Claude weekly",
+                    "claude.sevenDay", _localization.ClaudeWeekly,
                     LimitWindowClass.Weekly, sevenDay.UsedPercent));
             }
 
@@ -124,14 +124,14 @@ public sealed class UsageViewModel : INotifyPropertyChanged
                 if (snapshot.Primary is { } primary)
                 {
                     windows.Add(new CandyWindow(
-                        $"codex.{key}.primary", $"{name} session",
+                        $"codex.{key}.primary", $"{name} {_localization.Session}",
                         WindowClass(primary.WindowDurationMinutes), primary.UsedPercent));
                 }
 
                 if (snapshot.Secondary is { } secondary)
                 {
                     windows.Add(new CandyWindow(
-                        $"codex.{key}.secondary", $"{name} weekly",
+                        $"codex.{key}.secondary", $"{name} {_localization.Weekly}",
                         WindowClass(secondary.WindowDurationMinutes), secondary.UsedPercent));
                 }
             }
@@ -144,14 +144,14 @@ public sealed class UsageViewModel : INotifyPropertyChanged
                 if (group.FiveHour is { } session)
                 {
                     windows.Add(new CandyWindow(
-                        $"antigravity.{groupKey}.5h", $"{group.DisplayName} 5-hour session",
+                        $"antigravity.{groupKey}.5h", $"{group.DisplayName} {_localization.FiveHourSession}",
                         LimitWindowClass.Session, session.UsedPercent));
                 }
 
                 if (group.Weekly is { } weekly)
                 {
                     windows.Add(new CandyWindow(
-                        $"antigravity.{groupKey}.weekly", $"{group.DisplayName} weekly",
+                        $"antigravity.{groupKey}.weekly", $"{group.DisplayName} {_localization.Weekly}",
                         LimitWindowClass.Weekly, weekly.UsedPercent));
                 }
             }
@@ -217,8 +217,13 @@ public sealed class UsageViewModel : INotifyPropertyChanged
     public string? ProviderName
     {
         get => _providerName;
-        private set => SetField(ref _providerName, value);
+        private set
+        {
+            if (SetField(ref _providerName, value)) OnPropertyChanged(nameof(ProviderNameText));
+        }
     }
+
+    public string ProviderNameText => ProviderName ?? _localization.NoUsageData;
 
     public long? TodayTokens
     {
@@ -649,7 +654,11 @@ public sealed class UsageViewModel : INotifyPropertyChanged
 
     public bool HasBurnForecast => BurnRateText is not null || ForecastText is not null;
 
-    internal void RefreshPresentation() => ApplyStoreState();
+    internal void RefreshPresentation()
+    {
+        ApplyStoreState();
+        OnPropertyChanged(nameof(ProviderNameText));
+    }
 
     public Task RefreshAsync(CancellationToken cancellationToken = default) =>
         RefreshAsync(scheduleEmptyRetry: true, cancellationToken);
@@ -921,25 +930,25 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         var remaining = value.ToUniversalTime() - _timeProvider.GetUtcNow();
         if (remaining <= TimeSpan.Zero)
         {
-            return "Reset due";
+            return _localization.ResetDue;
         }
 
         if (remaining < TimeSpan.FromMinutes(1))
         {
-            return "Resets in <1m";
+            return _localization.ResetsIn("<1m");
         }
 
         if (remaining >= TimeSpan.FromDays(1))
         {
-            return $"Resets in {(int)remaining.TotalDays}d {remaining.Hours}h";
+            return _localization.ResetsIn($"{(int)remaining.TotalDays}d {remaining.Hours}h");
         }
 
         if (remaining >= TimeSpan.FromHours(1))
         {
-            return $"Resets in {(int)remaining.TotalHours}h {remaining.Minutes}m";
+            return _localization.ResetsIn($"{(int)remaining.TotalHours}h {remaining.Minutes}m");
         }
 
-        return $"Resets in {(int)remaining.TotalMinutes}m";
+        return _localization.ResetsIn($"{(int)remaining.TotalMinutes}m");
     }
 
     private string? FormatRelative(DateTimeOffset? timestamp)
@@ -957,23 +966,23 @@ public sealed class UsageViewModel : INotifyPropertyChanged
 
         if (elapsed < TimeSpan.FromMinutes(1))
         {
-            return "just now";
+            return _localization.JustNow;
         }
 
         if (elapsed < TimeSpan.FromHours(1))
         {
             var minutes = (int)elapsed.TotalMinutes;
-            return minutes == 1 ? "1 minute ago" : $"{minutes} minutes ago";
+            return _localization.MinutesAgo(minutes);
         }
 
         if (elapsed < TimeSpan.FromDays(1))
         {
             var hours = (int)elapsed.TotalHours;
-            return hours == 1 ? "1 hour ago" : $"{hours} hours ago";
+            return _localization.HoursAgo(hours);
         }
 
         var days = (int)elapsed.TotalDays;
-        return days == 1 ? "1 day ago" : $"{days} days ago";
+        return _localization.DaysAgo(days);
     }
 
     private bool SetField<T>(

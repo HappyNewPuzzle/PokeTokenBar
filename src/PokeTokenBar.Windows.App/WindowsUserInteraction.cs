@@ -20,14 +20,19 @@ internal interface IUserInteraction
 
 internal sealed class WindowsUserInteraction : IUserInteraction
 {
+    private readonly LocalizationService _text;
+
+    public WindowsUserInteraction(LocalizationService text) =>
+        _text = text ?? throw new ArgumentNullException(nameof(text));
+
     public string? ChooseExportPath(string suggestedFileName)
     {
         var dialog = new SaveFileDialog
         {
-            Title = "Export PokeTokenBar save",
+            Title = _text.ExportDialogTitle,
             FileName = suggestedFileName,
             DefaultExt = ".json",
-            Filter = "PokeTokenBar save (*.json)|*.json",
+            Filter = _text.SaveFileFilter,
             AddExtension = true,
         };
         return dialog.ShowDialog() == true ? dialog.FileName : null;
@@ -37,9 +42,9 @@ internal sealed class WindowsUserInteraction : IUserInteraction
     {
         var dialog = new OpenFileDialog
         {
-            Title = "Import PokeTokenBar save",
+            Title = _text.ImportDialogTitle,
             DefaultExt = ".json",
-            Filter = "PokeTokenBar save (*.json)|*.json",
+            Filter = _text.SaveFileFilter,
             Multiselect = false,
             CheckFileExists = true,
         };
@@ -48,8 +53,8 @@ internal sealed class WindowsUserInteraction : IUserInteraction
 
     public bool ConfirmImport(StateTransferPreview incoming, StateTransferSummary current) =>
         WpfMessageBox.Show(
-            $"Replace the current progress?\n\nIncoming: {incoming.State.DexCount} Dex, {incoming.State.LifetimeTokens:N0} tokens\nCurrent: {current.DexCount} Dex, {current.LifetimeTokens:N0} tokens\n\nA local backup will be created first.",
-            "Import PokeTokenBar save",
+            _text.ImportConfirm(incoming, current),
+            _text.ImportDialogTitle,
             MessageBoxButton.OKCancel,
             MessageBoxImage.Warning,
             MessageBoxResult.Cancel) == MessageBoxResult.OK;
