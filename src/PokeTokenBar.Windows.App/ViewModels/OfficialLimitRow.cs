@@ -4,4 +4,5 @@ public sealed record OfficialLimitRow(
     string Label,
     int RemainingPercent,
     string RemainingText,
-    string? ResetText);
+    string? ResetText,
+    string? DetailText = null);

@@ -24,6 +24,7 @@ public sealed class UsageStore
     private DateTimeOffset? _claudeRateLimitsUpdatedAt;
     private AntigravityRateLimitStatus? _antigravityRateLimits;
     private DateTimeOffset? _antigravityRateLimitsUpdatedAt;
+    private IReadOnlyList<ProviderStatusSnapshot> _providerStatuses = Array.Empty<ProviderStatusSnapshot>();
 
     public UsageStore(
         IEnumerable<IUsageProvider> providers,
@@ -67,6 +68,17 @@ public sealed class UsageStore
 
     public IReadOnlyList<string> RegisteredProviderIds =>
         new ReadOnlyCollection<string>(_registeredProviders.Select(static provider => provider.Id).ToArray());
+
+    public IReadOnlyList<ProviderStatusSnapshot> ProviderStatuses
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _providerStatuses;
+            }
+        }
+    }
 
     public DateTimeOffset? LastUpdated
     {
@@ -192,6 +204,61 @@ public sealed class UsageStore
 
     public double MonthCostTotal =>
         CostingSnapshots.Sum(static snapshot => snapshot.MonthTotal?.TotalCost ?? 0);
+
+    public double? ClaudeBurnPerMinute =>
+        Snapshots.FirstOrDefault(static snapshot => snapshot.ProviderId == "claude_code")
+            ?.ActiveBlock?.TokensPerMinute;
+
+    public sealed record FiveHourForecast(DateTimeOffset DepletionTime, bool BeforeReset);
+
+    public FiveHourForecast? ClaudeFiveHourForecast
+    {
+        get
+        {
+            var window = ClaudeRateLimits?.FiveHour;
+            if (window?.UsedPercent is not double utilization ||
+                window.ResetsAt is not DateTimeOffset reset)
+            {
+                return null;
+            }
+
+            if (utilization >= 100)
+            {
+                return new FiveHourForecast(Now(), true);
+            }
+
+            var block = Snapshots.FirstOrDefault(static snapshot =>
+                snapshot.ProviderId == "claude_code")?.ActiveBlock;
+            var depletion = ForecastDepletion(
+                block?.TotalTokens ?? 0,
+                block?.TokensPerMinute ?? 0,
+                utilization,
+                Now());
+            return depletion is DateTimeOffset value
+                ? new FiveHourForecast(value, value < reset)
+                : null;
+        }
+    }
+
+    public static DateTimeOffset? ForecastDepletion(
+        long blockTokens,
+        double tokensPerMinute,
+        double utilization,
+        DateTimeOffset now)
+    {
+        if (!double.IsFinite(utilization) || !double.IsFinite(tokensPerMinute) ||
+            utilization < 5 || utilization >= 100 || blockTokens <= 0 ||
+            tokensPerMinute < 10_000)
+        {
+            return null;
+        }
+
+        var tokensPerPercent = blockTokens / utilization;
+        var minutesLeft = (100 - utilization) * tokensPerPercent / tokensPerMinute;
+        return double.IsFinite(minutesLeft) && minutesLeft < 60 * 24
+            ? now.AddMinutes(minutesLeft)
+            : null;
+    }
 
     public ProviderSnapshot? Snapshot(string? preferredProviderId = null)
     {
@@ -333,19 +400,21 @@ public sealed class UsageStore
 
         cancellationToken.ThrowIfCancellationRequested();
         CommitEnrichmentPhase(enrichmentOutcomes);
-        await Task.WhenAll(
+        var officialResults = await Task.WhenAll(
             RefreshCodexRateLimitsAsync(cancellationToken),
             RefreshClaudeRateLimitsAsync(cancellationToken),
             RefreshAntigravityRateLimitsAsync(cancellationToken)).ConfigureAwait(false);
+        UpdateProviderStatuses(failedIds, officialResults);
     }
 
-    private async Task RefreshCodexRateLimitsAsync(CancellationToken cancellationToken)
+    private async Task<bool> RefreshCodexRateLimitsAsync(CancellationToken cancellationToken)
     {
         if (_codexRateLimitsProvider is null)
         {
-            return;
+            return true;
         }
 
+        var succeeded = true;
         try
         {
             var limits = await _codexRateLimitsProvider
@@ -367,20 +436,23 @@ public sealed class UsageStore
         catch (Exception)
         {
             // Official limits are best effort. Preserve the previous successful value.
+            succeeded = false;
         }
 
         EnsureProviderSnapshotForOfficialLimits(
             "codex",
             _codexRateLimits?.HasVisibleLimit == true);
+        return succeeded;
     }
 
-    private async Task RefreshClaudeRateLimitsAsync(CancellationToken cancellationToken)
+    private async Task<bool> RefreshClaudeRateLimitsAsync(CancellationToken cancellationToken)
     {
         if (_claudeRateLimitsProvider is null)
         {
-            return;
+            return true;
         }
 
+        var succeeded = true;
         try
         {
             var limits = await _claudeRateLimitsProvider
@@ -402,11 +474,13 @@ public sealed class UsageStore
         catch (Exception)
         {
             // Claude OAuth limits are best effort; local usage remains available.
+            succeeded = false;
         }
 
         EnsureProviderSnapshotForOfficialLimits(
             "claude_code",
             _claudeRateLimits?.HasVisibleLimit == true);
+        return succeeded;
     }
 
     private void EnsureProviderSnapshotForOfficialLimits(string providerId, bool hasVisibleLimit)
@@ -434,13 +508,14 @@ public sealed class UsageStore
         }
     }
 
-    private async Task RefreshAntigravityRateLimitsAsync(CancellationToken cancellationToken)
+    private async Task<bool> RefreshAntigravityRateLimitsAsync(CancellationToken cancellationToken)
     {
         if (_antigravityRateLimitsProvider is null)
         {
-            return;
+            return true;
         }
 
+        var succeeded = true;
         try
         {
             var limits = await _antigravityRateLimitsProvider
@@ -462,11 +537,52 @@ public sealed class UsageStore
         catch (Exception)
         {
             // Antigravity quota is best effort; local usage remains available.
+            succeeded = false;
         }
 
         EnsureProviderSnapshotForOfficialLimits(
             "antigravity",
             _antigravityRateLimits?.HasVisibleLimit == true);
+        return succeeded;
+    }
+
+    private void UpdateProviderStatuses(
+        IReadOnlySet<string> failedProviderIds,
+        IReadOnlyList<bool> officialRefreshResults)
+    {
+        lock (_stateLock)
+        {
+            _providerStatuses = Array.AsReadOnly(_providers.Select(provider =>
+            {
+                var snapshot = _snapshots.FirstOrDefault(candidate => candidate.ProviderId == provider.Id);
+                (bool? HasLimits, bool RefreshSucceeded) official = provider.Id switch
+                {
+                    "codex" when _codexRateLimitsProvider is not null =>
+                        (_codexRateLimits is not null, officialRefreshResults[0]),
+                    "claude_code" when _claudeRateLimitsProvider is not null =>
+                        (_claudeRateLimits is not null, officialRefreshResults[1]),
+                    "antigravity" when _antigravityRateLimitsProvider is not null =>
+                        (_antigravityRateLimits is not null, officialRefreshResults[2]),
+                    _ => ((bool?)null, true),
+                };
+                var auth = official.HasLimits switch
+                {
+                    true => ProviderAuthStatus.Authenticated,
+                    false => ProviderAuthStatus.QuotaUnavailable,
+                    null => ProviderAuthStatus.NotApplicable,
+                };
+                var runtime = failedProviderIds.Contains(provider.Id)
+                    ? snapshot is null ? ProviderRuntimeStatus.Error : ProviderRuntimeStatus.Stale
+                    : !official.RefreshSucceeded && official.HasLimits == true && snapshot is not null
+                        ? ProviderRuntimeStatus.Stale
+                        : snapshot is null
+                            ? ProviderRuntimeStatus.NoSessions
+                            : official.HasLimits == false
+                                ? ProviderRuntimeStatus.LocalDataOnly
+                                : ProviderRuntimeStatus.Ready;
+                return new ProviderStatusSnapshot(provider.Id, provider.DisplayName, runtime, auth);
+            }).ToArray());
+        }
     }
 
     public AntigravityRateLimitStatus? AntigravityRateLimits

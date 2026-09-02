@@ -45,13 +45,18 @@ public static class AppComposition
         var companionStore = new CompanionStore(api, persistence);
         var settings = new SettingsViewModel(
             settingsPersistence, autoStartService, companionStore.State.Language);
-        var usage = CreateUsageViewModel(httpClient, settings.CustomRoots);
+        var usage = CreateUsageViewModel(httpClient, settings.CustomRoots, settings.Localization);
         usage.SelectedProviderId = settings.SelectedProviderId;
+        settings.UpdateProviderStatuses(usage.ProviderStatuses);
         usage.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName == nameof(UsageViewModel.SelectedProviderId))
             {
                 settings.SaveSelectedProvider(usage.SelectedProviderId);
+            }
+            else if (args.PropertyName == nameof(UsageViewModel.ProviderStatuses))
+            {
+                settings.UpdateProviderStatuses(usage.ProviderStatuses);
             }
         };
         var spriteLoader = new PokemonSpriteLoader(httpClient);
@@ -73,6 +78,7 @@ public static class AppComposition
         settings.LanguageChanged += language =>
         {
             companionStore.SetLanguage(language);
+            usage.RefreshPresentation();
             _ = RefreshLanguageAsync(companion, economy);
         };
         settings.PropertyChanged += (_, args) =>
@@ -108,11 +114,12 @@ public static class AppComposition
     }
 
     public static UsageViewModel CreateUsageViewModel(HttpClient? httpClient = null) =>
-        CreateUsageViewModel(httpClient, null);
+        CreateUsageViewModel(httpClient, null, null);
 
     internal static UsageViewModel CreateUsageViewModel(
         HttpClient? httpClient,
-        Func<string, IReadOnlyList<string>>? customRoots)
+        Func<string, IReadOnlyList<string>>? customRoots,
+        LocalizationService? localization = null)
     {
         IUsageProvider[] providers = customRoots is null
             ?
@@ -134,7 +141,7 @@ public static class AppComposition
             codexRateLimitsProvider: codexRateLimitsProvider,
             claudeRateLimitsProvider: claudeRateLimitsProvider,
             antigravityRateLimitsProvider: antigravityRateLimitsProvider);
-        return new UsageViewModel(store);
+        return new UsageViewModel(store, localization: localization);
     }
 
     private static IUsageProvider[] CreateConfiguredProviders(

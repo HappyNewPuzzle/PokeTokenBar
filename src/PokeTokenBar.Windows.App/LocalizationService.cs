@@ -86,6 +86,50 @@ public sealed class LocalizationService : INotifyPropertyChanged
         $"{window}: {percent:0}% 사용", $"{window}: {percent:0}% used", $"{window}: {percent:0}% 使用",
         $"{window}: {percent:0}% usado", $"{window} : {percent:0}% utilisé", $"{window}: {percent:0}% usado", $"{window}: {percent:0}% verbraucht");
 
+    public string ProviderStatus => T("프로바이더 상태", "Provider status", "プロバイダー状態", "Estado del proveedor", "État du fournisseur", "Status do provedor", "Providerstatus");
+    public string Authentication => T("인증", "Authentication", "認証", "Autenticación", "Authentification", "Autenticação", "Authentifizierung");
+    public string Ready => T("준비됨", "Ready", "準備完了", "Listo", "Prêt", "Pronto", "Bereit");
+    public string NotInstalled => T("설치되지 않음", "Not installed", "未インストール", "No instalado", "Non installé", "Não instalado", "Nicht installiert");
+    public string NoSessions => T("세션 없음", "No sessions", "セッションなし", "Sin sesiones", "Aucune session", "Sem sessões", "Keine Sitzungen");
+    public string AuthenticationRequired => T("인증 필요", "Authentication required", "認証が必要", "Autenticación requerida", "Authentification requise", "Autenticação necessária", "Authentifizierung erforderlich");
+    public string LocalDataOnly => T("로컬 데이터만", "Local data only", "ローカルデータのみ", "Solo datos locales", "Données locales uniquement", "Somente dados locais", "Nur lokale Daten");
+    public string QuotaUnavailable => T("한도 사용 불가", "Quota unavailable", "クォータ利用不可", "Cuota no disponible", "Quota indisponible", "Cota indisponível", "Kontingent nicht verfügbar");
+    public string Error => T("오류", "Error", "エラー", "Error", "Erreur", "Erro", "Fehler");
+    public string Stale => T("오래된 데이터", "Stale", "古いデータ", "Desactualizado", "Obsolète", "Desatualizado", "Veraltet");
+    public string Authenticated => T("인증됨", "Authenticated", "認証済み", "Autenticado", "Authentifié", "Autenticado", "Authentifiziert");
+    public string NotApplicable => T("해당 없음", "Not applicable", "対象外", "No aplicable", "Sans objet", "Não aplicável", "Nicht zutreffend");
+    public string Credits => T("크레딧", "Credits", "クレジット", "Créditos", "Crédits", "Créditos", "Guthaben");
+    public string Spend => T("지출", "Spend", "支出", "Gasto", "Dépenses", "Gasto", "Ausgaben");
+    public string BurnRate => T("소진 속도", "Burn rate", "消費速度", "Tasa de consumo", "Taux de consommation", "Taxa de consumo", "Verbrauchsrate");
+    public string Forecast => T("예측", "Forecast", "予測", "Previsión", "Prévision", "Previsão", "Prognose");
+    public string NoProjection => T("예측 없음", "No projection", "予測なし", "Sin proyección", "Aucune projection", "Sem projeção", "Keine Prognose");
+    public string PersonalSpendLimit => T("개인 사용 한도", "Personal spend limit", "個人利用上限", "Límite de gasto personal", "Limite de dépense personnelle", "Limite de gasto pessoal", "Persönliches Ausgabenlimit");
+    public string Plan => T("플랜", "Plan", "プラン", "Plan", "Forfait", "Plano", "Tarif");
+    public string LimitReached => T("한도 도달", "Limit reached", "上限到達", "Límite alcanzado", "Limite atteinte", "Limite atingido", "Limit erreicht");
+    public string Limit => T("한도", "Limit", "上限", "Límite", "Limite", "Limite", "Limit");
+    public string CustomRootConfigured => T("사용자 폴더 설정됨", "Custom root configured", "カスタムフォルダー設定済み", "Carpeta personalizada configurada", "Dossier personnalisé configuré", "Pasta personalizada configurada", "Benutzerordner konfiguriert");
+    public string DefaultRoots => T("기본 폴더", "Default folders", "既定フォルダー", "Carpetas predeterminadas", "Dossiers par défaut", "Pastas padrão", "Standardordner");
+
+    public string RuntimeStatus(ProviderRuntimeStatus status) => status switch
+    {
+        ProviderRuntimeStatus.Ready => Ready,
+        ProviderRuntimeStatus.NoSessions => NoSessions,
+        ProviderRuntimeStatus.LocalDataOnly => LocalDataOnly,
+        ProviderRuntimeStatus.Error => Error,
+        ProviderRuntimeStatus.Stale => Stale,
+        _ => Error,
+    };
+
+    public string AuthStatus(ProviderAuthStatus status) => status switch
+    {
+        ProviderAuthStatus.Authenticated => Authenticated,
+        ProviderAuthStatus.QuotaUnavailable => QuotaUnavailable,
+        _ => NotApplicable,
+    };
+
+    public string HourWindow(int hours) => T($"{hours}시간", $"{hours}-hour", $"{hours}時間", $"{hours} horas", $"{hours} heures", $"{hours} horas", $"{hours} Stunden");
+    public string MinuteWindow(int minutes) => T($"{minutes}분", $"{minutes}-minute", $"{minutes}分", $"{minutes} minutos", $"{minutes} minutes", $"{minutes} minutos", $"{minutes} Minuten");
+
     public string About => T("정보", "About", "情報", "Acerca de", "À propos", "Sobre", "Info");
     public string UpdateNotifications => T("업데이트 알림", "Update notifications", "更新通知", "Avisos de actualización", "Notifications de mise à jour", "Avisos de atualização", "Update-Benachrichtigungen");
     public string CheckForUpdates => T("업데이트 확인", "Check for updates", "アップデートを確認", "Buscar actualizaciones", "Rechercher des mises à jour", "Buscar atualizações", "Nach Updates suchen");

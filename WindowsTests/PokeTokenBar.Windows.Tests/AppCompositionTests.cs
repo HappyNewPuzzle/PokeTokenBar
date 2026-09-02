@@ -211,6 +211,7 @@ public sealed partial class AppCompositionTests
             if (new[]
                 {
                     typeof(OfficialLimitRow),
+                    typeof(ProviderStatusRow),
                     typeof(ShopProductViewModel),
                     typeof(BagItemViewModel),
                     typeof(CollectionEntryViewModel),
@@ -260,16 +261,13 @@ public sealed partial class AppCompositionTests
             "RefreshCommand",
             "ErrorMessage",
             "HasCodexRateLimits",
-            "HasFiveHourLimit",
-            "FiveHourRemainingPercent",
-            "FiveHourRemainingText",
-            "FiveHourResetText",
-            "HasWeeklyLimit",
-            "WeeklyRemainingPercent",
-            "WeeklyRemainingText",
-            "WeeklyResetText",
             "OfficialLimitsMetadataText",
-            "AntigravityLimitRows",
+            "OfficialLimitRows",
+            "ProviderStatusText",
+            "ProviderAuthStatusText",
+            "CreditsText",
+            "BurnRateText",
+            "ForecastText",
         ];
 
         Assert.All(expected, property =>
@@ -280,13 +278,10 @@ public sealed partial class AppCompositionTests
         Assert.Contains("Binding Settings.ResetFloatingPetPositionCommand", xaml, StringComparison.Ordinal);
         Assert.Contains("Binding Settings.RefreshIntervalOptions", xaml, StringComparison.Ordinal);
         Assert.Contains("Binding Settings.SelectedRefreshInterval", xaml, StringComparison.Ordinal);
-        Assert.Contains("Value=\"{Binding Usage.FiveHourRemainingPercent", xaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{Binding Usage.FiveHourRemainingText", xaml, StringComparison.Ordinal);
-        Assert.Contains("Value=\"{Binding Usage.WeeklyRemainingPercent", xaml, StringComparison.Ordinal);
-        Assert.Contains("Text=\"{Binding Usage.WeeklyRemainingText", xaml, StringComparison.Ordinal);
-        Assert.Contains("ItemsSource=\"{Binding Usage.AntigravityLimitRows", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{Binding Usage.OfficialLimitRows", xaml, StringComparison.Ordinal);
         Assert.Contains("Value=\"{Binding RemainingPercent", xaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding RemainingText", xaml, StringComparison.Ordinal);
+        Assert.Contains("ItemsSource=\"{Binding Settings.ProviderStatusRows", xaml, StringComparison.Ordinal);
     }
 
     [Fact]

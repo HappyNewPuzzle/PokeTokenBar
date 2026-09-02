@@ -12,6 +12,7 @@ public sealed class UsageViewModel : INotifyPropertyChanged
 {
     private readonly UsageStore _store;
     private readonly TimeProvider _timeProvider;
+    private readonly LocalizationService _localization;
 
     private IReadOnlyList<ProviderSnapshot> _providers = Array.Empty<ProviderSnapshot>();
     private string? _preferredProviderId;
@@ -50,16 +51,25 @@ public sealed class UsageViewModel : INotifyPropertyChanged
     private string? _weeklyResetText;
     private string? _officialLimitsMetadataText;
     private IReadOnlyList<OfficialLimitRow> _antigravityLimitRows = Array.Empty<OfficialLimitRow>();
+    private IReadOnlyList<OfficialLimitRow> _officialLimitRows = Array.Empty<OfficialLimitRow>();
+    private IReadOnlyList<ProviderStatusSnapshot> _providerStatuses = Array.Empty<ProviderStatusSnapshot>();
+    private string? _providerStatusText;
+    private string? _providerAuthStatusText;
+    private string? _creditsText;
+    private string? _burnRateText;
+    private string? _forecastText;
     private LimitDisplayMode _limitDisplayMode = LimitDisplayMode.Remaining;
 
     public UsageViewModel(
         UsageStore store,
         string? preferredProviderId = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        LocalizationService? localization = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _preferredProviderId = preferredProviderId;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _localization = localization ?? new LocalizationService(AppLanguage.En);
         RefreshCommand = new AsyncCommand(
             RefreshAsync,
             () => !IsRefreshing,
@@ -576,6 +586,71 @@ public sealed class UsageViewModel : INotifyPropertyChanged
 
     public bool HasAntigravityLimitRows => AntigravityLimitRows.Count > 0;
 
+    public IReadOnlyList<OfficialLimitRow> OfficialLimitRows
+    {
+        get => _officialLimitRows;
+        private set
+        {
+            if (SetField(ref _officialLimitRows, value))
+            {
+                OnPropertyChanged(nameof(HasOfficialLimitRows));
+            }
+        }
+    }
+
+    public bool HasOfficialLimitRows => OfficialLimitRows.Count > 0;
+
+    public IReadOnlyList<ProviderStatusSnapshot> ProviderStatuses
+    {
+        get => _providerStatuses;
+        private set => SetField(ref _providerStatuses, value);
+    }
+
+    public string? ProviderStatusText
+    {
+        get => _providerStatusText;
+        private set => SetField(ref _providerStatusText, value);
+    }
+
+    public string? ProviderAuthStatusText
+    {
+        get => _providerAuthStatusText;
+        private set => SetField(ref _providerAuthStatusText, value);
+    }
+
+    public string? CreditsText
+    {
+        get => _creditsText;
+        private set
+        {
+            if (SetField(ref _creditsText, value)) OnPropertyChanged(nameof(HasCredits));
+        }
+    }
+
+    public bool HasCredits => CreditsText is not null;
+
+    public string? BurnRateText
+    {
+        get => _burnRateText;
+        private set
+        {
+            if (SetField(ref _burnRateText, value)) OnPropertyChanged(nameof(HasBurnForecast));
+        }
+    }
+
+    public string? ForecastText
+    {
+        get => _forecastText;
+        private set
+        {
+            if (SetField(ref _forecastText, value)) OnPropertyChanged(nameof(HasBurnForecast));
+        }
+    }
+
+    public bool HasBurnForecast => BurnRateText is not null || ForecastText is not null;
+
+    internal void RefreshPresentation() => ApplyStoreState();
+
     public Task RefreshAsync(CancellationToken cancellationToken = default) =>
         RefreshAsync(scheduleEmptyRetry: true, cancellationToken);
 
@@ -625,6 +700,8 @@ public sealed class UsageViewModel : INotifyPropertyChanged
     private void ApplyStoreState()
     {
         Providers = new ReadOnlyCollection<ProviderSnapshot>(_store.Snapshots.ToArray());
+        ProviderStatuses = new ReadOnlyCollection<ProviderStatusSnapshot>(
+            _store.ProviderStatuses.ToArray());
         var selected = _store.Snapshot(PreferredProviderId);
         SetField(ref _selectedProviderId, selected?.ProviderId, nameof(SelectedProviderId));
         ProviderName = selected?.DisplayName;
@@ -652,6 +729,21 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         ErrorMessage = _store.LastErrorDescription;
         LastUpdated = _store.LastUpdated;
         LastUpdatedText = FormatRelative(_store.LastUpdated);
+        var providerStatus = ProviderStatuses.FirstOrDefault(status =>
+            status.ProviderId == selected?.ProviderId);
+        if (providerStatus is not null)
+        {
+            var runtime = IsOfficialLimitsStale(providerStatus.ProviderId)
+                ? ProviderRuntimeStatus.Stale
+                : providerStatus.RuntimeStatus;
+            ProviderStatusText = _localization.RuntimeStatus(runtime);
+            ProviderAuthStatusText = _localization.AuthStatus(providerStatus.AuthStatus);
+        }
+        else
+        {
+            ProviderStatusText = null;
+            ProviderAuthStatusText = null;
+        }
         ApplyOfficialLimits(selected?.ProviderId);
     }
 
@@ -661,8 +753,12 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         double? secondaryUsed = null;
         DateTimeOffset? primaryReset = null;
         DateTimeOffset? secondaryReset = null;
+        var rows = new List<OfficialLimitRow>();
         OfficialLimitsMetadataText = null;
         AntigravityLimitRows = Array.Empty<OfficialLimitRow>();
+        CreditsText = null;
+        BurnRateText = null;
+        ForecastText = null;
 
         if (selectedProviderId == "codex")
         {
@@ -674,6 +770,44 @@ public sealed class UsageViewModel : INotifyPropertyChanged
             secondaryUsed = snapshot?.Secondary?.UsedPercent;
             primaryReset = snapshot?.Primary?.ResetsAt;
             secondaryReset = snapshot?.Secondary?.ResetsAt;
+            var buckets = status?.VisibleSnapshots ?? [];
+            foreach (var bucket in buckets)
+            {
+                var prefix = buckets.Count > 1 ? $"{BucketLabel(bucket)} · " : "";
+                if (bucket.Primary is { } primary)
+                {
+                    rows.Add(LimitRow(prefix + WindowLabel(primary.WindowDurationMinutes),
+                        primary.UsedPercent, primary.ResetsAt));
+                }
+                if (bucket.Secondary is { } secondary)
+                {
+                    rows.Add(LimitRow(prefix + WindowLabel(secondary.WindowDurationMinutes),
+                        secondary.UsedPercent, secondary.ResetsAt));
+                }
+                if (bucket.IndividualLimit is { } spend)
+                {
+                    rows.Add(LimitRow(prefix + _localization.PersonalSpendLimit,
+                        spend.UsedPercent, spend.ResetsAt, $"{spend.Used} / {spend.Limit}"));
+                }
+            }
+
+            var credits = status?.Snapshots.Select(static bucket => bucket.Credits)
+                .FirstOrDefault(static value => value?.Unlimited == true ||
+                    (value?.HasCredits == true && !string.IsNullOrWhiteSpace(value.Balance)));
+            CreditsText = credits?.Unlimited == true
+                ? $"{_localization.Credits}: ∞"
+                : credits?.Balance is { Length: > 0 } balance
+                    ? $"{_localization.Credits}: {balance}"
+                    : null;
+            var plan = status?.RateLimits.PlanType ?? status?.VisibleSnapshots.FirstOrDefault()?.PlanType;
+            OfficialLimitsMetadataText = string.Join(" · ", new[]
+            {
+                string.IsNullOrWhiteSpace(plan) ? null : $"{_localization.Plan}: {plan}",
+                status?.VisibleSnapshots.Any(static bucket => bucket.RateLimitReachedType is not null) == true
+                    ? _localization.LimitReached : null,
+                _store.CodexRateLimitsStale ? _localization.Stale : null,
+            }.Where(static value => value is not null)!);
+            if (OfficialLimitsMetadataText.Length == 0) OfficialLimitsMetadataText = null;
         }
         else if (selectedProviderId == "claude_code")
         {
@@ -690,6 +824,25 @@ public sealed class UsageViewModel : INotifyPropertyChanged
             {
                 OfficialLimitsMetadataText = null;
             }
+            if (status?.FiveHour is { } fiveHour)
+            {
+                rows.Add(LimitRow(_localization.FiveHourSession, fiveHour.UsedPercent, fiveHour.ResetsAt));
+            }
+            if (status?.SevenDay is { } weekly)
+            {
+                rows.Add(LimitRow(_localization.Weekly, weekly.UsedPercent, weekly.ResetsAt));
+            }
+            if (_store.ClaudeBurnPerMinute is double burn && burn > 0 && double.IsFinite(burn))
+            {
+                BurnRateText = $"{_localization.BurnRate}: {UsageValueFormatter.Compact((long)Math.Round(burn))}/min";
+            }
+            if (status?.FiveHour is not null || _store.ClaudeBurnPerMinute is not null)
+            {
+                var forecast = _store.ClaudeFiveHourForecast;
+                ForecastText = forecast?.BeforeReset == true
+                    ? $"{_localization.Forecast}: {forecast.DepletionTime.ToLocalTime():HH:mm}"
+                    : $"{_localization.Forecast}: {_localization.NoProjection}";
+            }
         }
         else if (selectedProviderId == "antigravity")
         {
@@ -700,7 +853,10 @@ public sealed class UsageViewModel : INotifyPropertyChanged
                     LimitText(bucket.UsedPercent),
                     FormatReset(bucket.ResetsAt))))
                 .ToArray() ?? Array.Empty<OfficialLimitRow>();
+            rows.AddRange(AntigravityLimitRows);
         }
+
+        OfficialLimitRows = rows;
 
         HasFiveHourLimit = primaryUsed is not null;
         FiveHourRemainingPercent = DisplayPercent(primaryUsed, _limitDisplayMode);
@@ -711,12 +867,47 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         WeeklyRemainingPercent = DisplayPercent(secondaryUsed, _limitDisplayMode);
         WeeklyRemainingText = secondaryUsed is null ? null : LimitText(secondaryUsed.Value);
         WeeklyResetText = FormatReset(secondaryReset);
-        HasCodexRateLimits = HasFiveHourLimit || HasWeeklyLimit || HasAntigravityLimitRows;
+        HasCodexRateLimits = HasOfficialLimitRows || CreditsText is not null || HasBurnForecast;
     }
+
+    private OfficialLimitRow LimitRow(
+        string label,
+        double usedPercent,
+        DateTimeOffset? reset,
+        string? detail = null) =>
+        new(label, DisplayPercent(usedPercent, _limitDisplayMode), LimitText(usedPercent),
+            FormatReset(reset), detail);
+
+    private string WindowLabel(int? minutes) => minutes switch
+    {
+        300 => _localization.FiveHourSession,
+        10_080 => _localization.Weekly,
+        int value when value >= 60 && value % 60 == 0 => _localization.HourWindow(value / 60),
+        int value => _localization.MinuteWindow(value),
+        null => _localization.Limit,
+    };
+
+    private static string BucketLabel(CodexRateLimitSnapshot snapshot)
+    {
+        var raw = snapshot.LimitName ?? snapshot.LimitId ?? "Codex";
+        var spaced = raw.Replace('_', ' ');
+        return spaced.Length == 0 ? "Codex" : char.ToUpperInvariant(spaced[0]) + spaced[1..];
+    }
+
+    private bool IsOfficialLimitsStale(string providerId) => providerId switch
+    {
+        "codex" => _store.CodexRateLimitsStale,
+        "claude_code" => _store.ClaudeRateLimitsStale,
+        "antigravity" => _store.AntigravityRateLimitsStale,
+        _ => false,
+    };
 
     private string LimitText(double usedPercent)
     {
-        var suffix = _limitDisplayMode == LimitDisplayMode.Remaining ? "remaining" : "used";
+        var suffix = _limitDisplayMode == LimitDisplayMode.Remaining
+            ? _localization.Remaining
+            : _localization.Used;
+        if (_localization.Language == AppLanguage.En) suffix = suffix.ToLowerInvariant();
         return $"{DisplayPercent(usedPercent, _limitDisplayMode)}% {suffix}";
     }
 

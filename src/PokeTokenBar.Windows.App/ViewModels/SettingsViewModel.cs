@@ -41,6 +41,8 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
     private string _selectedRootProviderId = "codex";
     private string _customRootText = "";
     private string? _customRootStatus;
+    private IReadOnlyList<ProviderStatusSnapshot> _providerStatuses = Array.Empty<ProviderStatusSnapshot>();
+    private IReadOnlyList<ProviderStatusRow> _providerStatusRows = Array.Empty<ProviderStatusRow>();
     private string? _errorMessage;
 
     public SettingsViewModel(
@@ -152,6 +154,7 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
             SaveSettings();
             OnPropertyChanged(nameof(LimitDisplayOptions));
             OnPropertyChanged(nameof(AnimationQualityOptions));
+            RefreshProviderStatusRows();
             LanguageChanged?.Invoke(value);
         }
     }
@@ -293,6 +296,7 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
                 ? $"Ignored invalid paths: {string.Join(", ", invalid)}"
                 : null;
             SaveSettings();
+            RefreshProviderStatusRows();
             CustomRootsChanged?.Invoke(this, EventArgs.Empty);
         }
     }
@@ -303,11 +307,33 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
         private set => SetField(ref _customRootStatus, value);
     }
 
+    public IReadOnlyList<ProviderStatusRow> ProviderStatusRows
+    {
+        get => _providerStatusRows;
+        private set => SetField(ref _providerStatusRows, value);
+    }
+
+    internal void UpdateProviderStatuses(IReadOnlyList<ProviderStatusSnapshot> statuses)
+    {
+        _providerStatuses = statuses ?? Array.Empty<ProviderStatusSnapshot>();
+        RefreshProviderStatusRows();
+    }
+
     internal IReadOnlyList<string> CustomRoots(string providerId) =>
         ParseRoots(CustomRootValue(providerId));
 
     internal bool HasConfiguredCustomRoot(string providerId) =>
         !string.IsNullOrWhiteSpace(CustomRootValue(providerId));
+
+    private void RefreshProviderStatusRows() => ProviderStatusRows = _providerStatuses
+        .Select(status => new ProviderStatusRow(
+            status.DisplayName,
+            Localization.RuntimeStatus(status.RuntimeStatus),
+            Localization.AuthStatus(status.AuthStatus),
+            HasConfiguredCustomRoot(status.ProviderId)
+                ? Localization.CustomRootConfigured
+                : Localization.DefaultRoots))
+        .ToArray();
 
     internal string? SkippedUpdateVersion => _settings.SkippedUpdateVersion;
 

@@ -6,9 +6,9 @@ This is a code-based parity audit, not an implementation plan disguised as compl
 
 | Item | Value |
 |---|---|
-| Audit date | 2026-09-01 |
+| Audit date | 2026-09-02 |
 | Windows branch | `windows-port` |
-| Windows commit | `1e0b022` plus the Phase 6 working tree |
+| Windows commit | `514e9d9` plus the Phase 7A working tree |
 | macOS baseline | `upstream/main` at `37763d3c367068492c18f6e51b45977c2d27f6d5` |
 | Merge base | `4c29ca0fa28c1fb67929517542d4e58d802171f8` |
 | Initial `git status --short` | Existing unrelated `.gitignore` change and two untracked Korean documentation files |
@@ -32,9 +32,9 @@ The full matrix in section 18 contains **93 atomic feature rows**:
 
 | Status | Count | Share |
 |---|---:|---:|
-| COMPLETE | 68 | 73.1% |
-| PARTIAL | 8 | 8.6% |
-| MISSING | 4 | 4.3% |
+| COMPLETE | 72 | 77.4% |
+| PARTIAL | 7 | 7.5% |
+| MISSING | 1 | 1.1% |
 | WINDOWS EQUIVALENT | 12 | 12.9% |
 | MAC-ONLY / N/A | 1 | 1.1% |
 
@@ -49,7 +49,7 @@ These counts deliberately do not award parity merely because a model type or dor
 | Priority | Gap | macOS behavior | Windows state | Size | Dependencies | Principal files |
 |---|---|---|---|---|---|---|
 | P1 | Companion product UI | Home shows progression and celebrations; Shop, Bag, Collection, catch log, dex details, and representative selection are reachable. | Home, Shop, Bag, and Collection are reachable; celebrations and richer dex details remain absent. | M | Celebration/detail presentation | macOS `CompanionView.swift`, `ShopView.swift`, `BagView.swift`, `PopoverView.swift`; Windows `MainWindow.xaml` |
-| P1 | Full settings surface | Language, refresh, animation quality, limit mode, menu content, floating size/bubbles, notifications, thresholds, provider roots/auth, updates, and save transfer are configurable. | User-facing runtime, update, transfer, and root controls are connected; provider auth/status and configurable tray-content controls remain. | M | Remaining product settings | macOS `SettingsView.swift`, `Core/UsageStore.swift`; Windows `MainWindow.xaml`, `SettingsViewModel.cs`, `SupportViewModel.cs` |
+| P1 | Full settings surface | Language, refresh, animation quality, limit mode, menu content, floating size/bubbles, notifications, thresholds, provider roots/auth, updates, and save transfer are configurable. | User-facing runtime, update, transfer, roots, and read-only provider/auth status are connected; configurable tray-content and credential controls remain. | M | Remaining product settings | macOS `SettingsView.swift`, `Core/UsageStore.swift`; Windows `MainWindow.xaml`, `SettingsViewModel.cs`, `SupportViewModel.cs` |
 | P2 | Release signing and installer QA | macOS release workflow signs and packages releases. | Reproducible portable zip and Inno Setup source exist; a signing identity is intentionally absent and real installer compile/install QA is pending. | M | Release environment and signing identity | macOS release scripts; Windows `scripts/build-release.ps1`, `installer/PokeTokenBar.iss`, `WINDOWS_RELEASE.md` |
 
 ## 4. Usage Providers
@@ -77,13 +77,25 @@ Windows `IUsageProvider`, `UsageSnapshot`, and provider-selector plumbing are re
 
 The Windows Codex data path is one of the most complete parts of the port. `UsageStore.RefreshAsync` coalesces refreshes, performs daily and enrichment work, preserves stale snapshots on failure, and retains a provider when daily usage is empty but another period or official limit exists. `UsageViewModel.ApplyOfficialLimits` converts provider-level used percentages into clamped remaining values for the UI. `MainWindow.xaml` displays Today, Recent 5 hours, This week, This month, and official 5-hour/weekly reset information.
 
-Remaining gaps:
+Phase 7A outcomes and remaining gaps:
 
 - Windows `UsagePollingController` matches the macOS Manual/1/2/5/15-minute schedule, defaults to two minutes, retries a truly empty successful refresh once after 20 seconds, and preserves `UsageStore` refresh coalescing.
-- Windows exposes used/remaining display preference and warning thresholds. Burn-rate forecast, provider status checks, and configurable menu-bar summaries remain absent.
-- macOS Codex UI can represent multiple buckets, plan metadata, credits/spend controls, and warnings. Windows parses richer app-server data, but `UsageViewModel.ApplyOfficialLimits` selects only primary/secondary rows.
+- Windows exposes used/remaining display preference and warning thresholds. Claude's upstream burn forecast formula and provider-local runtime/auth status are now production UI; configurable menu-bar summaries remain absent.
+- Codex now renders every deduplicated bucket, plan/reached/stale metadata, real credit balance/unlimited state, and personal spend controls without manufacturing zero values.
 - Antigravity quota groups are fetched and displayed without the existing two-row projection losing buckets. Windows reads the two known standalone token files, but OS credential-store discovery and refresh remain unverified because this machine has no Antigravity installation; quota parity is therefore partial.
 - Claude Code and Gemini are production cost-reporting providers; calculated local cost flows through the existing snapshot and UI path. Antigravity intentionally reports no per-token cost.
+
+### Phase 7A source semantics
+
+| Area | Production source / calculation | Display and fallback | Refresh |
+|---|---|---|---|
+| Codex buckets | `account/rateLimits/read`; top-level first, then sorted `rateLimitsByLimitId`, deduplicated by key/`limitId` | Every primary, secondary and personal-spend window; duration and bucket labels are preserved | Existing refresh only; failure preserves the last value, which becomes stale after 15 minutes |
+| Credits/spend | Codex credit metadata and monetary `individualLimit`; separate from the companion token wallet | Credits only for unlimited/non-empty balances; spend uses server `used / limit`; missing values are unavailable, never zero | Existing Codex refresh |
+| Burn forecast | Claude active-block tokens and token/minute divided by official 5h utilization | Requires 5–99% utilization, positive tokens, at least 10k tokens/minute, finite projection under 24h; otherwise no projection | Existing usage/limit refresh; display-only |
+| Runtime/auth status | Daily/enrichment result, retained snapshot, and official-limit result | Ready, no sessions, local-only, error or stale; authenticated/quota unavailable/not applicable; installation is not guessed | One provider failure remains isolated; no new timer |
+| Antigravity | Local SQLite/protobuf and official quota are independent | Missing quota does not hide local usage; real Windows credential-store readiness remains PARTIAL | Existing best-effort quota refresh |
+
+Upstream's status-page checker describes vendor incidents rather than local installation/authentication. Windows therefore does not infer `Not installed` or `Authentication required` from an empty local scan.
 
 ## 6. Companion / Pokemon
 
@@ -119,7 +131,7 @@ Windows persists and exposes:
 - floating size, animation quality and bubble preference,
 - per-provider additive custom scan folders.
 
-`JsonAppSettingsPersistence` stores these settings atomically in LocalAppData, ignores unknown JSON fields, and safely supplies defaults to older files. Phase 6 adds update notification/check controls, version/About information, save transfer, and diagnostics. Remaining settings gaps are configurable tray content and provider auth/status controls.
+`JsonAppSettingsPersistence` stores these settings atomically in LocalAppData, ignores unknown JSON fields, and safely supplies defaults to older files. Phase 6 adds update notification/check controls, version/About information, save transfer, and diagnostics. Phase 7A adds read-only provider runtime/auth/quota/custom-root rows. Remaining settings gaps are configurable tray content and credential controls.
 
 ## 11. Notifications
 
@@ -173,7 +185,7 @@ The most important missing behavior tests correspond to missing production featu
 2. Notification opt-in, threshold, deduplication, re-arm, and event paths are covered; native shell balloon appearance still needs manual OS-level QA.
 3. Major runtime language-switch paths are covered; untranslated detail copy prevents full localization coverage.
 4. Update checking, release selection, version metadata, save transfer, backup, rollback, and release-script contracts are covered; native dialog and trust-prompt appearance still need OS-level QA.
-5. No warning/burn forecast/provider-status behavior tests.
+5. Burn forecast, provider status/failure isolation, Codex multi-bucket, credits/spend, and localization behavior are covered; vendor status-page appearance still lacks OS-level QA.
 
 The macOS suite contains dedicated coverage for these areas, including `CompanionTests`, `RareCandyTests`, `PremiumEggTests`, `ShopTests`, `DittoTests`, `SaveTransferTests`, provider-specific suites, `CustomRootsTests`, `LocalUsageCacheTests`, and `SingleInstanceTests`. Test-count parity alone would be misleading; Windows should add tests only as each missing production slice is ported.
 
@@ -207,13 +219,13 @@ Counts in section 2 are calculated from this table only.
 | Usage | Recurring polling | Configurable timer refresh | Native timer with Manual/1/2/5/15-minute schedules | COMPLETE | `UsageStore.reschedule` | `UsagePollingController.cs` | P0 | — |
 | Usage | Empty-result retry | One 20-second retry after successful empty scan | Same; errors, month-only, and official-only are not empty | COMPLETE | `UsageStore.handleEmptyUsageRetry` | `UsagePollingController.EvaluateEmptyRetry` | P1 | — |
 | Usage | Custom scan roots | Per-provider configured roots | Twelve provider-specific additive roots persist and apply on the next refresh | COMPLETE | `CustomRoots`; persisted `UsageStore` settings | `ConfigurableUsageProvider.cs`; `SettingsViewModel.cs`; `MainWindow.xaml` | P1 | — |
-| Usage | Burn forecast | Computes burn tier/forecast | No production calculation/UI | MISSING | `UsageStore` burn fields | `UsageViewModel.cs` | P2 | M |
-| Usage | Provider status checks | Optional provider health/status | No production status layer | MISSING | `UsageStore` status checks | absent | P2 | M |
+| Usage | Burn forecast | Computes Claude 5h depletion forecast from active-block burn | Matching guarded formula and display-only forecast/burn UI | COMPLETE | `UsageStore` burn fields | `UsageStore.ForecastDepletion`; `UsageViewModel.cs`; `MainWindow.xaml` | P2 | — |
+| Usage | Provider status checks | Optional provider health/status | Provider-local refresh, stale, local-only, auth and quota states with failure isolation | COMPLETE | `UsageStore` status checks | `ProviderStatusModels.cs`; `UsageStore.cs`; `UsageViewModel.cs` | P2 | — |
 | Limits | Codex official fetch | App-server rate limits | App-server rate limits | COMPLETE | `CodexRateLimitsProvider.swift` | `CodexRateLimitsProvider.cs` | P0 | — |
 | Limits | Remaining percentages | Used/remaining selectable | Persisted used/remaining mode with clamped labels and progress bars | COMPLETE | `AppSettings.limitDisplayMode` | `UsageViewModel.ApplyOfficialLimits`; `SettingsViewModel.cs`; `MainWindow.xaml` | P0 | — |
 | Limits | Reset display | Shows reset timestamps | Shows reset timestamps | COMPLETE | `PopoverView.limitRow` | `MainWindow.xaml` | P0 | — |
-| Limits | Multiple Codex buckets | Models/displays bucket set | Parser can see richer data; UI projects primary/secondary only | PARTIAL | `CodexRateLimitsProvider` | `CodexRateLimitsProvider.cs`; `UsageViewModel.ApplyOfficialLimits` | P1 | M |
-| Limits | Plan/credits/spend | Displays plan, credits/spend controls where available | Not exposed in UI | MISSING | `CodexRateLimitsProvider`; `PopoverView` | `UsageViewModel.cs` | P1 | M |
+| Limits | Multiple Codex buckets | Models/displays bucket set | Deterministic deduplicated bucket collection renders every primary/secondary/spend row | COMPLETE | `CodexRateLimitsProvider` | `CodexRateLimitsProvider.cs`; `UsageViewModel.ApplyOfficialLimits`; `OfficialLimitRow.cs` | P1 | — |
+| Limits | Plan/credits/spend | Displays plan, credits/spend controls where available | Plan/reached/stale metadata, real credits, and monetary personal spend rows are displayed when present | COMPLETE | `CodexRateLimitsProvider`; `PopoverView` | `UsageViewModel.cs`; `MainWindow.xaml` | P1 | — |
 | Limits | Claude OAuth limits | OAuth limits/account metadata | Read-only CLI OAuth credential discovery, limits, plan, email, and organization metadata | COMPLETE | `OAuthLimitsProvider.swift` | `ClaudeCredentialProvider.cs`; `ClaudeRateLimitsProvider.cs`; `UsageViewModel.cs` | P0 | — |
 | Limits | Antigravity quota | Google quota groups | All groups/buckets displayed from read-only standalone-token auth; Windows OS-store/refresh path unverified | PARTIAL | `AntigravityRateLimitsProvider.swift` | `AntigravityRateLimitsProvider.cs`; `AntigravityCredentialProvider.cs`; `UsageViewModel.cs` | P1 | S |
 | Companion | Persisted companion restore | Restores current companion state | Restores current companion state | COMPLETE | `CompanionStore.load` | `CompanionStore.InitializeAsync`; `JsonCompanionPersistence.cs` | P0 | — |
@@ -257,7 +269,7 @@ Counts in section 2 are calculated from this table only.
 | Settings | Limit used/remaining mode | User choice | Persisted choice updates labels and progress values immediately | COMPLETE | `AppSettings.limitDisplayMode` | `UsageViewModel.ApplyOfficialLimits`; `SettingsViewModel.cs` | P2 | — |
 | Settings | Floating/animation options | Size, quality, bubble preferences | Same production settings and runtime effects | COMPLETE | `SettingsView` | `SettingsViewModel.cs`; floating/sprite presentation | P2 | — |
 | Settings | Notification/threshold options | Category toggles and 80/95 defaults | Independent limit/companion toggles and persisted ordered thresholds | COMPLETE | `AppSettings` | `AppSettings.cs`; `SettingsViewModel.cs`; `MainWindow.xaml` | P1 | — |
-| Settings | Provider roots/auth controls | Roots, Keychain opt-out, refresh controls | Twelve additive scan-root editors apply on next refresh; auth controls remain absent | PARTIAL | `SettingsView`; `CustomRoots` | `ConfigurableUsageProvider.cs`; `SettingsViewModel.cs`; `MainWindow.xaml` | P1 | M |
+| Settings | Provider roots/auth controls | Roots, Keychain opt-out, refresh controls | Twelve additive roots plus read-only runtime/auth/quota/custom-root status; credential controls remain absent | PARTIAL | `SettingsView`; `CustomRoots` | `ConfigurableUsageProvider.cs`; `ProviderStatusModels.cs`; `SettingsViewModel.cs`; `MainWindow.xaml` | P1 | M |
 | Localization | Pokémon names/natures | Seven current languages | API names/natures follow the persisted seven-language runtime selection | COMPLETE | `Localization.swift`; model helpers | `AppLanguageRules`; `PokeApiClient.cs`; `CompanionViewModel.cs` | P1 | — |
 | Localization | Full application UI | Seven-language UI strings | Major popup/settings/tray/floating/notification strings switch live; some economy detail copy falls back to English | PARTIAL | `Localization.swift` | `LocalizationService.cs`; `MainWindow.xaml`; tray/floating view models | P1 | M |
 | Notifications | Limit warning/critical | Configurable, deduped notifications | Persisted edge-triggered `NotifyIcon` balloon and floating bubble equivalent | WINDOWS EQUIVALENT | app notification routing; `UsageStore` | `NotificationController.cs`; `LimitNotificationEvaluator` | P1 | — |
@@ -299,7 +311,7 @@ Completed in Windows Phase 4: candy rewards, wallet/inventory mutations, Rare Ca
 
 ### Phase D — Alerts, settings, and localization — complete
 
-Completed in Windows Phase 5 with native notification-area balloons, persisted threshold tiers, floating bubbles, refresh/limit/floating/root settings, and a runtime seven-language resource catalog. Provider status and burn displays remain separate product work.
+Completed in Windows Phase 5 with native notification-area balloons, persisted threshold tiers, floating bubbles, refresh/limit/floating/root settings, and a runtime seven-language resource catalog. Phase 7A added provider status and burn displays without a second polling path.
 
 **Exit criteria:** all user-facing strings switch language; warning and companion notifications respect settings and do not spam; floating size/quality/bubbles persist.
 
