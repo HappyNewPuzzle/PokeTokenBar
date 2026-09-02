@@ -6,6 +6,7 @@ public enum NotificationKind
     LimitCritical,
     Hatch,
     Evolution,
+    DittoReveal,
     Graduation,
     Reward,
 }
@@ -14,6 +15,7 @@ public enum CompanionGameEventKind
 {
     Hatch,
     Evolution,
+    DittoReveal,
     Graduation,
     Reward,
 }
@@ -21,7 +23,9 @@ public enum CompanionGameEventKind
 public sealed record CompanionGameEvent(
     CompanionGameEventKind Kind,
     int? SpeciesId = null,
-    int Count = 0);
+    int Count = 0,
+    int? PreviousSpeciesId = null,
+    bool IsShiny = false);
 
 public sealed record NotificationMessage(
     string Id,

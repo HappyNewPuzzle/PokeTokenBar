@@ -72,6 +72,7 @@ public sealed partial class AppCompositionTests
             composition.ViewModel.Companion,
             "_store");
         Assert.IsType<PokeApiClient>(GetPrivateField<IPokeApiClient>(companionStore, "_provider"));
+        Assert.True(GetPrivateField<bool>(companionStore, "_dittoDisguiseRollingEnabled"));
         Assert.Equal(1, persistence.LoadCalls);
         Assert.Equal(0, handler.RequestCalls);
     }

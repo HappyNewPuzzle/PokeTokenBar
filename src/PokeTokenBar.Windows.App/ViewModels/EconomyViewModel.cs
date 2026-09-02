@@ -171,7 +171,7 @@ public sealed class EconomyViewModel : INotifyPropertyChanged
                     speciesId,
                     _store.CurrentLine?.LocalizedName(speciesId, _store.State.Language) ?? $"#{speciesId}",
                     active.Rarity,
-                    active.IsShiny,
+                    _store.CurrentIsShiny,
                     active.Nature,
                     speciesId == active.CurrentId,
                     null);

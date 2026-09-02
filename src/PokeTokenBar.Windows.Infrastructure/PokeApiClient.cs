@@ -11,7 +11,7 @@ public sealed class PokeApiClient : IPokeApiClient
     private static readonly Uri RestBaseUri = new("https://pokeapi.co/api/v2/");
     private static readonly Uri GraphQlUri = new("https://graphql.pokeapi.co/v1beta2");
     private static readonly HashSet<string> SupportedLanguageCodes =
-        ["ko", "en", "ja-Hrkt", "ja", "es", "fr", "pt"];
+        ["ko", "en", "ja-Hrkt", "ja", "es", "fr", "pt", "de"];
 
     private readonly HttpClient _httpClient;
     private readonly TimeSpan _requestTimeout;

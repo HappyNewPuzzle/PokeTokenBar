@@ -44,7 +44,10 @@ public static class AppComposition
         ArgumentNullException.ThrowIfNull(autoStartService);
 
         var api = new PokeApiClient(httpClient);
-        var companionStore = new CompanionStore(api, persistence);
+        var companionStore = new CompanionStore(
+            api,
+            persistence,
+            dittoDisguiseRollingEnabled: true);
         var settings = new SettingsViewModel(
             settingsPersistence, autoStartService, companionStore.State.Language);
         var usage = CreateUsageViewModel(

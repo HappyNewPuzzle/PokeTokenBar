@@ -8,7 +8,7 @@ This is a code-based parity audit, not an implementation plan disguised as compl
 |---|---|
 | Audit date | 2026-09-02 |
 | Windows branch | `windows-port` |
-| Windows commit | `c99d268` plus the Phase 7C working tree |
+| Windows commit | `97e629c` plus the Phase 7D working tree |
 | macOS baseline | `upstream/main` at `37763d3c367068492c18f6e51b45977c2d27f6d5` |
 | Merge base | `4c29ca0fa28c1fb67929517542d4e58d802171f8` |
 | Initial `git status --short` | Existing unrelated `.gitignore` change and two untracked Korean documentation files |
@@ -32,9 +32,9 @@ The full matrix in section 18 contains **93 atomic feature rows**:
 
 | Status | Count | Share |
 |---|---:|---:|
-| COMPLETE | 76 | 81.7% |
+| COMPLETE | 77 | 82.8% |
 | PARTIAL | 3 | 3.2% |
-| MISSING | 1 | 1.1% |
+| MISSING | 0 | 0.0% |
 | WINDOWS EQUIVALENT | 12 | 12.9% |
 | MAC-ONLY / N/A | 1 | 1.1% |
 
@@ -99,9 +99,9 @@ Upstream's status-page checker describes vendor incidents rather than local inst
 
 ## 6. Companion / Pokemon
 
-Windows now connects every successful usage refresh to one provider-neutral companion seam. `CompanionStore` seeds the first valid daily observation, consumes independent provider deltas, handles date rollover/regression/disappearance, carries egg and evolution overflow, persists planned branches, graduates into the dex/catch history, and starts the next egg. Automatic hatch reuses the existing weighted PokeAPI selection and rarity/nature/shiny rules; the view model updates immediately and state survives restart.
+Windows now connects every successful usage refresh to one provider-neutral companion seam. `CompanionStore` seeds the first valid daily observation, consumes independent provider deltas, handles date rollover/regression/disappearance, carries egg and evolution overflow, persists planned branches, graduates into the dex/catch history, and starts the next egg. Automatic hatch reuses the existing weighted PokeAPI selection and rarity/nature/shiny rules. Common multi-form hatches can disguise Ditto at the upstream 1/128 rate; the first evolution threshold reveals rare single-form #132 while preserving overflow, shiny state, nature, persistence, representative validity, and the normal graduation path. The view model, floating pet, tray subject, collection, and localized event notification all reuse their existing shared state paths.
 
-The remaining companion gaps are Ditto disguise/reveal, richer celebrations, and richer dex detail presentation.
+The remaining companion presentation gaps are richer celebrations and richer dex detail presentation.
 
 ## 7. Economy / Shop / Items
 
@@ -181,9 +181,9 @@ Windows has strong tests around all twelve registered providers, including JSON/
 
 Phase 7C adds focused coverage for recoverable/fatal exception boundaries, tray and background-task containment, atomic cache persistence and corruption handling, all twelve canonical IDs, independent period rollover, offline stale preservation, fresh replacement, and restart-safe Companion/economy ledgers.
 
-The most important missing behavior tests correspond to missing production features:
+The remaining environment or presentation checks are:
 
-1. No Ditto lifecycle tests.
+1. Ditto roll eligibility, disguise/reveal, overflow, traits, items, persistence, duplicate-snapshot prevention, representative, Dex, localized notification, and shared sprite/view-model paths are covered.
 2. Notification opt-in, threshold, deduplication, re-arm, and event paths are covered; native shell balloon appearance still needs manual OS-level QA.
 3. Seven-language catalog, detailed economy/settings/support copy, runtime switching, and selected-view hardcoded-string guards are covered.
 4. Update checking, release selection, version metadata, save transfer, backup, rollback, and release-script contracts are covered; native dialog and trust-prompt appearance still need OS-level QA.
@@ -239,7 +239,7 @@ Counts in section 2 are calculated from this table only.
 | Companion | Graduation/new egg | Graduates final stage and starts cycle | Final stage graduates and starts a zero-progress egg | COMPLETE | `CompanionStore.graduate` | `CompanionStore.GraduateCore` | P0 | — |
 | Companion | Dex/catch log mutation | Captures update dex and log | Graduation persists individual dex/catch entries; presentation UI remains separate | COMPLETE | `CompanionStore.graduate`; `CompanionView` | `CompanionStore.GraduateCore`; `JsonCompanionPersistence.cs` | P1 | — |
 | Companion | Rarity/nature/shiny roll | Weighted hatch/capture attributes | Production auto-hatch uses weighted species and persists rarity/nature/shiny | COMPLETE | `CompanionStore` sampling | `CompanionStore.HatchRandomAsync` | P1 | — |
-| Companion | Ditto disguise/reveal | Full disguise/reveal lifecycle | No production lifecycle | MISSING | `CompanionStore`; `DittoTests` | absent | P2 | M |
+| Companion | Ditto disguise/reveal | Full disguise/reveal lifecycle | Common multi-form hatches roll 1/128, reveal #132 at the first evolution threshold, preserve traits/overflow, and continue through persistence, UI, items, Dex, and graduation | COMPLETE | `CompanionStore`; `DittoTests` | `CompanionStore.cs`; `DittoLifecycleTests.cs` | P2 | — |
 | Economy | Currency rewards/ledger | Usage and events grant currency | Usage-backed wallet and official-window candy ledger persist atomically | COMPLETE | `CompanionStore.grantCandies` | `CompanionEconomy.cs`; `CompanionStore.cs`; `UsageCompanionController.cs` | P1 | — |
 | Economy | Shop/purchases | Purchases validated and persisted | Prices, balance validation, ownership, and inventory purchases are connected to Shop UI | COMPLETE | `CompanionStore.buy`; `ShopView.swift` | `CompanionStore.PurchaseAsync`; `EconomyViewModel.cs`; `MainWindow.xaml` | P1 | — |
 | Economy | Rare Candy | Inventory item advances progress | Adds 100M progress through the production hatch/evolution/graduation path | COMPLETE | `CompanionStore.useRareCandy` | `CompanionStore.UseItemAsync`; `EconomyViewModel.cs` | P1 | — |

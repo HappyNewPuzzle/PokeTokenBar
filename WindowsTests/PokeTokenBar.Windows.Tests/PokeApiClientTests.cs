@@ -41,7 +41,7 @@ public sealed class PokeApiClientTests : IDisposable
         Assert.Equal(2, Assert.Single(line.Tree.Children).SpeciesId);
         Assert.Equal("이상해씨", line.Names[1]["ko"]);
         Assert.Equal("Bulbasaur", line.Names[1]["en"]);
-        Assert.False(line.Names[1].ContainsKey("de"));
+        Assert.Equal("ignored", line.Names[1]["de"]);
     }
 
     [Fact]

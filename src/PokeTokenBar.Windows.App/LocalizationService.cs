@@ -80,11 +80,23 @@ public sealed class LocalizationService : INotifyPropertyChanged
     public string NotificationCriticalTitle => T("한도 임박", "Limit critical", "上限切迫", "Límite crítico", "Limite critique", "Limite crítico", "Limit kritisch");
     public string HatchTitle => T("부화!", "Hatched!", "孵化！", "¡Eclosionó!", "Éclosion !", "Chocou!", "Geschlüpft!");
     public string EvolutionTitle => T("진화!", "Evolution!", "進化！", "¡Evolución!", "Évolution !", "Evolução!", "Entwicklung!");
+    public string DittoRevealTitle => T("메타몽!", "Ditto revealed!", "メタモン！", "¡Era Ditto!", "C'était Métamorph !", "Era Ditto!", "Ditto enthüllt!");
+    public string ShinyDittoRevealTitle => T("이로치 메타몽!", "Shiny Ditto revealed!", "色違いのメタモン！", "¡Era un Ditto variocolor!", "C'était un Métamorph chromatique !", "Era um Ditto brilhante!", "Schillerndes Ditto enthüllt!");
     public string GraduationTitle => T("졸업!", "Graduation!", "卒業！", "¡Graduación!", "Diplôme !", "Graduação!", "Abschluss!");
     public string RewardTitle => T("보상 획득", "Reward earned", "報酬獲得", "Recompensa obtenida", "Récompense obtenue", "Recompensa recebida", "Belohnung erhalten");
     public string CompanionEventBody(int? speciesId) => speciesId is int id
         ? $"Pokémon #{id}"
         : "PokeTokenBar";
+    public string DittoRevealBody(int? disguiseSpeciesId) => disguiseSpeciesId is int id
+        ? T(
+            $"Pokémon #{id}의 정체는 메타몽이었어요!",
+            $"Pokémon #{id} was Ditto in disguise!",
+            $"Pokémon #{id}の正体はメタモンでした！",
+            $"¡Pokémon #{id} era Ditto disfrazado!",
+            $"Le Pokémon #{id} était Métamorph déguisé !",
+            $"Pokémon #{id} era um Ditto disfarçado!",
+            $"Pokémon #{id} war ein verkleidetes Ditto!")
+        : CompanionEventBody(PokemonOdds.DittoSpeciesId);
     public string RewardBody(int count) => T($"희귀사탕 ×{count}", $"Rare Candy ×{count}", $"ふしぎなアメ ×{count}", $"Caramelo Raro ×{count}", $"Super Bonbon ×{count}", $"Doce Raro ×{count}", $"Sonderbonbon ×{count}");
     public string PercentUsed(string window, double percent) => T(
         $"{window}: {percent:0}% 사용", $"{window}: {percent:0}% used", $"{window}: {percent:0}% 使用",

@@ -6,6 +6,7 @@ public sealed class CompanionStore
     private readonly ICompanionPersistence _persistence;
     private readonly Random _random;
     private readonly TimeProvider _timeProvider;
+    private readonly bool _dittoDisguiseRollingEnabled;
     private readonly SemaphoreSlim _mutationGate = new(1, 1);
 
     public event EventHandler<CompanionGameEvent>? GameEventOccurred;
@@ -14,12 +15,14 @@ public sealed class CompanionStore
         IPokeApiClient provider,
         ICompanionPersistence persistence,
         Random? random = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        bool dittoDisguiseRollingEnabled = false)
     {
         _provider = provider ?? throw new ArgumentNullException(nameof(provider));
         _persistence = persistence ?? throw new ArgumentNullException(nameof(persistence));
         _random = random ?? Random.Shared;
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _dittoDisguiseRollingEnabled = dittoDisguiseRollingEnabled;
         State = NormalizeState(TryLoad() ?? new CompanionState());
         DisplayState = State.Active is null
             ? CompanionStateKind.Egg
@@ -110,7 +113,15 @@ public sealed class CompanionStore
 
         try
         {
-            return await LoadCurrentLineCoreAsync(cancellationToken).ConfigureAwait(false);
+            var previous = State;
+            var loaded = await LoadCurrentLineCoreAsync(cancellationToken).ConfigureAwait(false);
+            if (loaded)
+            {
+                await ApplyUsageCoreAsync(0, cancellationToken).ConfigureAwait(false);
+                PublishCompanionChanges(previous, State);
+            }
+
+            return loaded;
         }
         finally
         {
@@ -268,7 +279,11 @@ public sealed class CompanionStore
             var previousRepresentative = RepresentativeSubject;
             var beforeStage = State.Active.StageIndex;
             State = State with { Inventory = DecrementedInventory(kind) };
-            ApplyUsageCore(CompanionEconomyRules.RareCandyExperience, save: false);
+            await ApplyUsageCoreAsync(
+                    CompanionEconomyRules.RareCandyExperience,
+                    cancellationToken,
+                    save: false)
+                .ConfigureAwait(false);
             var result = State.Active is null
                 ? ItemUseResult.Graduated
                 : State.Active.StageIndex > beforeStage
@@ -478,7 +493,7 @@ public sealed class CompanionStore
                 }
                 else
                 {
-                    ApplyUsageCore(delta);
+                    await ApplyUsageCoreAsync(delta, cancellationToken).ConfigureAwait(false);
                 }
             }
 
@@ -619,7 +634,7 @@ public sealed class CompanionStore
             await LoadCurrentLineCoreAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        ApplyUsageCore(0);
+        await ApplyUsageCoreAsync(0, cancellationToken).ConfigureAwait(false);
         if (DisplayState != CompanionStateKind.LevelUp)
         {
             DisplayState = State.Active is null
@@ -661,7 +676,10 @@ public sealed class CompanionStore
         }
     }
 
-    private void ApplyUsageCore(long delta, bool save = true)
+    private async Task ApplyUsageCoreAsync(
+        long delta,
+        CancellationToken cancellationToken,
+        bool save = true)
     {
         if (State.Active is not MonState active)
         {
@@ -691,6 +709,17 @@ public sealed class CompanionStore
             if (node is null)
             {
                 break;
+            }
+
+            if (current.DittoDisguise is not null && !current.DittoRevealed)
+            {
+                if (!await RevealDittoCoreAsync(current, threshold, cancellationToken)
+                        .ConfigureAwait(false))
+                {
+                    break;
+                }
+
+                continue;
             }
 
             if (node.Children.Count == 0)
@@ -736,6 +765,62 @@ public sealed class CompanionStore
         {
             TrySave();
         }
+    }
+
+    public static bool DittoDisguiseHit(PokemonRarity rarity, int totalForms, int roll) =>
+        rarity == PokemonRarity.Common &&
+        totalForms >= 2 &&
+        roll % PokemonOdds.DittoDisguiseDenominator == 0;
+
+    private async Task<bool> RevealDittoCoreAsync(
+        MonState disguise,
+        long firstEvolutionThreshold,
+        CancellationToken cancellationToken)
+    {
+        EvoLine dittoLine;
+        try
+        {
+            dittoLine = await _provider
+                .GetLineAsync(PokemonOdds.DittoSpeciesId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+
+        if (!ReferenceEquals(State.Active, disguise) ||
+            disguise.DittoDisguise is null ||
+            disguise.DittoRevealed ||
+            disguise.UsedAtStage < firstEvolutionThreshold)
+        {
+            return false;
+        }
+
+        var plan = BuildEvolutionPlan(dittoLine.Tree, dittoLine.BaseId);
+        State = State with
+        {
+            Active = disguise with
+            {
+                BaseId = dittoLine.BaseId,
+                PathIds = [dittoLine.BaseId],
+                PlannedPathIds = plan,
+                StageIndex = 0,
+                UsedAtStage = Math.Max(0, disguise.UsedAtStage - firstEvolutionThreshold),
+                Rarity = dittoLine.Rarity,
+                TotalForms = plan.Count,
+                DittoRevealed = true,
+            },
+        };
+        ReconcileRepresentativeSelection();
+        CurrentLine = dittoLine;
+        DisplayState = CompanionStateKind.LevelUp;
+        RefreshRepresentativeSubject();
+        return true;
     }
 
     private EvoNode PickEvolutionChild(EvoNode node, int baseId)
@@ -895,8 +980,21 @@ public sealed class CompanionStore
         }
 
         var overflow = Math.Max(0, State.EggUsage - PokemonBalance.EggHatchThreshold);
-        var plan = BuildEvolutionPlan(line.Tree, line.BaseId);
         var natures = Enum.GetValues<PokemonNature>();
+        var isShiny = CompanionEconomyRules.RollsShiny(
+            _random.Next(OwnsShinyCharm
+                ? CompanionEconomyRules.ShinyCharmDenominator
+                : PokemonOdds.ShinyDenominator),
+            OwnsShinyCharm);
+        var nature = natures[_random.Next(natures.Length)];
+        var dittoDisguise = _dittoDisguiseRollingEnabled &&
+                            DittoDisguiseHit(
+                                line.Rarity,
+                                line.TotalForms,
+                                _random.Next(PokemonOdds.DittoDisguiseDenominator))
+            ? line.BaseId
+            : (int?)null;
+        var plan = BuildEvolutionPlan(line.Tree, line.BaseId);
         var active = new MonState
         {
             BaseId = line.BaseId,
@@ -906,12 +1004,9 @@ public sealed class CompanionStore
             UsedAtStage = 0,
             Rarity = line.Rarity,
             TotalForms = plan.Count,
-            IsShiny = CompanionEconomyRules.RollsShiny(
-                _random.Next(OwnsShinyCharm
-                    ? CompanionEconomyRules.ShinyCharmDenominator
-                    : PokemonOdds.ShinyDenominator),
-                OwnsShinyCharm),
-            Nature = natures[_random.Next(natures.Length)],
+            IsShiny = isShiny,
+            Nature = nature,
+            DittoDisguise = dittoDisguise,
         };
 
         State = State with
@@ -926,7 +1021,7 @@ public sealed class CompanionStore
         RefreshRepresentativeSubject();
         if (overflow > 0)
         {
-            ApplyUsageCore(overflow);
+            await ApplyUsageCoreAsync(overflow, cancellationToken).ConfigureAwait(false);
         }
 
         TrySave();
@@ -972,6 +1067,14 @@ public sealed class CompanionStore
         RepresentativeSubject = State.RepresentativeSpeciesId is int selected
             ? new RepresentativeSubject(selected, State.OwnsShinySpecies(selected))
             : new RepresentativeSubject(CurrentSpeciesId, CurrentIsShiny);
+    }
+
+    private void ReconcileRepresentativeSelection()
+    {
+        if (State.RepresentativeSpeciesId is int selected && !State.OwnsSpecies(selected))
+        {
+            State = State with { RepresentativeSpeciesId = null };
+        }
     }
 
     private CompanionState? TryLoad()
@@ -1036,10 +1139,43 @@ public sealed class CompanionStore
 
     private void PublishCompanionChanges(CompanionState previous, CompanionState current)
     {
+        if (previous.Active is null &&
+            current.Active is { DittoRevealed: true, DittoDisguise: int disguise } revealed)
+        {
+            PublishGameEvent(new CompanionGameEvent(CompanionGameEventKind.Hatch, disguise));
+            PublishGameEvent(new CompanionGameEvent(
+                CompanionGameEventKind.DittoReveal,
+                revealed.CurrentId,
+                PreviousSpeciesId: disguise,
+                IsShiny: revealed.IsShiny));
+            return;
+        }
+
+        if (previous.Active is
+                { DittoRevealed: false, DittoDisguise: int previousDisguise } hidden &&
+            current.Active is null &&
+            current.Dex.Count > previous.Dex.Count &&
+            current.Dex[^1] is { BaseId: PokemonOdds.DittoSpeciesId } ditto)
+        {
+            PublishGameEvent(new CompanionGameEvent(
+                CompanionGameEventKind.DittoReveal,
+                PokemonOdds.DittoSpeciesId,
+                PreviousSpeciesId: previousDisguise,
+                IsShiny: hidden.IsShiny));
+            PublishGameEvent(new CompanionGameEvent(
+                CompanionGameEventKind.Graduation,
+                ditto.FinalId));
+            return;
+        }
+
         CompanionGameEvent? gameEvent = null;
         if (previous.Active is null && current.Active is { } hatched)
         {
-            gameEvent = new CompanionGameEvent(CompanionGameEventKind.Hatch, hatched.CurrentId);
+            gameEvent = new CompanionGameEvent(
+                CompanionGameEventKind.Hatch,
+                hatched.CurrentId,
+                IsShiny: hatched.IsShiny &&
+                    (hatched.DittoDisguise is null || hatched.DittoRevealed));
         }
         else if (previous.Active is { } graduated && current.Active is null &&
                  current.Dex.Count > previous.Dex.Count)
@@ -1049,7 +1185,15 @@ public sealed class CompanionStore
         else if (previous.Active is { } before && current.Active is { } after &&
                  before.CurrentId != after.CurrentId)
         {
-            gameEvent = new CompanionGameEvent(CompanionGameEventKind.Evolution, after.CurrentId);
+            gameEvent = before.DittoDisguise is not null &&
+                        !before.DittoRevealed &&
+                        after.DittoRevealed
+                ? new CompanionGameEvent(
+                    CompanionGameEventKind.DittoReveal,
+                    after.CurrentId,
+                    PreviousSpeciesId: before.DittoDisguise,
+                    IsShiny: after.IsShiny)
+                : new CompanionGameEvent(CompanionGameEventKind.Evolution, after.CurrentId);
         }
 
         if (gameEvent is not null) PublishGameEvent(gameEvent);

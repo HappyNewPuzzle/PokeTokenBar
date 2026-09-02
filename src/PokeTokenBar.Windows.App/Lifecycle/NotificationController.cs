@@ -62,6 +62,10 @@ internal sealed class NotificationController : IDisposable
                     (NotificationKind.Hatch, text.HatchTitle, text.CompanionEventBody(gameEvent.SpeciesId)),
                 CompanionGameEventKind.Evolution =>
                     (NotificationKind.Evolution, text.EvolutionTitle, text.CompanionEventBody(gameEvent.SpeciesId)),
+                CompanionGameEventKind.DittoReveal =>
+                    (NotificationKind.DittoReveal,
+                        gameEvent.IsShiny ? text.ShinyDittoRevealTitle : text.DittoRevealTitle,
+                        text.DittoRevealBody(gameEvent.PreviousSpeciesId)),
                 CompanionGameEventKind.Graduation =>
                     (NotificationKind.Graduation, text.GraduationTitle, text.CompanionEventBody(gameEvent.SpeciesId)),
                 _ => (NotificationKind.Reward, text.RewardTitle, text.RewardBody(gameEvent.Count)),
