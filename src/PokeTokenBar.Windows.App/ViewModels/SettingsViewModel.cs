@@ -155,6 +155,9 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(LimitDisplayOptions));
             OnPropertyChanged(nameof(AnimationQualityOptions));
             OnPropertyChanged(nameof(RefreshIntervalOptions));
+            OnPropertyChanged(nameof(SelectedLimitDisplayMode));
+            OnPropertyChanged(nameof(SelectedAnimationQuality));
+            OnPropertyChanged(nameof(SelectedRefreshInterval));
             CustomRootStatus = InvalidRoots(CustomRootText) is { Count: > 0 } invalid
                 ? Localization.InvalidPaths(string.Join(", ", invalid)) : null;
             RefreshProviderStatusRows();

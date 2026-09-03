@@ -1,6 +1,13 @@
 using System.ComponentModel;
+using System.Threading;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+using System.Xml.Linq;
 using PokeTokenBar.Windows.App;
 using PokeTokenBar.Windows.App.Sprites;
 using PokeTokenBar.Windows.App.Tray;
@@ -211,6 +218,129 @@ public sealed class Phase7BTrayLocalizationTests
     }
 
     [Fact]
+    public void SettingsLocalizedComboBindingsRetainCanonicalSelectionsAcrossLanguageChanges()
+    {
+        RunSta(() =>
+        {
+            var settings = Settings(AppLanguage.Ko);
+            var refreshCadenceChanges = 0;
+            settings.RefreshIntervalChanged += _ => refreshCadenceChanges++;
+            var refresh = BoundCombo(settings, nameof(SettingsViewModel.RefreshIntervalOptions),
+                nameof(SettingsViewModel.SelectedRefreshInterval));
+            var limit = BoundCombo(settings, nameof(SettingsViewModel.LimitDisplayOptions),
+                nameof(SettingsViewModel.SelectedLimitDisplayMode));
+            var animation = BoundCombo(settings, nameof(SettingsViewModel.AnimationQualityOptions),
+                nameof(SettingsViewModel.SelectedAnimationQuality));
+            var language = BoundCombo(settings, nameof(SettingsViewModel.LanguageOptions),
+                nameof(SettingsViewModel.SelectedLanguage));
+            var panel = new StackPanel();
+            panel.Children.Add(refresh);
+            panel.Children.Add(limit);
+            panel.Children.Add(animation);
+            panel.Children.Add(language);
+            var host = new Window
+            {
+                Content = panel,
+                ShowInTaskbar = false,
+                WindowStyle = WindowStyle.None,
+                Width = 1,
+                Height = 1,
+                Left = -10000,
+                Top = -10000,
+            };
+            host.Show();
+            Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
+
+            try
+            {
+                Assert.Equal(RefreshIntervalMode.TwoMinutes, refresh.SelectedValue);
+                Assert.Equal(LimitDisplayMode.Remaining, limit.SelectedValue);
+                Assert.Equal(AnimationQuality.PowerSaver, animation.SelectedValue);
+                Assert.Equal(AppLanguage.Ko, language.SelectedValue);
+                Assert.Equal("2분", SelectedLabel(refresh));
+
+                var qualities = Enum.GetValues<AnimationQuality>();
+                var languages = new[] { AppLanguage.En, AppLanguage.Ko, AppLanguage.Ja, AppLanguage.De };
+                for (var index = 0; index < languages.Length; index++)
+                {
+                    var quality = qualities[index % qualities.Length];
+                    settings.SelectedAnimationQuality = quality;
+                    settings.SelectedLanguage = languages[index];
+                    Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
+
+                    Assert.Equal(RefreshIntervalMode.TwoMinutes, refresh.SelectedValue);
+                    Assert.Equal(LimitDisplayMode.Remaining, limit.SelectedValue);
+                    Assert.Equal(quality, animation.SelectedValue);
+                    Assert.Equal(languages[index], language.SelectedValue);
+                    Assert.Equal(settings.Localization.Minutes(2), SelectedLabel(refresh));
+                    Assert.Equal(settings.LimitDisplayOptions.Single(x => x.Value == LimitDisplayMode.Remaining).Label,
+                        SelectedLabel(limit));
+                    Assert.Equal(settings.AnimationQualityOptions.Single(x => x.Value == quality).Label,
+                        SelectedLabel(animation));
+                }
+                Assert.Equal(0, refreshCadenceChanges);
+            }
+            finally { host.Close(); }
+        });
+    }
+
+    [Fact]
+    public void PersistedCanonicalSettingsReloadWithoutLocalizedSelectionLoss()
+    {
+        var persistence = new SettingsPersistence(AppSettings.Default with { Language = AppLanguage.Ko });
+        var settings = new SettingsViewModel(persistence, new AutoStart())
+        {
+            SelectedRefreshInterval = RefreshIntervalMode.FifteenMinutes,
+            SelectedLimitDisplayMode = LimitDisplayMode.Used,
+            SelectedAnimationQuality = AnimationQuality.Smooth,
+        };
+
+        var reloaded = new SettingsViewModel(persistence, new AutoStart());
+
+        Assert.Equal(RefreshIntervalMode.FifteenMinutes, reloaded.SelectedRefreshInterval);
+        Assert.Equal(LimitDisplayMode.Used, reloaded.SelectedLimitDisplayMode);
+        Assert.Equal(AnimationQuality.Smooth, reloaded.SelectedAnimationQuality);
+    }
+
+    [Fact]
+    public void LocalizedSettingOptionsAreCompleteForEveryLanguage()
+    {
+        foreach (var language in Enum.GetValues<AppLanguage>())
+        {
+            var settings = Settings(language);
+            Assert.Equal(Enum.GetValues<RefreshIntervalMode>(), settings.RefreshIntervalOptions.Select(x => x.Value));
+            Assert.Equal(Enum.GetValues<LimitDisplayMode>(), settings.LimitDisplayOptions.Select(x => x.Value));
+            Assert.Equal(Enum.GetValues<AnimationQuality>(), settings.AnimationQualityOptions.Select(x => x.Value));
+            Assert.All(settings.RefreshIntervalOptions, option => Assert.False(string.IsNullOrWhiteSpace(option.Label)));
+            Assert.All(settings.LimitDisplayOptions, option => Assert.False(string.IsNullOrWhiteSpace(option.Label)));
+            Assert.All(settings.AnimationQualityOptions, option => Assert.False(string.IsNullOrWhiteSpace(option.Label)));
+        }
+    }
+
+    [Fact]
+    public void SettingsXamlUsesCanonicalSelectedValuesForLocalizedComboBoxes()
+    {
+        var root = FindRepositoryRoot();
+        var document = XDocument.Load(Path.Combine(root, "src", "PokeTokenBar.Windows.App", "MainWindow.xaml"));
+        var combos = document.Descendants().Where(element => element.Name.LocalName == "ComboBox").ToArray();
+
+        foreach (var (options, selection) in new[]
+        {
+            ("RefreshIntervalOptions", "SelectedRefreshInterval"),
+            ("LimitDisplayOptions", "SelectedLimitDisplayMode"),
+            ("AnimationQualityOptions", "SelectedAnimationQuality"),
+            ("LanguageOptions", "SelectedLanguage"),
+        })
+        {
+            var combo = Assert.Single(combos, element =>
+                element.Attribute("ItemsSource")?.Value.Contains(options, StringComparison.Ordinal) == true);
+            Assert.Equal("Label", combo.Attribute("DisplayMemberPath")?.Value);
+            Assert.Equal("Value", combo.Attribute("SelectedValuePath")?.Value);
+            Assert.Contains(selection, combo.Attribute("SelectedValue")?.Value, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void ProductionViews_RouteKnownPhase7BStringsThroughLocalization()
     {
         var root = FindRepositoryRoot();
@@ -267,6 +397,38 @@ public sealed class Phase7BTrayLocalizationTests
 
     private static SettingsViewModel Settings(AppLanguage language) => new(
         new SettingsPersistence(AppSettings.Default with { Language = language }), new AutoStart());
+
+    private static ComboBox BoundCombo(SettingsViewModel settings, string itemsSource, string selectedValue)
+    {
+        var combo = new ComboBox
+        {
+            DataContext = settings,
+            DisplayMemberPath = "Label",
+            SelectedValuePath = "Value",
+        };
+        combo.SetBinding(ItemsControl.ItemsSourceProperty, new Binding(itemsSource));
+        combo.SetBinding(Selector.SelectedValueProperty, new Binding(selectedValue) { Mode = BindingMode.TwoWay });
+        combo.ApplyTemplate();
+        Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.DataBind);
+        return combo;
+    }
+
+    private static string? SelectedLabel(ComboBox combo) =>
+        combo.SelectedItem?.GetType().GetProperty("Label")?.GetValue(combo.SelectedItem) as string;
+
+    private static void RunSta(Action action)
+    {
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try { action(); }
+            catch (Exception exception) { failure = exception; }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        if (failure is not null) throw failure;
+    }
 
     private static BitmapSource Image(byte marker)
     {
