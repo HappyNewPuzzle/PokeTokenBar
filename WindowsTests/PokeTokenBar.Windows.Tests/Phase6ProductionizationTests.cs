@@ -283,7 +283,7 @@ public sealed class Phase6ProductionizationTests : IDisposable
     public void ReleaseContracts_UseAssemblyVersionAndLocationIndependentDataPath()
     {
         var project = File.ReadAllText(Path.Combine(Root(), "src", "PokeTokenBar.Windows.App", "PokeTokenBar.Windows.App.csproj"));
-        Assert.Contains("<Version>2.5.2</Version>", project);
+        Assert.Contains("<Version>2.5.3</Version>", project);
         Assert.Contains("PokeTokenBarDataPaths.Root", File.ReadAllText(Path.Combine(Root(), "src", "PokeTokenBar.Windows.Infrastructure", "JsonAppSettingsPersistence.cs")));
         Assert.DoesNotContain("Environment.ProcessPath", JsonAppSettingsPersistence.GetDefaultFilePath());
     }
