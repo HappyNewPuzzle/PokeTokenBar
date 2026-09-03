@@ -104,6 +104,9 @@ public sealed class LocalizationService : INotifyPropertyChanged
 
     public string ProviderStatus => T("프로바이더 상태", "Provider status", "プロバイダー状態", "Estado del proveedor", "État du fournisseur", "Status do provedor", "Providerstatus");
     public string Authentication => T("인증", "Authentication", "認証", "Autenticación", "Authentification", "Autenticação", "Authentifizierung");
+    public string CredentialAccess => T("자격 증명 접근", "Credential access", "資格情報へのアクセス", "Acceso a credenciales", "Accès aux identifiants", "Acesso às credenciais", "Zugriff auf Anmeldedaten");
+    public string CredentialAccessHint => T("Claude 및 Antigravity 공식 한도 자격 증명을 읽습니다.", "Read credentials for Claude and Antigravity official limits.", "Claude と Antigravity の公式上限用資格情報を読み取ります。", "Lee credenciales para los límites oficiales de Claude y Antigravity.", "Lit les identifiants pour les limites officielles Claude et Antigravity.", "Lê credenciais para os limites oficiais do Claude e Antigravity.", "Liest Anmeldedaten für offizielle Claude- und Antigravity-Limits.");
+    public string RefreshCredentials => T("한도 자격 증명 새로 고침", "Refresh limit credentials", "上限の資格情報を更新", "Actualizar credenciales de límites", "Actualiser les identifiants des limites", "Atualizar credenciais de limites", "Limit-Anmeldedaten aktualisieren");
     public string Ready => T("준비됨", "Ready", "準備完了", "Listo", "Prêt", "Pronto", "Bereit");
     public string NotInstalled => T("설치되지 않음", "Not installed", "未インストール", "No instalado", "Non installé", "Não instalado", "Nicht installiert");
     public string NoSessions => T("세션 없음", "No sessions", "セッションなし", "Sin sesiones", "Aucune session", "Sem sessões", "Keine Sitzungen");

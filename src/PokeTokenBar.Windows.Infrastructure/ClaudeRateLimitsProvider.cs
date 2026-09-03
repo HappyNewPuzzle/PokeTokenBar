@@ -18,6 +18,12 @@ public sealed class ClaudeRateLimitsProvider : IClaudeRateLimitsProvider
     {
     }
 
+    public ClaudeRateLimitsProvider(Func<bool> credentialAccessEnabled)
+        : this(SharedHttpClient,
+            new ClaudeCredentialProvider(credentialAccessEnabled: credentialAccessEnabled))
+    {
+    }
+
     public ClaudeRateLimitsProvider(
         HttpClient httpClient,
         IClaudeCredentialProvider credentials)

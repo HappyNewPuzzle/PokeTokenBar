@@ -43,7 +43,8 @@ public sealed record AppSettings(
     IReadOnlyDictionary<string, int>? NotificationTiers = null,
     string? SelectedProviderId = null,
     bool UpdateNotificationsEnabled = true,
-    string? SkippedUpdateVersion = null)
+    string? SkippedUpdateVersion = null,
+    bool CredentialAccessEnabled = true)
 {
     public static AppSettings Default { get; } = new();
 }

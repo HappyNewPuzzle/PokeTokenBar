@@ -6,9 +6,9 @@ This is a code-based parity audit, not an implementation plan disguised as compl
 
 | Item | Value |
 |---|---|
-| Audit date | 2026-09-02 |
+| Audit date | 2026-09-03 |
 | Windows branch | `windows-port` |
-| Windows commit | `97e629c` plus the Phase 7D working tree |
+| Windows commit | `0c7b1e2` plus the Phase 7E working tree |
 | macOS baseline | `upstream/main` at `37763d3c367068492c18f6e51b45977c2d27f6d5` |
 | Merge base | `4c29ca0fa28c1fb67929517542d4e58d802171f8` |
 | Initial `git status --short` | Existing unrelated `.gitignore` change and two untracked Korean documentation files |
@@ -26,14 +26,14 @@ Estimates are implementation effort after dependencies are available: **S** (up 
 
 ## 2. Executive Summary
 
-The Windows port now has a complete P0 production path: twelve providers, limits, companion/economy UI, native lifecycle integration, update checks, safe save transfer, sanitized diagnostics, and reproducible self-contained portable packaging. Inno Setup source supplies the per-user installer path; installer compilation/signing and real Antigravity environment validation remain release-environment work.
+The Windows port now has a complete P0 production path: twelve providers, limits, companion/economy UI, native lifecycle integration, update checks, safe save transfer, sanitized diagnostics, and reproducible self-contained portable packaging. Inno Setup supplies the verified per-user installer path. Authenticode is opt-in and verified when configured; a trusted signing identity and real Antigravity account remain release-environment validation work.
 
 The full matrix in section 18 contains **93 atomic feature rows**:
 
 | Status | Count | Share |
 |---|---:|---:|
-| COMPLETE | 77 | 82.8% |
-| PARTIAL | 3 | 3.2% |
+| COMPLETE | 79 | 84.9% |
+| PARTIAL | 1 | 1.1% |
 | MISSING | 0 | 0.0% |
 | WINDOWS EQUIVALENT | 12 | 12.9% |
 | MAC-ONLY / N/A | 1 | 1.1% |
@@ -49,8 +49,8 @@ These counts deliberately do not award parity merely because a model type or dor
 | Priority | Gap | macOS behavior | Windows state | Size | Dependencies | Principal files |
 |---|---|---|---|---|---|---|
 | P1 | Companion product UI | Home shows progression and celebrations; Shop, Bag, Collection, catch log, dex details, and representative selection are reachable. | Home, Shop, Bag, and Collection are reachable; celebrations and richer dex details remain absent. | M | Celebration/detail presentation | macOS `CompanionView.swift`, `ShopView.swift`, `BagView.swift`, `PopoverView.swift`; Windows `MainWindow.xaml` |
-| P1 | Full settings surface | Language, refresh, animation quality, limit mode, menu content, floating size/bubbles, notifications, thresholds, provider roots/auth, updates, and save transfer are configurable. | User-facing runtime, update, transfer, roots, and read-only provider/auth status are connected; configurable tray-content and credential controls remain. | M | Remaining product settings | macOS `SettingsView.swift`, `Core/UsageStore.swift`; Windows `MainWindow.xaml`, `SettingsViewModel.cs`, `SupportViewModel.cs` |
-| P2 | Release signing and installer QA | macOS release workflow signs and packages releases. | Reproducible portable zip and Inno Setup source exist; a signing identity is intentionally absent and real installer compile/install QA is pending. | M | Release environment and signing identity | macOS release scripts; Windows `scripts/build-release.ps1`, `installer/PokeTokenBar.iss`, `WINDOWS_RELEASE.md` |
+| P1 | Full settings surface | Language, refresh, animation quality, limit mode, menu content, floating size/bubbles, notifications, thresholds, provider roots/auth, updates, and save transfer are configurable. | User-facing runtime, update, transfer, roots, read-only provider/auth status, credential opt-out, and manual credential refresh are connected; exact tray text is platform-inapplicable. | — | — | macOS `SettingsView.swift`, `Core/UsageStore.swift`; Windows `MainWindow.xaml`, `SettingsViewModel.cs`, `SupportViewModel.cs` |
+| P2 | Release signing and installer QA | macOS release workflow signs and packages releases. | Portable and per-user installer builds are verified. Authenticode app/installer signing is opt-in, ordered, and verified when a certificate is supplied; a trusted signing identity is intentionally absent. | M | Trusted release signing identity and installed-app QA | macOS release scripts; Windows `scripts/build-release.ps1`, `installer/PokeTokenBar.iss`, `WINDOWS_RELEASE.md` |
 
 ## 4. Usage Providers
 
@@ -61,7 +61,7 @@ macOS provider registration is explicit in `UsageStore.init` and provider implem
 | Codex | Local session parsing, period enrichment, cost/token aggregates, official app-server limits. | Detailed JSONL rollout/fork/canonical-session pipeline, daily/5h/week/month enrichment, official limits. | COMPLETE | macOS `LocalCodexProvider` in `LocalUsageProvider.swift`; Windows `LocalCodexUsageProvider.cs`, `CodexLocalRolloutPipeline.cs`, `CodexRateLimitsProvider.cs` |
 | Claude Code | Local JSONL usage plus OAuth limits/account metadata. | Recursive local JSONL usage/cost parsing plus read-only CLI OAuth limits/account metadata. | COMPLETE | macOS `LocalClaudeProvider`, `OAuthLimitsProvider.swift`; Windows `LocalClaudeUsageProvider.cs`, `ClaudeRateLimitsProvider.cs`, `ClaudeCredentialProvider.cs` |
 | Gemini | Local JSON/JSONL usage, period enrichment, and model pricing. | Recursive Windows-profile JSON/JSONL parsing, matching token mapping/dedup, periods, and cost. | COMPLETE | macOS `LocalGeminiProvider`; Windows `LocalGeminiUsageProvider.cs` |
-| Antigravity | SQLite/protobuf local usage plus Google quota limits. | Windows built-in SQLite/protobuf local usage plus read-only token-file quota integration. | COMPLETE | macOS `LocalAntigravityProvider`, `AntigravityRateLimitsProvider.swift`; Windows `LocalAntigravityUsageProvider.cs`, `AntigravityRateLimitsProvider.cs` |
+| Antigravity | SQLite/protobuf local usage plus Google quota limits. | Windows built-in SQLite/protobuf local usage plus read-only token-file and Credential Manager quota integration. | COMPLETE | macOS `LocalAntigravityProvider`, `AntigravityRateLimitsProvider.swift`; Windows `LocalAntigravityUsageProvider.cs`, `AntigravityRateLimitsProvider.cs`, `WindowsCredentialStore.cs` |
 | OpenCode | SQLite and legacy JSON local usage. | Registered SQLite/legacy JSON provider with token, cost, dedup, and period aggregation. | COMPLETE | macOS `LocalOpenCodeProvider`; Windows `LocalOpenCodeUsageProvider` |
 | Hermes Agent | SQLite local session usage. | Registered SQLite provider with token, reasoning, actual/estimated cost, and periods. | COMPLETE | macOS `LocalHermesProvider`; Windows `LocalHermesUsageProvider` |
 | Cursor | Dashboard API primary path with SQLite fallback, including the zero-local-token fix. | Matching dashboard pagination/auth path with read-only Windows `state.vscdb` fallback, periods, dedup, and stale preservation. | COMPLETE | macOS `LocalCursorProvider` in `LocalAdditionalUsageProvider.swift`; Windows `LocalCursorUsageProvider.cs` |
@@ -82,7 +82,7 @@ Phase 7A outcomes and remaining gaps:
 - Windows `UsagePollingController` matches the macOS Manual/1/2/5/15-minute schedule, defaults to two minutes, retries a truly empty successful refresh once after 20 seconds, and preserves `UsageStore` refresh coalescing.
 - Windows exposes used/remaining display preference and warning thresholds. Claude's upstream burn forecast formula and provider-local runtime/auth status are now production UI; configurable menu-bar summaries remain absent.
 - Codex now renders every deduplicated bucket, plan/reached/stale metadata, real credit balance/unlimited state, and personal spend controls without manufacturing zero values.
-- Antigravity quota groups are fetched and displayed without the existing two-row projection losing buckets. Windows reads the two known standalone token files, but OS credential-store discovery and refresh remain unverified because this machine has no Antigravity installation; quota parity is therefore partial.
+- Antigravity quota groups are fetched and displayed without losing buckets. Windows reads the two known standalone token files first, then the Go-keyring-compatible `gemini:antigravity` Credential Manager target; nested/direct/base64 payloads, expiry, refresh-token exchange, native create/read/delete QA, and failure containment are verified. A real Antigravity account is not present on this machine.
 - Claude Code and Gemini are production cost-reporting providers; calculated local cost flows through the existing snapshot and UI path. Antigravity intentionally reports no per-token cost.
 
 ### Phase 7A source semantics
@@ -93,7 +93,7 @@ Phase 7A outcomes and remaining gaps:
 | Credits/spend | Codex credit metadata and monetary `individualLimit`; separate from the companion token wallet | Credits only for unlimited/non-empty balances; spend uses server `used / limit`; missing values are unavailable, never zero | Existing Codex refresh |
 | Burn forecast | Claude active-block tokens and token/minute divided by official 5h utilization | Requires 5–99% utilization, positive tokens, at least 10k tokens/minute, finite projection under 24h; otherwise no projection | Existing usage/limit refresh; display-only |
 | Runtime/auth status | Daily/enrichment result, retained snapshot, and official-limit result | Ready, no sessions, local-only, error or stale; authenticated/quota unavailable/not applicable; installation is not guessed | One provider failure remains isolated; no new timer |
-| Antigravity | Local SQLite/protobuf and official quota are independent | Missing quota does not hide local usage; real Windows credential-store readiness remains PARTIAL | Existing best-effort quota refresh |
+| Antigravity | Local SQLite/protobuf and official quota are independent | Missing quota does not hide local usage; file and native Credential Manager discovery are read-only | Existing best-effort quota refresh plus explicit user refresh |
 
 Upstream's status-page checker describes vendor incidents rather than local installation/authentication. Windows therefore does not infer `Not installed` or `Authentication required` from an empty local scan.
 
@@ -131,7 +131,7 @@ Windows persists and exposes:
 - floating size, animation quality and bubble preference,
 - per-provider additive custom scan folders.
 
-`JsonAppSettingsPersistence` stores these settings atomically in LocalAppData, ignores unknown JSON fields, and safely supplies defaults to older files. Phase 6 adds update notification/check controls, version/About information, save transfer, and diagnostics. Phase 7A adds read-only provider runtime/auth/quota/custom-root rows. Remaining settings gaps are configurable tray content and credential controls.
+`JsonAppSettingsPersistence` stores these settings atomically in LocalAppData, ignores unknown JSON fields, and safely supplies defaults to older files. Phase 6 adds update notification/check controls, version/About information, save transfer, and diagnostics. Phase 7A adds read-only provider runtime/auth/quota/custom-root rows. Phase 7E adds the upstream credential-access opt-out and explicit refresh control without adding token entry, reveal, login, logout, or delete behavior that upstream does not provide. Configurable tray text remains platform-inapplicable.
 
 ## 11. Notifications
 
@@ -149,7 +149,7 @@ Windows observes background tasks, contains provider/notification/tray/cache fai
 
 ## 14. Persistence / Cache
 
-Windows has appropriate native persistence for its implemented scope: LocalAppData JSON for app settings, the complete core companion/economy/collection state, and a versioned atomic `usage-cache.json` containing only provider IDs and presentation snapshots. Cached snapshots seed the UI as stale, roll Today/5h/week/month forward independently, are replaced only by successful provider refreshes, and never restore authentication or trigger Companion/economy rewards. Position persistence, sprite/base-species caching, Registry auto-start, and versioned export/import with backup and rollback remain unchanged. Claude and Antigravity credentials are discovered read-only from their CLI files; PokeTokenBar neither stores nor exports them.
+Windows has appropriate native persistence for its implemented scope: LocalAppData JSON for app settings, the complete core companion/economy/collection state, and a versioned atomic `usage-cache.json` containing only provider IDs and presentation snapshots. Cached snapshots seed the UI as stale, roll Today/5h/week/month forward independently, are replaced only by successful provider refreshes, and never restore authentication or trigger Companion/economy rewards. Position persistence, sprite/base-species caching, Registry auto-start, and versioned export/import with backup and rollback remain unchanged. Claude credentials come from the CLI file; Antigravity uses its CLI files and Windows Credential Manager read-only. PokeTokenBar never writes, deletes, logs, diagnoses, caches, or exports credential material.
 
 Neither audit nor any verification modified user `.codex` data.
 
@@ -157,7 +157,7 @@ Neither audit nor any verification modified user `.codex` data.
 
 macOS `UpdateChecker` checks GitHub releases and the UI presents update availability; Homebrew installs can upgrade/relaunch while other installs open the release page. The repository includes macOS packaging/signing scripts.
 
-Windows uses the same stable GitHub-release meaning: startup/popup checks are debounced to 30 minutes, manual checks bypass the debounce, failures are isolated, and only a validated `https://github.com` release page opens after explicit user action. It never overwrites the running executable or silently launches an installer. `build-release.ps1` produces a versioned self-contained portable directory and verified zip; the per-user Inno source supports Start Menu/optional desktop shortcuts, upgrade, uninstall, and user-data preservation. Installer compilation, real install/uninstall QA, and code signing remain release-environment work.
+Windows uses the same stable GitHub-release meaning: startup/popup checks are debounced to 30 minutes, manual checks bypass the debounce, failures are isolated, and only a validated `https://github.com` release page opens after explicit user action. It never overwrites the running executable or silently launches an installer. `build-release.ps1` produces a versioned self-contained portable directory and verified zip; the per-user Inno source supports Start Menu/optional desktop shortcuts, upgrade, uninstall, and user-data preservation. The script optionally discovers `signtool.exe`, signs/verifies the app before packaging and the installer after compilation, while the default unsigned flow remains unchanged. A trusted signing identity and installed-app QA remain release-environment work.
 
 ## 16. Platform-specific Mapping
 
@@ -169,7 +169,7 @@ Windows uses the same stable GitHub-release meaning: startup/popup checks are de
 | Process-based single-instance selection | User-SID named `Mutex` | WINDOWS EQUIVALENT |
 | `SMAppService` / launch agent | HKCU Run value | WINDOWS EQUIVALENT for login start; no keep-alive |
 | `UserDefaults` | LocalAppData JSON | WINDOWS EQUIVALENT |
-| Keychain credential discovery | Read-only Claude and Antigravity CLI credential-file discovery | PARTIAL; file paths are supported without PokeTokenBar writes, but Antigravity Windows OS-store discovery is unverified |
+| Keychain credential discovery | Read-only Claude CLI file plus Antigravity CLI files and native Credential Manager discovery | WINDOWS EQUIVALENT; the Go-keyring target and native read path are verified without PokeTokenBar writes/deletes |
 | Workspace/display sleep notifications | `SystemEvents.PowerModeChanged` | WINDOWS EQUIVALENT |
 | `UNUserNotificationCenter` | `NotifyIcon` balloon plus floating warning bubble | WINDOWS EQUIVALENT |
 | Homebrew/app bundle update | Versioned portable zip plus per-user Inno Setup source and release-page update path | WINDOWS EQUIVALENT; installer compile QA pending |
@@ -229,7 +229,7 @@ Counts in section 2 are calculated from this table only.
 | Limits | Multiple Codex buckets | Models/displays bucket set | Deterministic deduplicated bucket collection renders every primary/secondary/spend row | COMPLETE | `CodexRateLimitsProvider` | `CodexRateLimitsProvider.cs`; `UsageViewModel.ApplyOfficialLimits`; `OfficialLimitRow.cs` | P1 | — |
 | Limits | Plan/credits/spend | Displays plan, credits/spend controls where available | Plan/reached/stale metadata, real credits, and monetary personal spend rows are displayed when present | COMPLETE | `CodexRateLimitsProvider`; `PopoverView` | `UsageViewModel.cs`; `MainWindow.xaml` | P1 | — |
 | Limits | Claude OAuth limits | OAuth limits/account metadata | Read-only CLI OAuth credential discovery, limits, plan, email, and organization metadata | COMPLETE | `OAuthLimitsProvider.swift` | `ClaudeCredentialProvider.cs`; `ClaudeRateLimitsProvider.cs`; `UsageViewModel.cs` | P0 | — |
-| Limits | Antigravity quota | Google quota groups | All groups/buckets displayed from read-only standalone-token auth; Windows OS-store/refresh path unverified | PARTIAL | `AntigravityRateLimitsProvider.swift` | `AntigravityRateLimitsProvider.cs`; `AntigravityCredentialProvider.cs`; `UsageViewModel.cs` | P1 | S |
+| Limits | Antigravity quota | Google quota groups | All groups/buckets displayed from read-only token files or Go-keyring-compatible Windows Credential Manager auth, with expiry/refresh handling | COMPLETE | `AntigravityRateLimitsProvider.swift` | `AntigravityRateLimitsProvider.cs`; `AntigravityCredentialProvider.cs`; `WindowsCredentialStore.cs`; `UsageViewModel.cs` | P1 | — |
 | Companion | Persisted companion restore | Restores current companion state | Restores current companion state | COMPLETE | `CompanionStore.load` | `CompanionStore.InitializeAsync`; `JsonCompanionPersistence.cs` | P0 | — |
 | Companion | Pokémon data lookup | Species/evolution/localized data | GraphQL index plus REST fallback/cache | COMPLETE | Pokémon API services | `PokeApiClient.cs` | P0 | — |
 | Companion | Manual representative | Collection representative can be selected | Collection entries expose persisted representative selection | COMPLETE | `CompanionView` representative picker | `CompanionStore.SetRepresentativeAsync`; `EconomyViewModel.cs`; `MainWindow.xaml` | P1 | — |
@@ -271,7 +271,7 @@ Counts in section 2 are calculated from this table only.
 | Settings | Limit used/remaining mode | User choice | Persisted choice updates labels and progress values immediately | COMPLETE | `AppSettings.limitDisplayMode` | `UsageViewModel.ApplyOfficialLimits`; `SettingsViewModel.cs` | P2 | — |
 | Settings | Floating/animation options | Size, quality, bubble preferences | Same production settings and runtime effects | COMPLETE | `SettingsView` | `SettingsViewModel.cs`; floating/sprite presentation | P2 | — |
 | Settings | Notification/threshold options | Category toggles and 80/95 defaults | Independent limit/companion toggles and persisted ordered thresholds | COMPLETE | `AppSettings` | `AppSettings.cs`; `SettingsViewModel.cs`; `MainWindow.xaml` | P1 | — |
-| Settings | Provider roots/auth controls | Roots, Keychain opt-out, refresh controls | Twelve additive roots plus read-only runtime/auth/quota/custom-root status; credential controls remain absent | PARTIAL | `SettingsView`; `CustomRoots` | `ConfigurableUsageProvider.cs`; `ProviderStatusModels.cs`; `SettingsViewModel.cs`; `MainWindow.xaml` | P1 | M |
+| Settings | Provider roots/auth controls | Roots, Keychain opt-out, refresh controls | Twelve additive roots, read-only runtime/auth/quota/custom-root status, credential-access opt-out, and explicit refresh | COMPLETE | `SettingsView`; `CustomRoots` | `ConfigurableUsageProvider.cs`; `ProviderStatusModels.cs`; `SettingsViewModel.cs`; `MainWindow.xaml` | P1 | — |
 | Localization | Pokémon names/natures | Seven current languages | API names/natures follow the persisted seven-language runtime selection | COMPLETE | `Localization.swift`; model helpers | `AppLanguageRules`; `PokeApiClient.cs`; `CompanionViewModel.cs` | P1 | — |
 | Localization | Full application UI | Seven-language UI strings | Popup, economy, settings, tray/floating, notifications, update and save-transfer copy use the seven-language runtime catalog | COMPLETE | `Localization.swift` | `LocalizationService.cs`; `MainWindow.xaml`; tray/floating/economy/support view models | P1 | — |
 | Notifications | Limit warning/critical | Configurable, deduped notifications | Persisted edge-triggered `NotifyIcon` balloon and floating bubble equivalent | WINDOWS EQUIVALENT | app notification routing; `UsageStore` | `NotificationController.cs`; `LimitNotificationEvaluator` | P1 | — |
@@ -289,7 +289,7 @@ Counts in section 2 are calculated from this table only.
 | Updates | Update checking/UI | GitHub release check and banner | Stable GitHub release check, 30-minute debounce, manual check and banner | COMPLETE | `UpdateChecker.swift`; `PopoverView` | `GitHubReleaseUpdateChecker.cs`; `SupportViewModel.cs`; `MainWindow.xaml` | P1 | — |
 | Distribution | Packaged release | App bundle/Homebrew flows | Reproducible versioned self-contained portable directory/zip and per-user installer source | COMPLETE | packaging scripts | `scripts/build-release.ps1`; `installer/PokeTokenBar.iss`; `WINDOWS_RELEASE.md` | P0 | — |
 | Distribution | Upgrade/relaunch | Homebrew upgrade or release-page path | User-confirmed validated GitHub release-page path; no running-EXE overwrite | WINDOWS EQUIVALENT | `UpdateChecker` | `GitHubReleaseUpdateChecker.cs`; `WindowsUserInteraction.cs` | P2 | — |
-| Distribution | Signing/installer policy | macOS signing/package workflow | Per-user Inno source and release documentation exist; signing and real installer QA require a release environment | PARTIAL | `scripts/`; package docs | `installer/PokeTokenBar.iss`; `scripts/build-release.ps1`; `WINDOWS_RELEASE.md` | P2 | M |
+| Distribution | Signing/installer policy | macOS signing/package workflow | Per-user installer and unsigned build are verified; opt-in Authenticode app/installer signing is implemented, but no trusted certificate is available for real signed-artifact validation | PARTIAL | `scripts/`; package docs | `installer/PokeTokenBar.iss`; `scripts/build-release.ps1`; `WINDOWS_RELEASE.md` | P2 | S |
 
 ## 19. Recommended Porting Roadmap
 
@@ -319,6 +319,6 @@ Completed in Windows Phase 5 with native notification-area balloons, persisted t
 
 ### Phase E — Update and distribution closure
 
-Completed in Windows Phase 6 with stable GitHub release checking, user-confirmed release-page handoff, version/About UI, versioned save export/import with backup and rollback, sanitized diagnostics, reproducible portable packaging, and per-user Inno Setup source. Installer compilation/signing and real install/uninstall QA remain explicitly pending because this machine has no Inno compiler or signing identity.
+Completed through Windows Phase 7E with stable GitHub release checking, user-confirmed release-page handoff, version/About UI, versioned save export/import with backup and rollback, sanitized diagnostics, reproducible portable packaging, and a per-user Inno installer that compiles as `PokeTokenBar-Setup-2.5.2.exe` on this machine. Opt-in signing validates its arguments and discovers the installed Windows SDK tool, but real signed-artifact and install/uninstall QA remain pending because no trusted signing identity was available and installation was outside this source-level pass.
 
 **Exit criteria:** a non-developer can install, update, recover/export state, and provide actionable diagnostics without altering `.codex` data.

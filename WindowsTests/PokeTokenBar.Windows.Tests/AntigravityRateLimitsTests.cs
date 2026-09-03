@@ -23,7 +23,7 @@ public sealed class AntigravityRateLimitsTests : IDisposable
         var path = CredentialFile("primary.json", "fixture-token");
         var provider = new AntigravityCredentialProvider([path]);
 
-        Assert.Equal("fixture-token", await provider.GetAccessTokenAsync());
+        Assert.Equal("fixture-token", (await provider.GetCredentialAsync())?.AccessToken);
     }
 
     [Fact]
@@ -35,7 +35,7 @@ public sealed class AntigravityRateLimitsTests : IDisposable
         var valid = CredentialFile("alternate.json", "alternate-token");
         var provider = new AntigravityCredentialProvider([missing, malformed, valid]);
 
-        Assert.Equal("alternate-token", await provider.GetAccessTokenAsync());
+        Assert.Equal("alternate-token", (await provider.GetCredentialAsync())?.AccessToken);
     }
 
     [Theory]
@@ -48,7 +48,7 @@ public sealed class AntigravityRateLimitsTests : IDisposable
         var path = Path.Combine(_directory, $"credential-{Guid.NewGuid():N}.json");
         File.WriteAllText(path, json);
 
-        Assert.Null(await new AntigravityCredentialProvider([path]).GetAccessTokenAsync());
+        Assert.Null(await new AntigravityCredentialProvider([path]).GetCredentialAsync());
     }
 
     [Fact]
@@ -62,6 +62,86 @@ public sealed class AntigravityRateLimitsTests : IDisposable
                 Path.Combine(profile, ".gemini", "antigravity", "jetski-standalone-oauth-token"),
             ],
             AntigravityCredentialProvider.GetDefaultFilePaths(profile));
+    }
+
+    [Fact]
+    public async Task TokenFilePrecedesWindowsCredentialManager()
+    {
+        var storeRead = false;
+        var provider = new AntigravityCredentialProvider(
+            [CredentialFile("preferred.json", "file-token")],
+            () => true,
+            () => { storeRead = true; return "{\"token\":\"store-token\"}"; });
+
+        Assert.Equal("file-token", (await provider.GetCredentialAsync())?.AccessToken);
+        Assert.False(storeRead);
+    }
+
+    [Fact]
+    public async Task WindowsCredentialManagerUsesGoKeyringTargetAndNestedOauthPayload()
+    {
+        var provider = new AntigravityCredentialProvider(
+            [],
+            () => true,
+            () => "{\"token\":{\"access_token\":\"access\",\"refresh_token\":\"refresh\",\"expiry\":\"2026-09-03T12:00:00Z\"}}");
+
+        var credential = await provider.GetCredentialAsync();
+
+        Assert.Equal("gemini:antigravity", AntigravityCredentialProvider.WindowsCredentialTarget);
+        Assert.Equal("access", credential?.AccessToken);
+        Assert.Equal("refresh", credential?.RefreshToken);
+        Assert.Equal(new DateTimeOffset(2026, 9, 3, 12, 0, 0, TimeSpan.Zero), credential?.ExpiresAt);
+    }
+
+    [Fact]
+    public async Task GoKeyringBase64PayloadIsDecoded()
+    {
+        var value = "go-keyring-base64:" + Convert.ToBase64String(
+            Encoding.UTF8.GetBytes("{\"token\":\"encoded-token\"}"));
+        var provider = new AntigravityCredentialProvider([], () => true, () => value);
+
+        Assert.Equal("encoded-token", (await provider.GetCredentialAsync())?.AccessToken);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not-json")]
+    [InlineData("go-keyring-base64:not-base64")]
+    [InlineData("{\"token\":{}}")]
+    public void InvalidWindowsCredentialPayloadIsUnavailable(string? payload) =>
+        Assert.Null(AntigravityCredentialProvider.ParseCredential(payload));
+
+    [Fact]
+    public async Task DisabledCredentialAccessReadsNeitherFilesNorWindowsStore()
+    {
+        var storeRead = false;
+        var provider = new AntigravityCredentialProvider(
+            [CredentialFile("disabled.json", "secret")],
+            () => false,
+            () => { storeRead = true; return "{\"token\":\"secret\"}"; });
+
+        Assert.Null(await provider.GetCredentialAsync());
+        Assert.False(storeRead);
+    }
+
+    [Fact]
+    public async Task WindowsCredentialApiFailureIsContained()
+    {
+        var provider = new AntigravityCredentialProvider(
+            [], () => true, () => throw new InvalidOperationException("credential API unavailable"));
+
+        Assert.Null(await provider.GetCredentialAsync());
+    }
+
+    [Fact]
+    public void ExpiryUsesUpstreamOneMinuteSkew()
+    {
+        var clock = new FixedTimeProvider(Now);
+
+        Assert.True(new AntigravityOAuthCredential("a", ExpiresAt: Now.AddSeconds(59)).IsExpired(clock));
+        Assert.False(new AntigravityOAuthCredential("a", ExpiresAt: Now.AddSeconds(61)).IsExpired(clock));
+        Assert.False(new AntigravityOAuthCredential("a").IsExpired(clock));
     }
 
     [Fact]
@@ -202,6 +282,39 @@ public sealed class AntigravityRateLimitsTests : IDisposable
     }
 
     [Fact]
+    public async Task ExpiredCredentialRefreshesWithGoogleBeforeQuotaRequest()
+    {
+        var handler = new QueueHandler(
+            Json(HttpStatusCode.OK, "{\"access_token\":\"fresh\",\"expires_in\":3600}"),
+            Json(HttpStatusCode.OK, SampleJson));
+        var credential = new FixedCredentials(new AntigravityOAuthCredential(
+            "expired", "refresh", Now.AddMinutes(-1)));
+        var provider = new AntigravityRateLimitsProvider(
+            new HttpClient(handler), credential, [Endpoint], new FixedTimeProvider(Now));
+
+        Assert.True((await provider.FetchAsync())!.HasVisibleLimit);
+        Assert.Equal(AntigravityRateLimitsProvider.GoogleTokenUri, handler.Requests[0].Uri);
+        Assert.Contains("grant_type=refresh_token", handler.Requests[0].Body);
+        Assert.Equal("Bearer fresh", handler.Requests[1].Authorization);
+    }
+
+    [Fact]
+    public async Task RefreshFailureFallsBackToExistingAccessToken()
+    {
+        var handler = new QueueHandler(
+            Json(HttpStatusCode.BadRequest, "{}"),
+            Json(HttpStatusCode.OK, SampleJson));
+        var provider = new AntigravityRateLimitsProvider(
+            new HttpClient(handler),
+            new FixedCredentials(new AntigravityOAuthCredential("old", "refresh", Now.AddMinutes(-1))),
+            [Endpoint],
+            new FixedTimeProvider(Now));
+
+        Assert.True((await provider.FetchAsync())!.HasVisibleLimit);
+        Assert.Equal("Bearer old", handler.Requests[1].Authorization);
+    }
+
+    [Fact]
     public async Task MalformedAndHttpFailuresReachStoreBoundary()
     {
         var malformed = Provider(
@@ -302,10 +415,12 @@ public sealed class AntigravityRateLimitsTests : IDisposable
         private readonly Queue<string?> _values = new(values);
         public int Calls { get; private set; }
 
-        public Task<string?> GetAccessTokenAsync(CancellationToken cancellationToken = default)
+        public Task<AntigravityOAuthCredential?> GetCredentialAsync(
+            CancellationToken cancellationToken = default)
         {
             Calls++;
-            return Task.FromResult(_values.Count == 0 ? null : _values.Dequeue());
+            var value = _values.Count == 0 ? null : _values.Dequeue();
+            return Task.FromResult(value is null ? null : new AntigravityOAuthCredential(value));
         }
     }
 
@@ -319,6 +434,7 @@ public sealed class AntigravityRateLimitsTests : IDisposable
             CancellationToken cancellationToken)
         {
             Requests.Add(new Request(
+                request.RequestUri,
                 request.Method,
                 request.Headers.Authorization?.ToString(),
                 request.Headers.UserAgent.ToString(),
@@ -331,11 +447,19 @@ public sealed class AntigravityRateLimitsTests : IDisposable
     }
 
     private sealed record Request(
+        Uri? Uri,
         HttpMethod Method,
         string? Authorization,
         string UserAgent,
         string? ContentType,
         string? Body);
+
+    private sealed class FixedCredentials(AntigravityOAuthCredential? value)
+        : IAntigravityCredentialProvider
+    {
+        public Task<AntigravityOAuthCredential?> GetCredentialAsync(
+            CancellationToken cancellationToken = default) => Task.FromResult(value);
+    }
 
     private sealed class FakeLimits : IAntigravityRateLimitsProvider
     {

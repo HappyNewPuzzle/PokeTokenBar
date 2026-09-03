@@ -10,7 +10,7 @@ Extract `PokeTokenBar-<version>-win-x64.zip` to a writable folder and run `PokeT
 
 `PokeTokenBar-Setup-<version>.exe` is built from `installer/PokeTokenBar.iss` with Inno Setup 6. It installs per-user, creates a Start Menu shortcut, optionally creates a desktop shortcut, and upgrades the same installation in place without administrator elevation.
 
-Uninstall removes application files, shortcuts, and PokeTokenBar's HKCU startup value. It deliberately preserves `%LOCALAPPDATA%\PokeTokenBar`, including settings, companion/economy/collection progress, notification state, and sprite cache.
+Uninstall removes application files, shortcuts, and PokeTokenBar's HKCU startup value. It deliberately preserves `%LOCALAPPDATA%\PokeTokenBar`, including settings, companion/economy/collection progress, notification state, and sprite cache. Provider CLI files and Windows Credential Manager entries are read-only inputs and are never removed by install, upgrade, or uninstall.
 
 ## Data and startup
 
@@ -28,4 +28,8 @@ PokeTokenBar checks the latest stable GitHub release at startup and when the pop
 
 Run `powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1`. Add `-BuildInstaller` to compile the Inno Setup source when Inno Setup 6 is installed. Portable artifacts are still produced when the installer compiler is unavailable.
 
-Code signing is not automated because no signing identity is stored in the repository. Actual installer install/uninstall and Windows trust-prompt QA remain release-environment checks.
+Unsigned builds remain the default. To Authenticode-sign a release with a trusted certificate already installed in the Windows certificate store, pass `-CertificateThumbprint <SHA1>` and optionally `-CertificateStoreLocation CurrentUser|LocalMachine` and `-TimestampUrl <URL>`. The script discovers `signtool.exe` from PATH or Windows Kits 10, signs and verifies `PokeTokenBar.exe` before creating the portable zip, then signs and verifies the installer after Inno Setup compilation. No certificate, private key, or password is stored by the repository.
+
+Example: `powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1 -BuildInstaller -CertificateThumbprint <SHA1> -TimestampUrl <provider-url>`.
+
+A valid Authenticode signature establishes publisher identity, but SmartScreen reputation is a separate service signal and is not guaranteed by signing alone. Actual signed-artifact, install/uninstall, and trust-prompt QA therefore remains a release-environment check.

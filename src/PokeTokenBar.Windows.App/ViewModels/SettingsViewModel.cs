@@ -29,6 +29,7 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
     private bool _companionNotificationsEnabled;
     private bool _floatingBubbleAlertsEnabled;
     private bool _updateNotificationsEnabled;
+    private bool _credentialAccessEnabled;
     private string _selectedRootProviderId = "codex";
     private string _customRootText = "";
     private string? _customRootStatus;
@@ -56,6 +57,7 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
         _companionNotificationsEnabled = _settings.CompanionNotificationsEnabled;
         _floatingBubbleAlertsEnabled = _settings.FloatingBubbleAlertsEnabled;
         _updateNotificationsEnabled = _settings.UpdateNotificationsEnabled;
+        _credentialAccessEnabled = _settings.CredentialAccessEnabled;
         Localization = new LocalizationService(_selectedLanguage);
         _customRootText = CustomRootValue(_selectedRootProviderId);
         _isLaunchAtStartupEnabled = ReadAutoStartState();
@@ -236,6 +238,17 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
         {
             if (!SetField(ref _updateNotificationsEnabled, value)) return;
             _settings = _settings with { UpdateNotificationsEnabled = value };
+            SaveSettings();
+        }
+    }
+
+    public bool CredentialAccessEnabled
+    {
+        get => _credentialAccessEnabled;
+        set
+        {
+            if (!SetField(ref _credentialAccessEnabled, value)) return;
+            _settings = _settings with { CredentialAccessEnabled = value };
             SaveSettings();
         }
     }

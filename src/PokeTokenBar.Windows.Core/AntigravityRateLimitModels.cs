@@ -3,6 +3,16 @@ using System.Text.Json.Serialization;
 
 namespace PokeTokenBar.Windows.Core;
 
+public sealed record AntigravityOAuthCredential(
+    string AccessToken,
+    string? RefreshToken = null,
+    DateTimeOffset? ExpiresAt = null)
+{
+    public bool IsExpired(TimeProvider? timeProvider = null) =>
+        ExpiresAt is DateTimeOffset expiresAt &&
+        expiresAt <= (timeProvider ?? TimeProvider.System).GetUtcNow().AddMinutes(1);
+}
+
 public sealed record AntigravityQuotaBucket(
     [property: JsonPropertyName("bucketId")] string BucketId,
     [property: JsonPropertyName("displayName")] string DisplayName,

@@ -1,6 +1,10 @@
 param(
     [switch]$SkipTests,
-    [switch]$BuildInstaller
+    [switch]$BuildInstaller,
+    [string]$CertificateThumbprint,
+    [ValidateSet('CurrentUser', 'LocalMachine')]
+    [string]$CertificateStoreLocation = 'CurrentUser',
+    [string]$TimestampUrl
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,6 +18,63 @@ $solution = Join-Path $repoRoot 'PokeTokenBar.Windows.sln'
 $artifactRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot 'artifacts'))
 $publishDir = Join-Path $artifactRoot 'publish\win-x64'
 $releaseRoot = Join-Path $artifactRoot 'release'
+$signingEnabled = -not [string]::IsNullOrWhiteSpace($CertificateThumbprint)
+$signToolPath = $null
+
+function Find-SignTool {
+    $command = Get-Command signtool.exe -ErrorAction SilentlyContinue
+    if ($command) { return $command.Source }
+
+    $roots = @()
+    if (${env:ProgramFiles(x86)}) { $roots += Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin' }
+    if ($env:ProgramFiles) { $roots += Join-Path $env:ProgramFiles 'Windows Kits\10\bin' }
+    foreach ($root in $roots) {
+        if (-not (Test-Path -LiteralPath $root)) { continue }
+        $candidate = Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |
+            Sort-Object Name -Descending |
+            ForEach-Object { Join-Path $_.FullName 'x64\signtool.exe' } |
+            Where-Object { Test-Path -LiteralPath $_ } |
+            Select-Object -First 1
+        if ($candidate) { return $candidate }
+    }
+    return $null
+}
+
+function Invoke-AuthenticodeSign([string]$Path) {
+    $arguments = @('sign', '/fd', 'SHA256', '/sha1', $script:CertificateThumbprint, '/s', 'My')
+    if ($script:CertificateStoreLocation -eq 'LocalMachine') { $arguments += '/sm' }
+    if ($script:TimestampUrl) { $arguments += @('/tr', $script:TimestampUrl, '/td', 'SHA256') }
+    $arguments += $Path
+    & $script:signToolPath @arguments
+    if ($LASTEXITCODE -ne 0) { throw "signing failed for $Path with exit code $LASTEXITCODE" }
+    $signature = Get-AuthenticodeSignature -LiteralPath $Path
+    if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) {
+        throw "signature verification failed for ${Path}: $($signature.Status)"
+    }
+    if ($script:TimestampUrl -and -not $signature.TimeStamperCertificate) {
+        throw "timestamp verification failed for $Path"
+    }
+}
+
+if ($signingEnabled) {
+    $CertificateThumbprint = ($CertificateThumbprint -replace '\s', '').ToUpperInvariant()
+    if ($CertificateThumbprint -notmatch '^[0-9A-F]{40}$') { throw 'CertificateThumbprint must be a 40-character hexadecimal thumbprint.' }
+    if ($TimestampUrl) {
+        $timestampUri = $null
+        if (-not [Uri]::TryCreate($TimestampUrl, [UriKind]::Absolute, [ref]$timestampUri) -or
+            $timestampUri.Scheme -notin @('http', 'https')) {
+            throw 'TimestampUrl must be an absolute HTTP or HTTPS URI.'
+        }
+    }
+    $certificatePath = "Cert:\$CertificateStoreLocation\My\$CertificateThumbprint"
+    $certificate = Get-Item -LiteralPath $certificatePath -ErrorAction SilentlyContinue
+    if (-not $certificate -or -not $certificate.HasPrivateKey) {
+        throw "A signing certificate with a private key was not found at $certificatePath."
+    }
+    $signToolPath = Find-SignTool
+    if (-not $signToolPath) { throw 'signtool.exe was not found on PATH or under Windows Kits 10.' }
+}
+
 foreach ($target in @($publishDir, $releaseRoot)) {
     $resolved = [IO.Path]::GetFullPath($target)
     if (-not $resolved.StartsWith($artifactRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
@@ -34,6 +95,10 @@ if (-not $SkipTests) {
 }
 dotnet publish $project -c Release -r win-x64 --self-contained true -o $publishDir
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE" }
+
+if ($signingEnabled) {
+    Invoke-AuthenticodeSign (Join-Path $publishDir 'PokeTokenBar.exe')
+}
 
 $version = (dotnet msbuild $project -nologo -getProperty:Version | Select-Object -Last 1).Trim()
 if ($LASTEXITCODE -ne 0) { throw "version lookup failed with exit code $LASTEXITCODE" }
@@ -70,6 +135,9 @@ if ($BuildInstaller) {
     if ($isccPath) {
         & $isccPath "/DMyAppVersion=$version" "/DSourceDir=$publishDir" "/DOutputDir=$releaseRoot" (Join-Path $repoRoot 'installer\PokeTokenBar.iss')
         if ($LASTEXITCODE -ne 0) { throw "installer compilation failed with exit code $LASTEXITCODE" }
+        $installerPath = Join-Path $releaseRoot "PokeTokenBar-Setup-$version.exe"
+        if (-not (Test-Path -LiteralPath $installerPath)) { throw "installer output was not found: $installerPath" }
+        if ($signingEnabled) { Invoke-AuthenticodeSign $installerPath }
     } else {
         Write-Warning 'Inno Setup 6 was not found; portable artifacts are complete and installer compilation was skipped.'
     }

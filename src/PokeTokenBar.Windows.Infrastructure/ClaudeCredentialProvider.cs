@@ -8,13 +8,16 @@ public sealed class ClaudeCredentialProvider : IClaudeCredentialProvider
 {
     private readonly string _filePath;
     private readonly TimeProvider _timeProvider;
+    private readonly Func<bool> _credentialAccessEnabled;
 
     public ClaudeCredentialProvider(
         string? filePath = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        Func<bool>? credentialAccessEnabled = null)
     {
         _filePath = Path.GetFullPath(filePath ?? GetDefaultFilePath());
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _credentialAccessEnabled = credentialAccessEnabled ?? (() => true);
     }
 
     public string FilePath => _filePath;
@@ -28,6 +31,11 @@ public sealed class ClaudeCredentialProvider : IClaudeCredentialProvider
     public async Task<ClaudeOAuthCredential?> GetCredentialAsync(
         CancellationToken cancellationToken = default)
     {
+        if (!_credentialAccessEnabled())
+        {
+            return null;
+        }
+
         try
         {
             if (!File.Exists(_filePath))

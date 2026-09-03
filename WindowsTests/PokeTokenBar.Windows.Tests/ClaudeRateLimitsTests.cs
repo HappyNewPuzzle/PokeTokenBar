@@ -75,6 +75,16 @@ public sealed class ClaudeRateLimitsTests : IDisposable
     }
 
     [Fact]
+    public async Task DisabledCredentialAccessDoesNotReadClaudeCredentialFile()
+    {
+        var provider = new ClaudeCredentialProvider(
+            CredentialFile("{\"claudeAiOauth\":{\"accessToken\":\"secret\"}}"),
+            credentialAccessEnabled: () => false);
+
+        Assert.Null(await provider.GetCredentialAsync());
+    }
+
+    [Fact]
     public void DefaultCredentialPathUsesWindowsUserProfile()
     {
         var profile = Path.Combine(Path.GetPathRoot(_directory)!, "Users", "tester");

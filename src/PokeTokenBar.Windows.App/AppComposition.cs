@@ -54,7 +54,8 @@ public static class AppComposition
             httpClient,
             settings.CustomRoots,
             settings.Localization,
-            usageSnapshotPersistence);
+            usageSnapshotPersistence,
+            () => settings.CredentialAccessEnabled);
         usage.SelectedProviderId = settings.SelectedProviderId;
         settings.UpdateProviderStatuses(usage.ProviderStatuses);
         usage.PropertyChanged += (_, args) =>
@@ -96,6 +97,10 @@ public static class AppComposition
             {
                 usage.SetLimitDisplayMode(settings.SelectedLimitDisplayMode);
             }
+            else if (args.PropertyName == nameof(SettingsViewModel.CredentialAccessEnabled))
+            {
+                AppReliability.Run(usage.RefreshAsync());
+            }
         };
         usage.SetLimitDisplayMode(settings.SelectedLimitDisplayMode);
         var usagePolling = new UsagePollingController(
@@ -129,7 +134,8 @@ public static class AppComposition
         HttpClient? httpClient,
         Func<string, IReadOnlyList<string>>? customRoots,
         LocalizationService? localization = null,
-        IUsageSnapshotPersistence? snapshotPersistence = null)
+        IUsageSnapshotPersistence? snapshotPersistence = null,
+        Func<bool>? credentialAccessEnabled = null)
     {
         IUsageProvider[] providers = customRoots is null
             ?
@@ -143,9 +149,11 @@ public static class AppComposition
             ]
             : CreateConfiguredProviders(httpClient ?? new HttpClient(), customRoots);
         ICodexRateLimitsProvider codexRateLimitsProvider = new CodexRateLimitsProvider();
-        IClaudeRateLimitsProvider claudeRateLimitsProvider = new ClaudeRateLimitsProvider();
+        credentialAccessEnabled ??= () => true;
+        IClaudeRateLimitsProvider claudeRateLimitsProvider =
+            new ClaudeRateLimitsProvider(credentialAccessEnabled);
         IAntigravityRateLimitsProvider antigravityRateLimitsProvider =
-            new AntigravityRateLimitsProvider();
+            new AntigravityRateLimitsProvider(credentialAccessEnabled);
         var store = new UsageStore(
             providers,
             codexRateLimitsProvider: codexRateLimitsProvider,

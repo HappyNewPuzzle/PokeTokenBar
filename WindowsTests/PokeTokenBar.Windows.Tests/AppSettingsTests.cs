@@ -25,6 +25,7 @@ public sealed class AppSettingsTests : IDisposable
         Assert.Null(AppSettings.Default.FloatingPetPosition);
         Assert.False(AppSettings.Default.LaunchAtStartup);
         Assert.Equal(RefreshIntervalMode.TwoMinutes, AppSettings.Default.RefreshInterval);
+        Assert.True(AppSettings.Default.CredentialAccessEnabled);
     }
 
     [Fact]
@@ -147,6 +148,19 @@ public sealed class AppSettingsTests : IDisposable
         Assert.Equal(RefreshIntervalMode.FifteenMinutes, changed);
         Assert.Equal(RefreshIntervalMode.FifteenMinutes, persistence.LastSaved?.RefreshInterval);
         Assert.Equal(5, viewModel.RefreshIntervalOptions.Count);
+    }
+
+    [Fact]
+    public void CredentialAccessSelectionPersistsWithoutCredentialMaterial()
+    {
+        var persistence = new FakePersistence(AppSettings.Default);
+        var viewModel = new SettingsViewModel(persistence, new FakeAutoStart());
+
+        viewModel.CredentialAccessEnabled = false;
+
+        Assert.False(persistence.LastSaved!.CredentialAccessEnabled);
+        Assert.DoesNotContain("token", System.Text.Json.JsonSerializer.Serialize(
+            persistence.LastSaved), StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class FakeRunKey : IUserRunKey

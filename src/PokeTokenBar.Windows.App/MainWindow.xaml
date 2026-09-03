@@ -426,6 +426,25 @@
                               IsChecked="{Binding Settings.FloatingBubbleAlertsEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                     <CheckBox Margin="0,8,0,0" Content="{Binding Texts.UpdateNotifications, Mode=OneWay}"
                               IsChecked="{Binding Settings.UpdateNotificationsEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <CheckBox Margin="0,14,0,0" Content="{Binding Texts.CredentialAccess, Mode=OneWay}"
+                              IsChecked="{Binding Settings.CredentialAccessEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Margin="20,2,0,0" Text="{Binding Texts.CredentialAccessHint, Mode=OneWay}"
+                               FontSize="10" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                               TextWrapping="Wrap" />
+                    <Button Margin="20,6,0,0" HorizontalAlignment="Left" Padding="10,5"
+                            Content="{Binding Texts.RefreshCredentials, Mode=OneWay}"
+                            Command="{Binding Usage.RefreshCommand, Mode=OneWay}">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="IsEnabled" Value="True" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Settings.CredentialAccessEnabled, Mode=OneWay}" Value="False">
+                                        <Setter Property="IsEnabled" Value="False" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                     <TextBlock Margin="0,14,0,0" Text="{Binding Texts.ProviderRoots, Mode=OneWay}" FontWeight="SemiBold" />
                     <ItemsControl Margin="0,6,0,4" ItemsSource="{Binding Settings.ProviderStatusRows, Mode=OneWay}">
                         <ItemsControl.ItemTemplate>
