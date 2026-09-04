@@ -20,7 +20,7 @@ public sealed class SupportViewModel : INotifyPropertyChanged, IDisposable
     private UpdateCheckResult? _update;
     private string _updateStatus = "";
     private Func<LocalizationService, string> _statusText = text => text.NotChecked;
-    private bool _isChecking;
+    private UpdateCheckStatus _updateState = UpdateCheckStatus.Idle;
     private bool _disposed;
 
     internal SupportViewModel(
@@ -49,6 +49,7 @@ public sealed class SupportViewModel : INotifyPropertyChanged, IDisposable
         {
             _settings.SkipUpdateVersion(_update?.LatestVersion);
             _update = null;
+            UpdateState = UpdateCheckStatus.Idle;
             SetStatus(text => text.VersionSkipped);
             RaiseUpdateState();
             return Task.CompletedTask;
@@ -70,9 +71,17 @@ public sealed class SupportViewModel : INotifyPropertyChanged, IDisposable
     public string AppName => "PokeTokenBar";
     public string CurrentVersion => _updateChecker.CurrentVersion;
     public string VersionText => _settings.Localization.Version(CurrentVersion);
-    public bool IsChecking { get => _isChecking; private set => SetField(ref _isChecking, value); }
+    public UpdateCheckStatus UpdateState
+    {
+        get => _updateState;
+        private set
+        {
+            if (SetField(ref _updateState, value)) OnPropertyChanged(nameof(IsChecking));
+        }
+    }
+    public bool IsChecking => UpdateState == UpdateCheckStatus.Checking;
     public string UpdateStatus { get => _updateStatus; private set => SetField(ref _updateStatus, value); }
-    public bool HasUpdate => _update?.Status == UpdateCheckStatus.Available;
+    public bool HasUpdate => _update?.Status == UpdateCheckStatus.UpdateAvailable;
     public bool ShowUpdateBanner => HasUpdate && _settings.UpdateNotificationsEnabled;
     public string UpdateBannerText => HasUpdate ? _settings.Localization.UpdateBanner(_update!.LatestVersion!) : "";
 
@@ -90,26 +99,37 @@ public sealed class SupportViewModel : INotifyPropertyChanged, IDisposable
     {
         if (_lastChecked is { } last && _timeProvider.GetUtcNow() - last < minimumInterval) return;
         if (!await _checkGate.WaitAsync(0, cancellationToken)) return;
+        var previousState = UpdateState;
+        var previousStatus = _statusText;
         try
         {
             _lastChecked = _timeProvider.GetUtcNow();
-            IsChecking = true;
+            UpdateState = UpdateCheckStatus.Checking;
+            SetStatus(text => text.CheckingForUpdates);
             var result = await _updateChecker.CheckAsync(cancellationToken);
-            _update = result.Status == UpdateCheckStatus.Available &&
+            UpdateState = result.Status;
+            _update = result.Status == UpdateCheckStatus.UpdateAvailable &&
                       !string.Equals(result.LatestVersion, _settings.SkippedUpdateVersion, StringComparison.Ordinal)
                 ? result : null;
             SetStatus(result.Status switch
             {
-                UpdateCheckStatus.Available when _update is not null => text => text.UpdateAvailable(result.LatestVersion!),
+                UpdateCheckStatus.UpdateAvailable when _update is not null =>
+                    text => text.UpdateAvailableDetails(CurrentVersion, result.LatestVersion!),
+                UpdateCheckStatus.UpdateAvailable => text => text.VersionSkipped,
                 UpdateCheckStatus.Failed => text => text.UpdateCheckFailed,
                 _ => text => text.UpToDate(CurrentVersion),
             });
             if (!manual && result.Status == UpdateCheckStatus.Failed) SetStatus(text => text.NotChecked);
             RaiseUpdateState();
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            UpdateState = previousState;
+            SetStatus(previousStatus);
+            throw;
+        }
         finally
         {
-            IsChecking = false;
             _checkGate.Release();
         }
     }

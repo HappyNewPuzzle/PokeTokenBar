@@ -27,14 +27,14 @@ public sealed class Phase6ProductionizationTests : IDisposable
     [InlineData("3.0.0", "2.9.9", true)]
     [InlineData("2.0.10", "2.0.9", true)]
     [InlineData("2.0", "2.0.0", false)]
-    [InlineData("v2.5.3", "2.5.2", true)]
+    [InlineData("v2.5.3", "2.5.2", false)]
     [InlineData("2.5.3", "2.5.3-beta.1", true)]
     [InlineData("bad", "2.5.2", false)]
     public void ReleaseVersion_UsesVersionSafeComparison(string candidate, string current, bool expected) =>
         Assert.Equal(expected, ReleaseVersion.IsNewer(candidate, current));
 
     [Fact] public async Task UpdateChecker_ReturnsNewerStableRelease() =>
-        Assert.Equal(UpdateCheckStatus.Available, (await Checker("2.5.3").CheckAsync()).Status);
+        Assert.Equal(UpdateCheckStatus.UpdateAvailable, (await Checker("2.5.3").CheckAsync()).Status);
 
     [Theory]
     [InlineData("2.5.2")]
@@ -62,6 +62,7 @@ public sealed class Phase6ProductionizationTests : IDisposable
     {
         var handler = new CapturingHandler(ReleaseJson("2.5.3"));
         await new GitHubReleaseUpdateChecker(new HttpClient(handler), "2.5.2").CheckAsync();
+        Assert.Equal(GitHubReleaseUpdateChecker.ReleasesApi, handler.RequestUri);
         Assert.Contains("application/vnd.github+json", handler.Accept);
         Assert.Contains("PokeTokenBar/2.5.2", handler.UserAgent);
     }
@@ -353,12 +354,18 @@ public sealed class Phase6ProductionizationTests : IDisposable
     };
 
     private static GitHubReleaseUpdateChecker Checker(
-        string version, bool prerelease = false, string url = "https://github.com/chattymin/PokeTokenBar/releases/tag/v2.5.3") =>
+        string version, bool prerelease = false, string? url = null) =>
         new(new HttpClient(new JsonHandler(ReleaseJson(version, prerelease, url))), "2.5.2");
 
     private static string ReleaseJson(string version, bool prerelease = false,
-        string url = "https://github.com/chattymin/PokeTokenBar/releases/tag/v2.5.3") =>
-        JsonSerializer.Serialize(new { tag_name = version, html_url = url, draft = false, prerelease, body = "notes" });
+        string? url = null)
+    {
+        var tag = $"windows-v{version}";
+        return JsonSerializer.Serialize(new[]
+        {
+            new { tag_name = tag, html_url = url ?? $"https://github.com/HappyNewPuzzle/PokeTokenBar/releases/tag/{tag}", draft = false, prerelease, body = "notes" },
+        });
+    }
 
     private static (SettingsViewModel, UsageViewModel) DiagnosticsFixture() =>
         (new SettingsViewModel(new MemorySettings(), new AutoStart()),
@@ -376,8 +383,10 @@ public sealed class Phase6ProductionizationTests : IDisposable
     {
         public string Accept { get; private set; } = "";
         public string UserAgent { get; private set; } = "";
+        public Uri? RequestUri { get; private set; }
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            RequestUri = request.RequestUri;
             Accept = request.Headers.Accept.ToString();
             UserAgent = request.Headers.UserAgent.ToString();
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json) });

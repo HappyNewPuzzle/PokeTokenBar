@@ -67,7 +67,7 @@ internal sealed class WindowsUserInteraction : IUserInteraction
 
     public void OpenUri(Uri uri)
     {
-        if (uri.Scheme != Uri.UriSchemeHttps) return;
+        if (!ReleaseVersion.IsTrustedWindowsReleaseUri(uri)) return;
         Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
     }
 }
