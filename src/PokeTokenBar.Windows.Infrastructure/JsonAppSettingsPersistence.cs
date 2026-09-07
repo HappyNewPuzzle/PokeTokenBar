@@ -5,6 +5,8 @@ namespace PokeTokenBar.Windows.Infrastructure;
 
 public sealed class JsonAppSettingsPersistence : IAppSettingsPersistence
 {
+    private bool _writeBlocked;
+
     internal static readonly JsonSerializerOptions SerializerOptions =
         new(JsonSerializerDefaults.Web);
 
@@ -14,6 +16,8 @@ public sealed class JsonAppSettingsPersistence : IAppSettingsPersistence
     }
 
     public string FilePath { get; }
+
+    internal void BlockWritesUntilRestart() => _writeBlocked = true;
 
     public static string GetDefaultFilePath()
     {
@@ -34,18 +38,29 @@ public sealed class JsonAppSettingsPersistence : IAppSettingsPersistence
                 FileMode.Open,
                 FileAccess.Read,
                 FileShare.ReadWrite | FileShare.Delete);
-            var settings = JsonSerializer.Deserialize<AppSettings>(stream, SerializerOptions);
-            if (settings is null || !IsValid(settings))
+            using var document = JsonDocument.Parse(stream);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
             {
-                BackupCorruptFile();
+                _writeBlocked |= !AtomicFile.Quarantine(FilePath, "settings");
                 return null;
             }
 
-            return settings;
+            var recovered = false;
+            var settings = ReadSettings(document.RootElement, ref recovered);
+            var normalized = Normalize(settings);
+            if (recovered || settings != normalized)
+                ReliabilityEventLog.RecordRecovery("settings", "invalid-fields-defaulted");
+            return normalized;
         }
         catch (JsonException)
         {
-            BackupCorruptFile();
+            _writeBlocked |= !AtomicFile.Quarantine(FilePath, "settings");
+            return null;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            _writeBlocked = true;
+            ReliabilityEventLog.RecordError("settings", exception);
             return null;
         }
     }
@@ -53,34 +68,11 @@ public sealed class JsonAppSettingsPersistence : IAppSettingsPersistence
     public void Save(AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        var directory = Path.GetDirectoryName(FilePath)
-            ?? throw new InvalidOperationException("The settings path has no directory.");
-        Directory.CreateDirectory(directory);
-        var temporaryPath = Path.Combine(
-            directory,
-            $".{Path.GetFileName(FilePath)}.{Guid.NewGuid():N}.tmp");
-
-        try
-        {
-            using (var stream = new FileStream(
-                       temporaryPath,
-                       FileMode.CreateNew,
-                       FileAccess.Write,
-                       FileShare.None))
-            {
-                JsonSerializer.Serialize(stream, settings, SerializerOptions);
-                stream.Flush(flushToDisk: true);
-            }
-
-            File.Move(temporaryPath, FilePath, overwrite: true);
-        }
-        finally
-        {
-            if (File.Exists(temporaryPath))
-            {
-                File.Delete(temporaryPath);
-            }
-        }
+        if (_writeBlocked)
+            throw new IOException("Settings writes are disabled until PokeTokenBar restarts.");
+        if (!IsValid(settings)) throw new ArgumentException("Settings contain invalid values.", nameof(settings));
+        AtomicFile.Write(FilePath, stream =>
+            JsonSerializer.Serialize(stream, settings, SerializerOptions));
     }
 
     internal static bool IsValid(AppSettings settings) =>
@@ -98,17 +90,70 @@ public sealed class JsonAppSettingsPersistence : IAppSettingsPersistence
         (settings.FloatingPetPosition is not { } position ||
          (double.IsFinite(position.Left) && double.IsFinite(position.Top)));
 
-    private void BackupCorruptFile()
+    private static AppSettings ReadSettings(JsonElement root, ref bool recovered)
     {
-        var backupPath = $"{FilePath}.corrupt";
-        if (File.Exists(backupPath))
+        var defaults = AppSettings.Default;
+        return defaults with
         {
-            File.Delete(backupPath);
+            FloatingPetEnabled = Read(root, "floatingPetEnabled", defaults.FloatingPetEnabled, ref recovered),
+            FloatingPetPosition = Read(root, "floatingPetPosition", defaults.FloatingPetPosition, ref recovered),
+            LaunchAtStartup = Read(root, "launchAtStartup", defaults.LaunchAtStartup, ref recovered),
+            RefreshInterval = Read(root, "refreshInterval", defaults.RefreshInterval, ref recovered),
+            Language = Read(root, "language", defaults.Language, ref recovered),
+            LimitNotificationsEnabled = Read(root, "limitNotificationsEnabled", defaults.LimitNotificationsEnabled, ref recovered),
+            CompanionNotificationsEnabled = Read(root, "companionNotificationsEnabled", defaults.CompanionNotificationsEnabled, ref recovered),
+            WarningThreshold = Read(root, "warningThreshold", defaults.WarningThreshold, ref recovered),
+            CriticalThreshold = Read(root, "criticalThreshold", defaults.CriticalThreshold, ref recovered),
+            LimitDisplayMode = Read(root, "limitDisplayMode", defaults.LimitDisplayMode, ref recovered),
+            FloatingPetSize = Read(root, "floatingPetSize", defaults.FloatingPetSize, ref recovered),
+            AnimationQuality = Read(root, "animationQuality", defaults.AnimationQuality, ref recovered),
+            FloatingBubbleAlertsEnabled = Read(root, "floatingBubbleAlertsEnabled", defaults.FloatingBubbleAlertsEnabled, ref recovered),
+            CustomProviderRoots = Read(root, "customProviderRoots", defaults.CustomProviderRoots, ref recovered),
+            NotificationTiers = Read(root, "notificationTiers", defaults.NotificationTiers, ref recovered),
+            SelectedProviderId = Read(root, "selectedProviderId", defaults.SelectedProviderId, ref recovered),
+            UpdateNotificationsEnabled = Read(root, "updateNotificationsEnabled", defaults.UpdateNotificationsEnabled, ref recovered),
+            SkippedUpdateVersion = Read(root, "skippedUpdateVersion", defaults.SkippedUpdateVersion, ref recovered),
+            CredentialAccessEnabled = Read(root, "credentialAccessEnabled", defaults.CredentialAccessEnabled, ref recovered),
+        };
+    }
+
+    private static AppSettings Normalize(AppSettings settings)
+    {
+        var defaults = AppSettings.Default;
+        var warning = double.IsFinite(settings.WarningThreshold) && settings.WarningThreshold is >= 50 and <= 95
+            ? settings.WarningThreshold : defaults.WarningThreshold;
+        var critical = double.IsFinite(settings.CriticalThreshold) && settings.CriticalThreshold is >= 55 and <= 100
+            ? settings.CriticalThreshold : defaults.CriticalThreshold;
+        if (warning >= critical)
+        {
+            warning = defaults.WarningThreshold;
+            critical = defaults.CriticalThreshold;
         }
 
-        if (File.Exists(FilePath))
+        return settings with
         {
-            File.Move(FilePath, backupPath);
+            RefreshInterval = Enum.IsDefined(settings.RefreshInterval) ? settings.RefreshInterval : defaults.RefreshInterval,
+            Language = settings.Language is null || Enum.IsDefined(settings.Language.Value) ? settings.Language : defaults.Language,
+            WarningThreshold = warning,
+            CriticalThreshold = critical,
+            LimitDisplayMode = Enum.IsDefined(settings.LimitDisplayMode) ? settings.LimitDisplayMode : defaults.LimitDisplayMode,
+            FloatingPetSize = double.IsFinite(settings.FloatingPetSize) && settings.FloatingPetSize is >= 48 and <= 192
+                ? settings.FloatingPetSize : defaults.FloatingPetSize,
+            AnimationQuality = Enum.IsDefined(settings.AnimationQuality) ? settings.AnimationQuality : defaults.AnimationQuality,
+            FloatingPetPosition = settings.FloatingPetPosition is { } position &&
+                                  (!double.IsFinite(position.Left) || !double.IsFinite(position.Top))
+                ? defaults.FloatingPetPosition : settings.FloatingPetPosition,
+        };
+    }
+
+    private static T Read<T>(JsonElement root, string name, T fallback, ref bool recovered)
+    {
+        if (!root.TryGetProperty(name, out var property)) return fallback;
+        try { return property.Deserialize<T>(SerializerOptions) ?? fallback; }
+        catch (JsonException)
+        {
+            recovered = true;
+            return fallback;
         }
     }
 }

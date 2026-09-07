@@ -102,13 +102,23 @@ public sealed class StateTransferService
             WriteAtomic(_settings.FilePath, settingsBytes);
             _beforeCommitStep?.Invoke(2);
             WriteAtomic(_companion.FilePath, stateBytes);
+            try { WriteAtomic(_companion.BackupPath, stateBytes); }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                ReliabilityEventLog.RecordError("companion-backup", exception);
+            }
+            _settings.BlockWritesUntilRestart();
+            _companion.BlockWritesUntilRestart();
         }
-        catch (Exception exception)
+        catch (Exception)
         {
-            Restore(_settings.FilePath, oldSettings);
-            Restore(_companion.FilePath, oldState);
-            throw new StateTransferException(StateTransferError.CommitFailed,
-                $"The import was rolled back: {exception.Message}");
+            var rollbackFailed = !TryRestore(_settings.FilePath, oldSettings);
+            rollbackFailed |= !TryRestore(_companion.FilePath, oldState);
+            throw new StateTransferException(
+                StateTransferError.CommitFailed,
+                rollbackFailed
+                    ? "The import failed and rollback could not restore every file. Use the pre-import backup."
+                    : "The import was rolled back.");
         }
     }
 
@@ -226,26 +236,22 @@ public sealed class StateTransferService
         else WriteAtomic(path, data);
     }
 
-    private static void WriteAtomic(string path, byte[] data)
+    private static bool TryRestore(string path, byte[]? data)
     {
-        var directory = Path.GetDirectoryName(path)!;
-        Directory.CreateDirectory(directory);
-        var temporary = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         try
         {
-            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            {
-                stream.Write(data);
-                stream.Flush(true);
-            }
-            File.Move(temporary, path, true);
+            Restore(path, data);
+            return true;
         }
-        finally
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            try { if (File.Exists(temporary)) File.Delete(temporary); }
-            catch (IOException) { }
+            ReliabilityEventLog.RecordError("import-rollback", exception);
+            return false;
         }
     }
+
+    private static void WriteAtomic(string path, byte[] data)
+        => AtomicFile.WriteBytes(path, data);
 
     private static StateTransferException Invalid() =>
         new(StateTransferError.NotASaveFile, "The selected file is not a valid PokeTokenBar save.");

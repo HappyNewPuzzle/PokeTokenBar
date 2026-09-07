@@ -53,14 +53,15 @@ public sealed class Phase7CUsageCacheTests : IDisposable
     [InlineData("null")]
     [InlineData("{}")]
     [InlineData("[]")]
-    public void MalformedOrPartialCacheIsIgnoredWithoutMutation(string json)
+    public void MalformedOrPartialCacheIsIsolatedAndIgnored(string json)
     {
         WriteRaw(json);
 
         var result = Json().Load();
 
         Assert.Equal(UsageCacheLoadStatus.Corrupt, result.Status);
-        Assert.True(File.Exists(Json().FilePath));
+        Assert.False(File.Exists(Json().FilePath));
+        Assert.Single(Directory.GetFiles(_directory, "usage-cache.corrupt-*.json"));
     }
 
     [Fact]

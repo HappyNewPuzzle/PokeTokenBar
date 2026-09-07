@@ -168,6 +168,8 @@ public sealed class PokeApiClientTests : IDisposable
 
         Assert.Equal([new BaseSpecies(9, 120)], result);
         Assert.Equal(9, await ReadSnapshotEntriesAsync());
+        Assert.Contains(ReliabilityEventLog.Snapshot(), entry =>
+            entry.Component == "base-index" && entry.Summary == "cache-rebuilt");
     }
 
     [Fact]

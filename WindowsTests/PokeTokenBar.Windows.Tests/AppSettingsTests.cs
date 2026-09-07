@@ -70,7 +70,7 @@ public sealed class AppSettingsTests : IDisposable
         var loaded = persistence.Load();
 
         Assert.Null(loaded);
-        Assert.True(File.Exists(path + ".corrupt"));
+        Assert.Single(Directory.GetFiles(_directory, "settings.corrupt-*.json"));
     }
 
     [Fact]

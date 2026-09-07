@@ -82,7 +82,7 @@ public sealed class JsonCompanionPersistenceTests : IDisposable
 
         Assert.Null(persistence.Load());
         Assert.False(File.Exists(StatePath));
-        Assert.True(File.Exists($"{StatePath}.corrupt"));
+        Assert.Single(Directory.GetFiles(_directory, "companion-state.corrupt-*.json"));
     }
 
     [Theory]
@@ -96,7 +96,7 @@ public sealed class JsonCompanionPersistenceTests : IDisposable
         var persistence = new JsonCompanionPersistence(StatePath);
 
         Assert.Null(persistence.Load());
-        Assert.True(File.Exists($"{StatePath}.corrupt"));
+        Assert.Single(Directory.GetFiles(_directory, "companion-state.corrupt-*.json"));
     }
 
     [Fact]
@@ -119,7 +119,7 @@ public sealed class JsonCompanionPersistenceTests : IDisposable
         Assert.Null(state.Active);
         Assert.Empty(state.Inventory);
         Assert.True(File.Exists(StatePath));
-        Assert.False(File.Exists($"{StatePath}.corrupt"));
+        Assert.Empty(Directory.GetFiles(_directory, "companion-state.corrupt-*.json"));
     }
 
     [Fact]

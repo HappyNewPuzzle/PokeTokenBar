@@ -58,7 +58,7 @@ public sealed class SupportViewModel : INotifyPropertyChanged, IDisposable
         ImportCommand = new AsyncCommand(ImportAsync, onException: ShowError);
         CopyDiagnosticsCommand = new AsyncCommand(token =>
         {
-            _interaction.CopyText(DiagnosticsReport.Create(CurrentVersion, _settings, _usage));
+            _interaction.CopyText(DiagnosticsReport.Create(CurrentVersion, _settings, _usage, UpdateState));
             SetStatus(text => text.DiagnosticsCopied);
             return Task.CompletedTask;
         }, onException: ShowError);

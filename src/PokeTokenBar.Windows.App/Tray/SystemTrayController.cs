@@ -85,7 +85,7 @@ internal sealed class SystemTrayController : IDisposable, INotificationService
         ShowWindow();
     }
 
-    public void Refresh() => AppReliability.Run(_viewModel.RefreshCommand.ExecuteAsync());
+    public void Refresh() => AppReliability.Run(_viewModel.RefreshCommand.ExecuteAsync(), "tray-refresh");
 
     public void Exit()
     {

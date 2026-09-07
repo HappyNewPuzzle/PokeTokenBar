@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PokeTokenBar.Windows.Core;
@@ -6,6 +7,8 @@ namespace PokeTokenBar.Windows.Infrastructure;
 
 public sealed class JsonCompanionPersistence : ICompanionPersistence
 {
+    private bool _writeBlocked;
+
     internal static readonly JsonSerializerOptions SerializerOptions = CreateSerializerOptions();
 
     public JsonCompanionPersistence(string? filePath = null)
@@ -15,6 +18,10 @@ public sealed class JsonCompanionPersistence : ICompanionPersistence
 
     public string FilePath { get; }
 
+    internal string BackupPath => $"{FilePath}.bak";
+
+    internal void BlockWritesUntilRestart() => _writeBlocked = true;
+
     public static string GetDefaultFilePath()
     {
         return Path.Combine(PokeTokenBarDataPaths.Root, "companion-state.json");
@@ -22,91 +29,126 @@ public sealed class JsonCompanionPersistence : ICompanionPersistence
 
     public CompanionState? Load()
     {
-        if (!File.Exists(FilePath))
+        var primaryStatus = TryRead(FilePath, out var primary);
+        if (primaryStatus == ReadStatus.Valid)
         {
-            return null;
+            return primary;
         }
 
-        try
+        if (primaryStatus == ReadStatus.Unavailable) _writeBlocked = true;
+        if (primaryStatus == ReadStatus.Corrupt)
         {
-            using var stream = new FileStream(
-                FilePath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete);
-            using var document = JsonDocument.Parse(stream);
-            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            _writeBlocked |= !AtomicFile.Quarantine(FilePath, "companion");
+        }
+
+        var backupStatus = TryRead(BackupPath, out var backup);
+        if (backupStatus == ReadStatus.Valid)
+        {
+            if (!_writeBlocked)
             {
-                BackupCorruptFile();
-                return null;
+                try
+                {
+                    AtomicFile.WriteBytes(FilePath, File.ReadAllBytes(BackupPath));
+                    ReliabilityEventLog.RecordRecovery("companion", "last-known-good-restored");
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    ReliabilityEventLog.RecordError("companion", exception);
+                }
             }
-
-            return ReadState(document.RootElement);
+            else ReliabilityEventLog.RecordRecovery("companion", "last-known-good-read-only");
+            return backup;
         }
-        catch (JsonException)
-        {
-            BackupCorruptFile();
-            return null;
-        }
+        if (backupStatus == ReadStatus.Corrupt) AtomicFile.Quarantine(BackupPath, "companion-backup");
+        if (backupStatus == ReadStatus.Unavailable) _writeBlocked = true;
+        return null;
     }
 
     public void Save(CompanionState state)
     {
         ArgumentNullException.ThrowIfNull(state);
-        var directory = Path.GetDirectoryName(FilePath)
-            ?? throw new InvalidOperationException("The companion-state path has no directory.");
-        Directory.CreateDirectory(directory);
+        if (_writeBlocked)
+            throw new IOException("Companion writes are disabled until PokeTokenBar restarts.");
 
-        var temporaryPath = Path.Combine(
-            directory,
-            $".{Path.GetFileName(FilePath)}.{Guid.NewGuid():N}.tmp");
-        try
+        var primaryStatus = TryRead(FilePath, out _);
+        if (primaryStatus == ReadStatus.Unavailable)
         {
-            using (var stream = new FileStream(
-                       temporaryPath,
-                       FileMode.CreateNew,
-                       FileAccess.Write,
-                       FileShare.None))
-            {
-                JsonSerializer.Serialize(stream, state, SerializerOptions);
-                stream.Flush(flushToDisk: true);
-            }
-
-            File.Move(temporaryPath, FilePath, overwrite: true);
+            _writeBlocked = true;
+            throw new IOException("The existing companion state could not be read safely.");
         }
-        finally
+        if (primaryStatus == ReadStatus.Corrupt && !AtomicFile.Quarantine(FilePath, "companion"))
         {
-            if (File.Exists(temporaryPath))
+            _writeBlocked = true;
+            throw new IOException("The damaged companion state could not be isolated safely.");
+        }
+        if (primaryStatus == ReadStatus.Valid)
+        {
+            try { AtomicFile.WriteBytes(BackupPath, File.ReadAllBytes(FilePath)); }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
-                File.Delete(temporaryPath);
+                ReliabilityEventLog.RecordError("companion-backup", exception);
             }
         }
+
+        AtomicFile.Write(FilePath, stream =>
+            JsonSerializer.Serialize(stream, state, SerializerOptions));
     }
 
     public void Delete()
     {
-        if (File.Exists(FilePath))
+        if (_writeBlocked)
+            throw new IOException("Companion deletes are disabled until persistence is safely reloaded.");
+        try
         {
-            File.Delete(FilePath);
+            if (File.Exists(FilePath)) File.Delete(FilePath);
+            if (File.Exists(BackupPath)) File.Delete(BackupPath);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            ReliabilityEventLog.RecordError("companion", exception);
+            throw;
         }
     }
 
-    private void BackupCorruptFile()
+    private static ReadStatus TryRead(string path, out CompanionState? state)
     {
-        var backupPath = $"{FilePath}.corrupt";
-        if (File.Exists(backupPath))
+        state = null;
+        if (!File.Exists(path)) return ReadStatus.Missing;
+        try
         {
-            File.Delete(backupPath);
+            using var stream = new FileStream(
+                path, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            using var document = JsonDocument.Parse(stream);
+            if (document.RootElement.ValueKind != JsonValueKind.Object) return ReadStatus.Corrupt;
+            state = ReadState(document.RootElement);
+            return ReadStatus.Valid;
         }
-
-        if (File.Exists(FilePath))
+        catch (JsonException)
         {
-            File.Move(FilePath, backupPath);
+            return ReadStatus.Corrupt;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            ReliabilityEventLog.RecordError("companion", exception);
+            return ReadStatus.Unavailable;
         }
     }
 
-    internal static CompanionState ReadState(JsonElement root) =>
-        new()
+    private enum ReadStatus { Missing, Valid, Corrupt, Unavailable }
+
+    internal static CompanionState ReadState(JsonElement root)
+    {
+        var lastDate = Read(root, "lastDate", string.Empty);
+        var claimed = ReadClaimedTokens(root);
+        if (claimed is not null && !DateOnly.TryParseExact(
+                lastDate, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+        {
+            claimed = null;
+            lastDate = string.Empty;
+        }
+
+        return new()
         {
             InstallBaselineSet = Read(root, "installBaselineSet", false),
             UsedSinceInstall = Read(root, "usedSinceInstall", 0L),
@@ -114,8 +156,8 @@ public sealed class JsonCompanionPersistence : ICompanionPersistence
             EggUsage = Read(root, "eggUsage", 0L),
             EggTier = ReadNullable<PokemonRarity>(root, "eggTier"),
             PendingHatchId = ReadNullable<int>(root, "pendingHatchID"),
-            ClaimedTodayTokensByProvider = ReadClaimedTokens(root),
-            LastDate = Read(root, "lastDate", string.Empty),
+            ClaimedTodayTokensByProvider = claimed,
+            LastDate = lastDate,
             Active = ReadActive(root),
             RepresentativeSpeciesId = ReadNullable<int>(root, "representativeSpeciesID"),
             Dex = ReadDex(root),
@@ -125,6 +167,7 @@ public sealed class JsonCompanionPersistence : ICompanionPersistence
             CandyGrantTier = Read(root, "candyGrantTier", new Dictionary<string, int>()),
             CandyFeatureSeeded = Read(root, "candyFeatureSeeded", false),
         };
+    }
 
     private static MonState? ReadActive(JsonElement root)
     {
@@ -149,14 +192,14 @@ public sealed class JsonCompanionPersistence : ICompanionPersistence
         try
         {
             var decoded = active.Deserialize<MonState>(SerializerOptions);
-            if (decoded is null || decoded.PathIds.Count == 0)
+            if (decoded?.PathIds is not { Count: > 0 })
             {
                 return null;
             }
 
             return decoded with
             {
-                PlannedPathIds = decoded.PlannedPathIds.Count == 0
+                PlannedPathIds = decoded.PlannedPathIds is not { Count: > 0 }
                     ? decoded.PathIds
                     : decoded.PlannedPathIds,
                 StageIndex = Math.Clamp(decoded.StageIndex, 0, decoded.PathIds.Count - 1),
@@ -187,7 +230,7 @@ public sealed class JsonCompanionPersistence : ICompanionPersistence
             try
             {
                 var entry = element.Deserialize<DexEntry>(SerializerOptions);
-                if (entry is not null)
+                if (entry?.ChainOrder is { Count: > 0 })
                 {
                     entries.Add(entry);
                 }
@@ -209,10 +252,11 @@ public sealed class JsonCompanionPersistence : ICompanionPersistence
             return null;
         }
 
-        return Read(
+        var claimed = Read(
             root,
             "claimedTodayTokensByProvider",
             new Dictionary<string, long>());
+        return claimed.Values.All(value => value >= 0) ? claimed : null;
     }
 
     private static T Read<T>(JsonElement root, string propertyName, T fallback)
@@ -275,12 +319,18 @@ public sealed class JsonCompanionPersistence : ICompanionPersistence
             Type typeToConvert,
             JsonSerializerOptions options)
         {
-            if (reader.TokenType != JsonTokenType.Number || !reader.TryGetDouble(out var seconds))
+            if (reader.TokenType != JsonTokenType.Number ||
+                !reader.TryGetDouble(out var seconds) ||
+                !double.IsFinite(seconds))
             {
                 throw new JsonException("A Swift-compatible Date number was expected.");
             }
 
-            return ReferenceDate.AddSeconds(seconds);
+            try { return ReferenceDate.AddSeconds(seconds); }
+            catch (ArgumentOutOfRangeException exception)
+            {
+                throw new JsonException("The Swift-compatible Date is out of range.", exception);
+            }
         }
 
         public override void Write(

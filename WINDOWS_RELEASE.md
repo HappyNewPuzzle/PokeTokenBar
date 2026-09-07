@@ -22,7 +22,7 @@ Save export contains only PokeTokenBar settings and companion/economy/collection
 
 PokeTokenBar checks the latest stable `windows-vX.Y.Z` GitHub release at startup and when the popup is reopened, with a 30-minute minimum interval. “Check for updates” performs an immediate check. PokeTokenBar never replaces its running executable or starts an installer automatically; the release page opens only after the user selects it.
 
-“Copy diagnostics” copies a sanitized support report containing versions, architectures, provider availability, and boolean custom-root status. It excludes credentials, raw paths, session contents, prompts, and user identifiers.
+“Copy diagnostics” copies a sanitized support report containing versions, runtime/culture, update and provider status, persistence-file health, and recent recovery/error categories. It excludes exception messages, credentials, raw paths, session contents, prompts, and user identifiers. Malformed settings and caches are isolated per file; companion progress prefers its validated last-known-good backup without replaying game events.
 
 ## Building a release
 

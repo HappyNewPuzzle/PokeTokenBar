@@ -3,14 +3,15 @@ using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using PokeTokenBar.Windows.Core;
 
 namespace PokeTokenBar.Windows.App;
 
 internal static class AppReliability
 {
-    public static void Run(Task task) => _ = ObserveAsync(task);
+    public static void Run(Task task, string context = "background") => _ = ObserveAsync(task, context);
 
-    internal static async Task ObserveAsync(Task task)
+    internal static async Task ObserveAsync(Task task, string context = "background")
     {
         try
         {
@@ -21,6 +22,7 @@ internal static class AppReliability
         }
         catch (Exception exception) when (!IsFatal(exception))
         {
+            ReliabilityEventLog.RecordError(context, exception);
         }
     }
 

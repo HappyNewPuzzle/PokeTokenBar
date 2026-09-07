@@ -34,16 +34,19 @@ public sealed class JsonUsageSnapshotPersistence : IUsageSnapshotPersistence
             var document = JsonSerializer.Deserialize<CacheDocument>(stream, SerializerOptions);
             if (document is null || document.FormatVersion <= 0)
             {
+                AtomicFile.Quarantine(FilePath, "usage-cache");
                 return new(UsageCacheLoadStatus.Corrupt);
             }
 
             if (document.FormatVersion != FormatVersion)
             {
+                ReliabilityEventLog.RecordRecovery("usage-cache", "unsupported-cache-ignored");
                 return new(UsageCacheLoadStatus.Unsupported);
             }
 
             if (!IsValid(document))
             {
+                AtomicFile.Quarantine(FilePath, "usage-cache");
                 return new(UsageCacheLoadStatus.Corrupt);
             }
 
@@ -54,6 +57,10 @@ public sealed class JsonUsageSnapshotPersistence : IUsageSnapshotPersistence
         catch (Exception exception) when (
             exception is JsonException or IOException or UnauthorizedAccessException)
         {
+            if (exception is JsonException)
+                AtomicFile.Quarantine(FilePath, "usage-cache");
+            else
+                ReliabilityEventLog.RecordError("usage-cache", exception);
             return new(UsageCacheLoadStatus.Corrupt);
         }
     }
@@ -61,30 +68,12 @@ public sealed class JsonUsageSnapshotPersistence : IUsageSnapshotPersistence
     public void Save(UsageSnapshotCache cache)
     {
         ArgumentNullException.ThrowIfNull(cache);
-        var directory = Path.GetDirectoryName(FilePath)
-            ?? throw new InvalidOperationException("The usage cache path has no directory.");
-        Directory.CreateDirectory(directory);
-        var temporaryPath = Path.Combine(
-            directory, $".{Path.GetFileName(FilePath)}.{Guid.NewGuid():N}.tmp");
-
-        try
-        {
-            using (var stream = new FileStream(
-                       temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            {
-                JsonSerializer.Serialize(
-                    stream,
-                    new CacheDocument(FormatVersion, cache.SavedAt, cache.Providers),
-                    SerializerOptions);
-                stream.Flush(flushToDisk: true);
-            }
-
-            File.Move(temporaryPath, FilePath, overwrite: true);
-        }
-        finally
-        {
-            if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
-        }
+        var document = new CacheDocument(FormatVersion, cache.SavedAt, cache.Providers);
+        if (!IsValid(document)) throw new ArgumentException("Usage cache contains invalid values.", nameof(cache));
+        AtomicFile.Write(FilePath, stream => JsonSerializer.Serialize(
+            stream,
+            document,
+            SerializerOptions));
     }
 
     private static bool IsValid(CacheDocument document)

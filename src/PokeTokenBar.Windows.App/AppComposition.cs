@@ -89,7 +89,7 @@ public static class AppComposition
         {
             companionStore.SetLanguage(language);
             usage.RefreshPresentation();
-            AppReliability.Run(RefreshLanguageAsync(companion, economy));
+            AppReliability.Run(RefreshLanguageAsync(companion, economy), "language-refresh");
         };
         settings.PropertyChanged += (_, args) =>
         {
@@ -99,7 +99,7 @@ public static class AppComposition
             }
             else if (args.PropertyName == nameof(SettingsViewModel.CredentialAccessEnabled))
             {
-                AppReliability.Run(usage.RefreshAsync());
+                AppReliability.Run(usage.RefreshAsync(), "credential-refresh");
             }
         };
         usage.SetLimitDisplayMode(settings.SelectedLimitDisplayMode);

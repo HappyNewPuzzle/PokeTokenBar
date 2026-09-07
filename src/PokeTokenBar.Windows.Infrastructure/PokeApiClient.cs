@@ -22,6 +22,7 @@ public sealed class PokeApiClient : IPokeApiClient
     private readonly Dictionary<int, EvoLine> _lineCache = [];
     private IReadOnlyList<BaseSpecies>? _baseIndexCache;
     private Task<IReadOnlyList<BaseSpecies>>? _baseIndexRefreshTask;
+    private bool _baseIndexRecoveryPending;
 
     private static readonly TimeSpan BaseIndexFreshness = TimeSpan.FromDays(30);
 
@@ -202,9 +203,18 @@ public sealed class PokeApiClient : IPokeApiClient
                     new BaseIndexSnapshot(_timeProvider.GetUtcNow(), entries),
                     cancellationToken)
                 .ConfigureAwait(false);
+            lock (_cacheLock)
+            {
+                if (_baseIndexRecoveryPending)
+                {
+                    ReliabilityEventLog.RecordRecovery("base-index", "cache-rebuilt");
+                    _baseIndexRecoveryPending = false;
+                }
+            }
         }
-        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
+            ReliabilityEventLog.RecordError("base-index", exception);
             // The network result is still valid in memory even if the optional disk cache cannot be written.
         }
 
@@ -249,6 +259,7 @@ public sealed class PokeApiClient : IPokeApiClient
     private async Task<BaseIndexSnapshot?> TryReadBaseIndexCacheAsync(
         CancellationToken cancellationToken)
     {
+        if (!File.Exists(_baseIndexCachePath)) return null;
         try
         {
             await using var stream = new FileStream(
@@ -263,13 +274,23 @@ public sealed class PokeApiClient : IPokeApiClient
                     JsonOptions,
                     cancellationToken)
                 .ConfigureAwait(false);
-            return snapshot is { Entries.Count: > 0 } ? snapshot : null;
+            if (snapshot is { Entries.Count: > 0 }) return snapshot;
+            MarkBaseIndexRecovery();
+            return null;
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or JsonException)
         {
+            if (exception is JsonException) MarkBaseIndexRecovery();
+            else ReliabilityEventLog.RecordError("base-index", exception);
             return null;
         }
+    }
+
+    private void MarkBaseIndexRecovery()
+    {
+        lock (_cacheLock) _baseIndexRecoveryPending = true;
+        ReliabilityEventLog.RecordRecovery("base-index", "cache-ignored");
     }
 
     private async Task WriteBaseIndexCacheAsync(

@@ -3,6 +3,7 @@ using System.Windows.Threading;
 using PokeTokenBar.Windows.App.FloatingPet;
 using PokeTokenBar.Windows.App.Lifecycle;
 using PokeTokenBar.Windows.App.Tray;
+using PokeTokenBar.Windows.Core;
 
 namespace PokeTokenBar.Windows.App;
 
@@ -20,6 +21,7 @@ public partial class App : System.Windows.Application
     public App()
     {
         DispatcherUnhandledException += OnDispatcherUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
     }
 
@@ -98,12 +100,12 @@ public partial class App : System.Windows.Application
 
         _initialRefresh = new InitialRefreshController(viewModel.Usage);
         _initialCompanion = new InitialCompanionController(viewModel.Companion);
-        AppReliability.Run(_initialRefresh.StartAsync());
+        AppReliability.Run(_initialRefresh.StartAsync(), "startup-usage");
         _composition.UsagePolling.Start();
-        AppReliability.Run(_initialCompanion.StartAsync());
+        AppReliability.Run(_initialCompanion.StartAsync(), "startup-companion");
         if (viewModel.Support is { } support)
         {
-            AppReliability.Run(support.CheckAsync(TimeSpan.FromMinutes(30)));
+            AppReliability.Run(support.CheckAsync(TimeSpan.FromMinutes(30)), "startup-update");
         }
     }
 
@@ -118,6 +120,7 @@ public partial class App : System.Windows.Application
         _composition?.Dispose();
         _singleInstance?.Dispose();
         DispatcherUnhandledException -= OnDispatcherUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException -= OnAppDomainUnhandledException;
         TaskScheduler.UnobservedTaskException -= OnUnobservedTaskException;
         base.OnExit(e);
     }
@@ -126,13 +129,21 @@ public partial class App : System.Windows.Application
         object sender,
         DispatcherUnhandledExceptionEventArgs args)
     {
+        ReliabilityEventLog.RecordError("dispatcher", args.Exception);
         if (AppReliability.IsRecoverableDispatcherException(args.Exception)) args.Handled = true;
+    }
+
+    private static void OnAppDomainUnhandledException(object sender, UnhandledExceptionEventArgs args)
+    {
+        if (args.ExceptionObject is Exception exception)
+            ReliabilityEventLog.RecordError("app-domain", exception);
     }
 
     private static void OnUnobservedTaskException(
         object? sender,
         UnobservedTaskExceptionEventArgs args)
     {
+        ReliabilityEventLog.RecordError("task-scheduler", args.Exception);
         if (!AppReliability.IsFatal(args.Exception)) args.SetObserved();
     }
 }
