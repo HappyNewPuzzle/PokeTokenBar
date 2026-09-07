@@ -106,6 +106,23 @@ public sealed class Phase8BDiagnosticsRecoveryTests : IDisposable
     }
 
     [Fact]
+    public void AtomicWrite_TemporaryHandleAllowsRenameBeforeDispose()
+    {
+        var path = Path("rename.json");
+
+        AtomicFile.Write(path, stream =>
+        {
+            stream.Write(Encoding.UTF8.GetBytes("fixture"));
+            var temporary = Assert.IsType<FileStream>(stream).Name;
+            var probe = $"{temporary}.probe";
+            File.Move(temporary, probe);
+            File.Move(probe, temporary);
+        });
+
+        Assert.Equal("fixture", File.ReadAllText(path));
+    }
+
+    [Fact]
     public void Persistence_ReplaceFailurePreservesPreviousValidFile()
     {
         var persistence = new JsonAppSettingsPersistence(Path("settings.json"));

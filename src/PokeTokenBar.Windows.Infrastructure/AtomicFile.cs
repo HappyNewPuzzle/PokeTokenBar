@@ -20,13 +20,10 @@ internal static class AtomicFile
             var temporary = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
             try
             {
-                using (var stream = new FileStream(
-                           temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                {
-                    write(stream);
-                    stream.Flush(flushToDisk: true);
-                }
-
+                using var stream = new FileStream(
+                    temporary, FileMode.CreateNew, FileAccess.Write, FileShare.Delete);
+                write(stream);
+                stream.Flush(flushToDisk: true);
                 File.Move(temporary, path, overwrite: true);
             }
             finally
