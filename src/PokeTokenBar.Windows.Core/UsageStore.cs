@@ -23,10 +23,13 @@ public sealed class UsageStore
     private bool _refreshPending;
     private CodexRateLimitStatus? _codexRateLimits;
     private DateTimeOffset? _codexRateLimitsUpdatedAt;
+    private bool _codexRateLimitsRefreshFailed;
     private ClaudeRateLimitStatus? _claudeRateLimits;
     private DateTimeOffset? _claudeRateLimitsUpdatedAt;
+    private bool _claudeRateLimitsRefreshFailed;
     private AntigravityRateLimitStatus? _antigravityRateLimits;
     private DateTimeOffset? _antigravityRateLimitsUpdatedAt;
+    private bool _antigravityRateLimitsRefreshFailed;
     private IReadOnlyList<ProviderStatusSnapshot> _providerStatuses = Array.Empty<ProviderStatusSnapshot>();
     private UsageCacheLoadStatus _usageCacheStatus = UsageCacheLoadStatus.Missing;
 
@@ -160,8 +163,9 @@ public sealed class UsageStore
             lock (_stateLock)
             {
                 return _codexRateLimits is not null &&
-                    _codexRateLimitsUpdatedAt is DateTimeOffset updatedAt &&
-                    Now() - updatedAt > TimeSpan.FromMinutes(15);
+                    (_codexRateLimitsRefreshFailed ||
+                     (_codexRateLimitsUpdatedAt is DateTimeOffset updatedAt &&
+                      Now() - updatedAt > TimeSpan.FromMinutes(15)));
             }
         }
     }
@@ -447,6 +451,7 @@ public sealed class UsageStore
             lock (_stateLock)
             {
                 _codexRateLimits = limits;
+                _codexRateLimitsRefreshFailed = false;
                 if (limits is not null)
                 {
                     _codexRateLimitsUpdatedAt = Now();
@@ -461,6 +466,7 @@ public sealed class UsageStore
         {
             // Official limits are best effort. Preserve the previous successful value.
             succeeded = false;
+            lock (_stateLock) _codexRateLimitsRefreshFailed = true;
         }
 
         EnsureProviderSnapshotForOfficialLimits(
@@ -485,6 +491,7 @@ public sealed class UsageStore
             lock (_stateLock)
             {
                 _claudeRateLimits = limits;
+                _claudeRateLimitsRefreshFailed = false;
                 if (limits is not null)
                 {
                     _claudeRateLimitsUpdatedAt = Now();
@@ -499,6 +506,7 @@ public sealed class UsageStore
         {
             // Claude OAuth limits are best effort; local usage remains available.
             succeeded = false;
+            lock (_stateLock) _claudeRateLimitsRefreshFailed = true;
         }
 
         EnsureProviderSnapshotForOfficialLimits(
@@ -548,6 +556,7 @@ public sealed class UsageStore
             lock (_stateLock)
             {
                 _antigravityRateLimits = limits;
+                _antigravityRateLimitsRefreshFailed = false;
                 if (limits is not null)
                 {
                     _antigravityRateLimitsUpdatedAt = Now();
@@ -562,6 +571,7 @@ public sealed class UsageStore
         {
             // Antigravity quota is best effort; local usage remains available.
             succeeded = false;
+            lock (_stateLock) _antigravityRateLimitsRefreshFailed = true;
         }
 
         EnsureProviderSnapshotForOfficialLimits(
@@ -595,9 +605,10 @@ public sealed class UsageStore
                     false => ProviderAuthStatus.QuotaUnavailable,
                     null => ProviderAuthStatus.NotApplicable,
                 };
+                var hasLocalData = snapshot is not null && HasLocalData(snapshot);
                 var runtime = failedProviderIds.Contains(provider.Id)
                     ? snapshot is null ? ProviderRuntimeStatus.Error : ProviderRuntimeStatus.Stale
-                    : !official.RefreshSucceeded && official.HasLimits == true && snapshot is not null
+                    : !official.RefreshSucceeded && official.HasLimits == true && !hasLocalData
                         ? ProviderRuntimeStatus.Stale
                         : snapshot is null
                             ? ProviderRuntimeStatus.NoSessions
@@ -638,8 +649,9 @@ public sealed class UsageStore
             lock (_stateLock)
             {
                 return _antigravityRateLimits is not null &&
-                    _antigravityRateLimitsUpdatedAt is DateTimeOffset updatedAt &&
-                    Now() - updatedAt > TimeSpan.FromMinutes(15);
+                    (_antigravityRateLimitsRefreshFailed ||
+                     (_antigravityRateLimitsUpdatedAt is DateTimeOffset updatedAt &&
+                      Now() - updatedAt > TimeSpan.FromMinutes(15)));
             }
         }
     }
@@ -673,8 +685,9 @@ public sealed class UsageStore
             lock (_stateLock)
             {
                 return _claudeRateLimits is not null &&
-                    _claudeRateLimitsUpdatedAt is DateTimeOffset updatedAt &&
-                    Now() - updatedAt > TimeSpan.FromMinutes(15);
+                    (_claudeRateLimitsRefreshFailed ||
+                     (_claudeRateLimitsUpdatedAt is DateTimeOffset updatedAt &&
+                      Now() - updatedAt > TimeSpan.FromMinutes(15)));
             }
         }
     }

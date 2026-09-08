@@ -162,6 +162,8 @@ public sealed class LocalizationService : INotifyPropertyChanged
     public string CacheWrite => T("캐시 쓰기", "Cache write", "キャッシュ書き込み", "Escritura de caché", "Écriture cache", "Gravação de cache", "Cache-Schreibvorgänge");
     public string CacheRead => T("캐시 읽기", "Cache read", "キャッシュ読み取り", "Lectura de caché", "Lecture cache", "Leitura de cache", "Cache-Lesevorgänge");
     public string UsagePeriods => T("사용 기간", "Usage periods", "使用期間", "Períodos de uso", "Périodes d’utilisation", "Períodos de uso", "Nutzungszeiträume");
+    public string LocalUsage => T("로컬 사용량", "Local usage", "ローカル使用量", "Uso local", "Utilisation locale", "Uso local", "Lokale Nutzung");
+    public string LocalUpdated => T("로컬 갱신", "Local updated", "ローカル更新", "Actualización local", "Actualisation locale", "Atualização local", "Lokal aktualisiert");
     public string ShopIntro => T("사용한 토큰으로 아이템을 살 수 있어요. 구매해도 성장량은 줄지 않아요.", "Spend the tokens you've used on items. Purchases do not reduce growth.", "使ったトークンでアイテムを購入できます。購入しても成長量は減りません。", "Usa los tokens consumidos para comprar objetos. Las compras no reducen el progreso.", "Dépense les tokens consommés en objets. Les achats ne réduisent pas la progression.", "Compre itens com os tokens usados. As compras não reduzem o progresso.", "Kaufe Gegenstände mit deinen verbrauchten Tokens. Käufe verringern den Fortschritt nicht.");
     public string BagIntro => T("아이템은 앱을 다시 시작해도 유지돼요.", "Items persist across restarts.", "アイテムは再起動後も保持されます。", "Los objetos se conservan al reiniciar.", "Les objets sont conservés après redémarrage.", "Os itens continuam disponíveis após reiniciar.", "Gegenstände bleiben nach einem Neustart erhalten.");
     public string Active => T("적용 중", "Active", "適用中", "Activo", "Actif", "Ativo", "Aktiv");

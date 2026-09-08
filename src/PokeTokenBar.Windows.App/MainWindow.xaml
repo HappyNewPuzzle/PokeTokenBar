@@ -143,14 +143,13 @@
                                Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                     <TextBlock Margin="0,3,0,0"
                                FontSize="11"
-                               Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}">
-                        <Run Text="{Binding Usage.ProviderStatusText, Mode=OneWay}" />
-                        <Run Text=" · " />
-                        <Run Text="{Binding Usage.ProviderAuthStatusText, Mode=OneWay}" />
-                    </TextBlock>
+                               Text="{Binding Usage.ProviderStatusSummaryText, Mode=OneWay}"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                     <TextBlock Margin="0,4,0,0"
+                               TextWrapping="Wrap"
                                Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}">
-                        <Run Text="{Binding Texts.LastUpdated, Mode=OneWay}" />
+                        <Run Text="{Binding Texts.LocalUpdated, Mode=OneWay}" />
                         <Run Text=": " />
                         <Run Text="{Binding Usage.LastUpdatedText, Mode=OneWay, TargetNullValue=—}" />
                     </TextBlock>
@@ -250,7 +249,7 @@
                     BorderThickness="1"
                     CornerRadius="8">
                 <StackPanel>
-                    <TextBlock Text="{Binding Texts.UsagePeriods, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Texts.LocalUsage, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" />
                     <Grid Margin="0,14,0,0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -290,21 +289,42 @@
                     </Style>
                 </Border.Style>
                 <StackPanel>
+                    <StackPanel.Resources>
+                        <Style x:Key="OptionalOfficialText" TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <Trigger Property="Text" Value="{x:Null}">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </Trigger>
+                                <Trigger Property="Text" Value="">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Resources>
                     <TextBlock Text="{Binding Texts.OfficialLimits, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" />
                     <TextBlock Margin="0,4,0,0"
+                               Style="{StaticResource OptionalOfficialText}"
                                Text="{Binding Usage.OfficialLimitsMetadataText, Mode=OneWay}"
+                               TextWrapping="Wrap"
                                FontSize="11"
                                Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                     <TextBlock Margin="0,4,0,0"
+                               Style="{StaticResource OptionalOfficialText}"
                                Text="{Binding Usage.CreditsText, Mode=OneWay}"
+                               TextWrapping="Wrap"
                                FontSize="11"
                                Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                     <TextBlock Margin="0,4,0,0"
+                               Style="{StaticResource OptionalOfficialText}"
                                Text="{Binding Usage.BurnRateText, Mode=OneWay}"
+                               TextWrapping="Wrap"
                                FontSize="11"
                                Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                     <TextBlock Margin="0,2,0,0"
+                               Style="{StaticResource OptionalOfficialText}"
                                Text="{Binding Usage.ForecastText, Mode=OneWay}"
+                               TextWrapping="Wrap"
                                FontSize="11"
                                Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
 
@@ -330,10 +350,12 @@
                                                  Maximum="100"
                                                  Value="{Binding RemainingPercent, Mode=OneWay}" />
                                     <TextBlock Margin="0,4,0,0"
+                                               Style="{StaticResource OptionalOfficialText}"
                                                Text="{Binding DetailText, Mode=OneWay}"
                                                FontSize="11"
                                                Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                                     <TextBlock Margin="0,2,0,0"
+                                               Style="{StaticResource OptionalOfficialText}"
                                                Text="{Binding ResetText, Mode=OneWay}"
                                                FontSize="11"
                                                Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
@@ -454,14 +476,17 @@
                                         <ColumnDefinition Width="120" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Text="{Binding DisplayName, Mode=OneWay}" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding DisplayName, Mode=OneWay}"
+                                               TextWrapping="Wrap"
+                                               FontWeight="SemiBold" />
                                     <StackPanel Grid.Column="1">
-                                        <TextBlock Text="{Binding StatusText, Mode=OneWay}" FontSize="11" />
-                                        <TextBlock FontSize="10" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}">
-                                            <Run Text="{Binding AuthStatusText, Mode=OneWay}" />
-                                            <Run Text=" · " />
-                                            <Run Text="{Binding RootStatusText, Mode=OneWay}" />
-                                        </TextBlock>
+                                        <TextBlock Text="{Binding StatusText, Mode=OneWay}"
+                                                   TextWrapping="Wrap"
+                                                   FontSize="11" />
+                                        <TextBlock Text="{Binding DetailsText, Mode=OneWay}"
+                                                   TextWrapping="Wrap"
+                                                   FontSize="10"
+                                                   Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                                     </StackPanel>
                                 </Grid>
                             </DataTemplate>

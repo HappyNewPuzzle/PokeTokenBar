@@ -346,7 +346,9 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
         .Select(status => new ProviderStatusRow(
             status.DisplayName,
             Localization.RuntimeStatus(status.RuntimeStatus),
-            Localization.AuthStatus(status.AuthStatus),
+            status.AuthStatus == ProviderAuthStatus.NotApplicable
+                ? null
+                : Localization.AuthStatus(status.AuthStatus),
             HasConfiguredCustomRoot(status.ProviderId)
                 ? Localization.CustomRootConfigured
                 : Localization.DefaultRoots))

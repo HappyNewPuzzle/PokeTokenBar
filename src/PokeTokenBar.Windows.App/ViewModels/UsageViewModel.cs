@@ -616,14 +616,26 @@ public sealed class UsageViewModel : INotifyPropertyChanged
     public string? ProviderStatusText
     {
         get => _providerStatusText;
-        private set => SetField(ref _providerStatusText, value);
+        private set
+        {
+            if (SetField(ref _providerStatusText, value))
+                OnPropertyChanged(nameof(ProviderStatusSummaryText));
+        }
     }
 
     public string? ProviderAuthStatusText
     {
         get => _providerAuthStatusText;
-        private set => SetField(ref _providerAuthStatusText, value);
+        private set
+        {
+            if (SetField(ref _providerAuthStatusText, value))
+                OnPropertyChanged(nameof(ProviderStatusSummaryText));
+        }
     }
+
+    public string ProviderStatusSummaryText => string.Join(
+        " · ", new[] { ProviderStatusText, ProviderAuthStatusText }
+            .Where(static value => !string.IsNullOrWhiteSpace(value)));
 
     public string? CreditsText
     {
@@ -744,15 +756,14 @@ public sealed class UsageViewModel : INotifyPropertyChanged
             status.ProviderId == selected?.ProviderId);
         if (providerStatus is not null)
         {
-            var runtime = IsOfficialLimitsStale(providerStatus.ProviderId)
-                ? ProviderRuntimeStatus.Stale
-                : providerStatus.RuntimeStatus;
-            ProviderStatusText = _localization.RuntimeStatus(runtime);
-            ProviderAuthStatusText = _localization.AuthStatus(providerStatus.AuthStatus);
+            ProviderStatusText = _localization.RuntimeStatus(providerStatus.RuntimeStatus);
+            ProviderAuthStatusText = providerStatus.AuthStatus == ProviderAuthStatus.NotApplicable
+                ? null
+                : _localization.AuthStatus(providerStatus.AuthStatus);
         }
         else
         {
-            ProviderStatusText = null;
+            ProviderStatusText = _localization.NoSessions;
             ProviderAuthStatusText = null;
         }
         ApplyOfficialLimits(selected?.ProviderId);
@@ -816,7 +827,9 @@ public sealed class UsageViewModel : INotifyPropertyChanged
                 string.IsNullOrWhiteSpace(plan) ? null : $"{_localization.Plan}: {plan}",
                 status?.VisibleSnapshots.Any(static bucket => bucket.RateLimitReachedType is not null) == true
                     ? _localization.LimitReached : null,
-                _store.CodexRateLimitsStale ? _localization.Stale : null,
+                OfficialStaleText(
+                    _store.CodexRateLimitsStale,
+                    _store.CodexRateLimitsUpdatedAt),
             }.Where(static value => value is not null)!);
             if (OfficialLimitsMetadataText.Length == 0) OfficialLimitsMetadataText = null;
         }
@@ -829,7 +842,14 @@ public sealed class UsageViewModel : INotifyPropertyChanged
             secondaryReset = status?.SevenDay?.ResetsAt;
             OfficialLimitsMetadataText = string.Join(
                 " · ",
-                new[] { status?.PlanDisplay, status?.AccountDisplay }
+                new[]
+                {
+                    status?.PlanDisplay,
+                    status?.AccountDisplay,
+                    OfficialStaleText(
+                        _store.ClaudeRateLimitsStale,
+                        _store.ClaudeRateLimitsUpdatedAt),
+                }
                     .Where(static value => !string.IsNullOrWhiteSpace(value))!);
             if (OfficialLimitsMetadataText.Length == 0)
             {
@@ -843,14 +863,14 @@ public sealed class UsageViewModel : INotifyPropertyChanged
             {
                 rows.Add(LimitRow(_localization.Weekly, weekly.UsedPercent, weekly.ResetsAt));
             }
-            if (_store.ClaudeBurnPerMinute is double burn && burn > 0 && double.IsFinite(burn))
+            if (status?.FiveHour is not null &&
+                _store.ClaudeBurnPerMinute is double burn && burn > 0 && double.IsFinite(burn))
             {
                 BurnRateText = $"{_localization.BurnRate}: {UsageValueFormatter.Compact((long)Math.Round(burn))}/min";
             }
-            if (status?.FiveHour is not null || _store.ClaudeBurnPerMinute is not null)
+            if (!_store.ClaudeRateLimitsStale && _store.ClaudeFiveHourForecast is { } forecast)
             {
-                var forecast = _store.ClaudeFiveHourForecast;
-                ForecastText = forecast?.BeforeReset == true
+                ForecastText = forecast.BeforeReset
                     ? $"{_localization.Forecast}: {forecast.DepletionTime.ToLocalTime():HH:mm}"
                     : $"{_localization.Forecast}: {_localization.NoProjection}";
             }
@@ -865,6 +885,9 @@ public sealed class UsageViewModel : INotifyPropertyChanged
                     FormatReset(bucket.ResetsAt))))
                 .ToArray() ?? Array.Empty<OfficialLimitRow>();
             rows.AddRange(AntigravityLimitRows);
+            OfficialLimitsMetadataText = OfficialStaleText(
+                _store.AntigravityRateLimitsStale,
+                _store.AntigravityRateLimitsUpdatedAt);
         }
 
         OfficialLimitRows = rows;
@@ -905,13 +928,15 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         return spaced.Length == 0 ? "Codex" : char.ToUpperInvariant(spaced[0]) + spaced[1..];
     }
 
-    private bool IsOfficialLimitsStale(string providerId) => providerId switch
-    {
-        "codex" => _store.CodexRateLimitsStale,
-        "claude_code" => _store.ClaudeRateLimitsStale,
-        "antigravity" => _store.AntigravityRateLimitsStale,
-        _ => false,
-    };
+    private string? OfficialStaleText(bool stale, DateTimeOffset? updatedAt) => stale
+        ? string.Join(" · ", new[]
+        {
+            _localization.Stale,
+            FormatRelative(updatedAt) is { } relative
+                ? $"{_localization.LastUpdated}: {relative}"
+                : null,
+        }.Where(static value => value is not null)!)
+        : null;
 
     private string LimitText(double usedPercent)
     {

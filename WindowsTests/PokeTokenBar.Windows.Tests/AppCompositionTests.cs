@@ -264,8 +264,7 @@ public sealed partial class AppCompositionTests
             "HasCodexRateLimits",
             "OfficialLimitsMetadataText",
             "OfficialLimitRows",
-            "ProviderStatusText",
-            "ProviderAuthStatusText",
+            "ProviderStatusSummaryText",
             "CreditsText",
             "BurnRateText",
             "ForecastText",
@@ -283,6 +282,11 @@ public sealed partial class AppCompositionTests
         Assert.Contains("Value=\"{Binding RemainingPercent", xaml, StringComparison.Ordinal);
         Assert.Contains("Text=\"{Binding RemainingText", xaml, StringComparison.Ordinal);
         Assert.Contains("ItemsSource=\"{Binding Settings.ProviderStatusRows", xaml, StringComparison.Ordinal);
+        Assert.Contains("Text=\"{Binding DetailsText", xaml, StringComparison.Ordinal);
+        Assert.Contains("Binding Texts.LocalUsage", xaml, StringComparison.Ordinal);
+        Assert.Contains("Binding Texts.LocalUpdated", xaml, StringComparison.Ordinal);
+        Assert.Contains("x:Key=\"OptionalOfficialText\"", xaml, StringComparison.Ordinal);
+        Assert.Contains("TextWrapping=\"Wrap\"", xaml, StringComparison.Ordinal);
     }
 
     [Fact]

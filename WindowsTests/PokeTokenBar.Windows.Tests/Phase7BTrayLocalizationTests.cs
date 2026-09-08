@@ -350,7 +350,7 @@ public sealed class Phase7BTrayLocalizationTests
         Assert.DoesNotContain("TargetNullValue=Unknown nature", xaml, StringComparison.Ordinal);
         Assert.Contains("Texts.ShopIntro", xaml, StringComparison.Ordinal);
         Assert.Contains("Texts.BagIntro", xaml, StringComparison.Ordinal);
-        Assert.Contains("Texts.LastUpdated", xaml, StringComparison.Ordinal);
+        Assert.Contains("Texts.LocalUpdated", xaml, StringComparison.Ordinal);
     }
 
     [Fact]

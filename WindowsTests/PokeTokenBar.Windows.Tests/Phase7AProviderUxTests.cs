@@ -50,6 +50,7 @@ public sealed class Phase7AProviderUxTests : IDisposable
 
     [Theory]
     [InlineData("12.50", false, "Credits: 12.50")]
+    [InlineData("0", false, "Credits: 0")]
     [InlineData(null, true, "Credits: ∞")]
     [InlineData(null, false, null)]
     public async Task CreditsNeverInventZero(string? balance, bool unlimited, string? expected)
@@ -156,7 +157,7 @@ public sealed class Phase7AProviderUxTests : IDisposable
     }
 
     [Fact]
-    public async Task OfficialFailurePreservesLimitsAndMarksProviderStale()
+    public async Task OfficialFailurePreservesLimitsAndKeepsFreshLocalProviderReady()
     {
         var limits = new FakeCodexLimits { Value = SimpleCodexStatus(10) };
         var store = new UsageStore(
@@ -168,7 +169,8 @@ public sealed class Phase7AProviderUxTests : IDisposable
         await store.RefreshAsync();
 
         Assert.NotNull(store.CodexRateLimits);
-        Assert.Equal(ProviderRuntimeStatus.Stale, Assert.Single(store.ProviderStatuses).RuntimeStatus);
+        Assert.True(store.CodexRateLimitsStale);
+        Assert.Equal(ProviderRuntimeStatus.Ready, Assert.Single(store.ProviderStatuses).RuntimeStatus);
     }
 
     [Fact]
@@ -184,6 +186,174 @@ public sealed class Phase7AProviderUxTests : IDisposable
         var status = Assert.Single(store.ProviderStatuses);
         Assert.Equal(ProviderRuntimeStatus.LocalDataOnly, status.RuntimeStatus);
         Assert.Equal(ProviderAuthStatus.QuotaUnavailable, status.AuthStatus);
+    }
+
+    [Fact]
+    public async Task OfficialFailureMarksOnlyOfficialSectionStale()
+    {
+        var limits = new FakeCodexLimits { Value = SimpleCodexStatus(10) };
+        var store = new UsageStore(
+            [new FakeUsage("codex") { Daily = Daily(1) }],
+            new FixedTimeProvider(Now), limits);
+        var viewModel = new UsageViewModel(store, timeProvider: new FixedTimeProvider(Now));
+        await viewModel.RefreshAsync();
+        limits.Error = new IOException("fixture");
+
+        await viewModel.RefreshAsync();
+
+        Assert.Equal(1, viewModel.TodayTokens);
+        Assert.Equal("Ready · Authenticated", viewModel.ProviderStatusSummaryText);
+        Assert.Contains("Stale", viewModel.OfficialLimitsMetadataText, StringComparison.Ordinal);
+        Assert.Contains("Last updated", viewModel.OfficialLimitsMetadataText, StringComparison.Ordinal);
+        Assert.Single(viewModel.OfficialLimitRows);
+    }
+
+    [Fact]
+    public async Task OfficialOnlyFailureKeepsProviderAsStale()
+    {
+        var limits = new FakeCodexLimits { Value = SimpleCodexStatus(10) };
+        var store = new UsageStore(
+            [new FakeUsage("codex")], new FixedTimeProvider(Now), limits);
+        await store.RefreshAsync();
+        limits.Error = new IOException("fixture");
+
+        await store.RefreshAsync();
+
+        Assert.Equal(ProviderRuntimeStatus.Stale, Assert.Single(store.ProviderStatuses).RuntimeStatus);
+        Assert.True(store.CodexRateLimitsStale);
+    }
+
+    [Fact]
+    public async Task LocalOnlyProviderOmitsMeaninglessAuthStatus()
+    {
+        var viewModel = new UsageViewModel(new UsageStore(
+            [new FakeUsage("gemini") { Daily = Daily(1) }]),
+            timeProvider: new FixedTimeProvider(Now));
+
+        await viewModel.RefreshAsync();
+
+        Assert.Equal("Ready", viewModel.ProviderStatusSummaryText);
+        Assert.Null(viewModel.ProviderAuthStatusText);
+    }
+
+    [Fact]
+    public async Task EmptyDashboardStillShowsMeaningfulProviderStatus()
+    {
+        var viewModel = new UsageViewModel(new UsageStore([new FakeUsage("gemini")]),
+            timeProvider: new FixedTimeProvider(Now));
+
+        await viewModel.RefreshAsync();
+
+        Assert.Equal("No sessions", viewModel.ProviderStatusSummaryText);
+    }
+
+    [Fact]
+    public async Task CredentialUnavailableClearsOfficialDataButKeepsLocalUsage()
+    {
+        var limits = new FakeClaudeLimits
+        {
+            Value = new ClaudeRateLimitStatus(
+                new ClaudeRateLimitWindow(14, Now.AddHours(2)), null, null, null, null, null),
+        };
+        var store = new UsageStore(
+            [new FakeUsage("claude_code") { Daily = Daily(25) }],
+            new FixedTimeProvider(Now), claudeRateLimitsProvider: limits);
+        await store.RefreshAsync();
+        limits.Value = null;
+
+        await store.RefreshAsync();
+
+        Assert.Equal(25, store.Snapshot("claude_code")!.TodayTotalTokens);
+        Assert.Null(store.ClaudeRateLimits);
+        var status = Assert.Single(store.ProviderStatuses);
+        Assert.Equal(ProviderRuntimeStatus.LocalDataOnly, status.RuntimeStatus);
+        Assert.Equal(ProviderAuthStatus.QuotaUnavailable, status.AuthStatus);
+    }
+
+    [Fact]
+    public async Task StaleClaudeQuotaDoesNotPublishFreshForecast()
+    {
+        var usage = new FakeUsage("claude_code")
+        {
+            Daily = Daily(1),
+            Enrichment = new ProviderEnrichment(
+                new BlockUsage("block", "", "", true, 23_000_000, 0, 1_000_000), true),
+        };
+        var limits = new FakeClaudeLimits
+        {
+            Value = new ClaudeRateLimitStatus(
+                new ClaudeRateLimitWindow(23, Now.AddHours(2)), null, null, null, null, null),
+        };
+        var store = new UsageStore(
+            [usage], new FixedTimeProvider(Now), claudeRateLimitsProvider: limits);
+        var viewModel = new UsageViewModel(store, timeProvider: new FixedTimeProvider(Now));
+        await viewModel.RefreshAsync();
+        Assert.NotNull(viewModel.ForecastText);
+        limits.Error = new IOException("fixture");
+
+        await viewModel.RefreshAsync();
+
+        Assert.Equal("Ready · Authenticated", viewModel.ProviderStatusSummaryText);
+        Assert.Single(viewModel.OfficialLimitRows);
+        Assert.NotNull(viewModel.BurnRateText);
+        Assert.Null(viewModel.ForecastText);
+        Assert.Contains("Stale", viewModel.OfficialLimitsMetadataText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ProviderOrderingIgnoresParallelCompletionOrder()
+    {
+        var store = new UsageStore([
+            new FakeUsage("slow") { Daily = Daily(1), Delay = TimeSpan.FromMilliseconds(40) },
+            new FakeUsage("fast") { Daily = Daily(2) },
+            new FakeUsage("middle") { Daily = Daily(3), Delay = TimeSpan.FromMilliseconds(10) },
+        ]);
+
+        await store.RefreshAsync();
+
+        Assert.Equal(new[] { "slow", "fast", "middle" },
+            store.Snapshots.Select(static snapshot => snapshot.ProviderId));
+        Assert.Equal(new[] { "slow", "fast", "middle" },
+            store.ProviderStatuses.Select(static status => status.ProviderId));
+    }
+
+    [Fact]
+    public async Task RefreshKeepsPreviousValueVisibleUntilReplacementArrives()
+    {
+        var provider = new FakeUsage("local") { Daily = Daily(1) };
+        var viewModel = new UsageViewModel(new UsageStore([provider]),
+            timeProvider: new FixedTimeProvider(Now));
+        await viewModel.RefreshAsync();
+        provider.DailyGate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var refresh = viewModel.RefreshAsync();
+
+        Assert.True(viewModel.IsRefreshing);
+        Assert.Equal(1, viewModel.TodayTokens);
+        provider.DailyGate.SetResult(Daily(2));
+        await refresh;
+        Assert.Equal(2, viewModel.TodayTokens);
+    }
+
+    [Fact]
+    public async Task DiagnosticsUsesTheSameLocalRuntimeMeaningAsTheUi()
+    {
+        var limits = new FakeCodexLimits { Value = SimpleCodexStatus(10) };
+        var store = new UsageStore(
+            [new FakeUsage("codex") { Daily = Daily(1) }],
+            new FixedTimeProvider(Now), limits);
+        var usage = new UsageViewModel(store, timeProvider: new FixedTimeProvider(Now));
+        await usage.RefreshAsync();
+        limits.Error = new IOException("fixture");
+        await usage.RefreshAsync();
+        var settings = new SettingsViewModel(
+            new MemorySettings(AppSettings.Default), new FakeAutoStart(), AppLanguage.En);
+
+        var report = DiagnosticsReport.Create("2.5.3", settings, usage);
+
+        Assert.Equal("Ready · Authenticated", usage.ProviderStatusSummaryText);
+        Assert.Contains("provider.codex.status=Ready", report, StringComparison.Ordinal);
+        Assert.Contains("provider.codex.auth=Authenticated", report, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -221,12 +391,12 @@ public sealed class Phase7AProviderUxTests : IDisposable
     }
 
     [Fact]
-    public async Task ZeroBurnShowsNoProjectionWithoutDivision()
+    public async Task ZeroBurnHidesUnavailableForecastWithoutDivision()
     {
         var viewModel = await ClaudeViewModel(23_000_000, 0, 23, Now.AddHours(2));
 
         Assert.Null(viewModel.BurnRateText);
-        Assert.Equal("Forecast: No projection", viewModel.ForecastText);
+        Assert.Null(viewModel.ForecastText);
     }
 
     [Fact]
@@ -247,6 +417,37 @@ public sealed class Phase7AProviderUxTests : IDisposable
         Assert.Equal("Custom root configured", settings.ProviderStatusRows[0].RootStatusText);
         Assert.Equal("Quota unavailable", settings.ProviderStatusRows[0].AuthStatusText);
         Assert.Equal("Default folders", settings.ProviderStatusRows[1].RootStatusText);
+        Assert.Null(settings.ProviderStatusRows[1].AuthStatusText);
+        Assert.Equal("Default folders", settings.ProviderStatusRows[1].DetailsText);
+    }
+
+    [Fact]
+    public void ProviderRootSelectionSurvivesLanguageAndStatusRefresh()
+    {
+        var settings = new SettingsViewModel(
+            new MemorySettings(AppSettings.Default), new FakeAutoStart(), AppLanguage.En)
+        {
+            SelectedRootProviderId = "claude_code",
+        };
+        var statuses = new[]
+        {
+            new ProviderStatusSnapshot("codex", "Codex", ProviderRuntimeStatus.Ready,
+                ProviderAuthStatus.Authenticated),
+            new ProviderStatusSnapshot("claude_code", "Claude Code", ProviderRuntimeStatus.LocalDataOnly,
+                ProviderAuthStatus.QuotaUnavailable),
+        };
+        settings.UpdateProviderStatuses(statuses);
+
+        settings.SelectedLanguage = AppLanguage.De;
+        settings.UpdateProviderStatuses(statuses);
+
+        Assert.Equal("claude_code", settings.SelectedRootProviderId);
+        Assert.Equal(2, settings.ProviderStatusRows.Count);
+        Assert.All(settings.ProviderStatusRows, row =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(row.StatusText));
+            Assert.False(string.IsNullOrWhiteSpace(row.DetailsText));
+        });
     }
 
     [Theory]
@@ -266,7 +467,7 @@ public sealed class Phase7AProviderUxTests : IDisposable
             localization.Ready, localization.NotInstalled, localization.AuthenticationRequired,
             localization.LocalDataOnly, localization.QuotaUnavailable, localization.Credits,
             localization.Spend, localization.BurnRate, localization.Forecast,
-            localization.NoProjection,
+            localization.NoProjection, localization.LocalUsage, localization.LocalUpdated,
         }, value => Assert.False(string.IsNullOrWhiteSpace(value)));
     }
 
@@ -342,9 +543,17 @@ public sealed class Phase7AProviderUxTests : IDisposable
         public DailyUsage? Daily { get; set; }
         public ProviderEnrichment Enrichment { get; set; } = new();
         public Exception? Error { get; set; }
+        public TimeSpan Delay { get; set; }
+        public TaskCompletionSource<DailyUsage?>? DailyGate { get; set; }
 
-        public Task<DailyUsage?> FetchDailyAsync(CancellationToken cancellationToken = default) =>
-            Error is null ? Task.FromResult(Daily) : Task.FromException<DailyUsage?>(Error);
+        public async Task<DailyUsage?> FetchDailyAsync(CancellationToken cancellationToken = default)
+        {
+            if (Delay > TimeSpan.Zero) await Task.Delay(Delay, cancellationToken);
+            if (Error is not null) throw Error;
+            return DailyGate is null
+                ? Daily
+                : await DailyGate.Task.WaitAsync(cancellationToken);
+        }
 
         public Task<ProviderEnrichment> FetchEnrichmentAsync(
             CancellationToken cancellationToken = default) => Task.FromResult(Enrichment);
@@ -361,8 +570,11 @@ public sealed class Phase7AProviderUxTests : IDisposable
     private sealed class FakeClaudeLimits : IClaudeRateLimitsProvider
     {
         public ClaudeRateLimitStatus? Value { get; set; }
+        public Exception? Error { get; set; }
         public Task<ClaudeRateLimitStatus?> FetchAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(Value);
+            Error is null
+                ? Task.FromResult(Value)
+                : Task.FromException<ClaudeRateLimitStatus?>(Error);
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
