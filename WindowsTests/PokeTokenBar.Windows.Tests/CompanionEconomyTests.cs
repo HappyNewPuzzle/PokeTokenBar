@@ -1,3 +1,5 @@
+using System.Xml.Linq;
+using PokeTokenBar.Windows.App;
 using PokeTokenBar.Windows.App.ViewModels;
 using PokeTokenBar.Windows.Core;
 using PokeTokenBar.Windows.Infrastructure;
@@ -68,6 +70,15 @@ public sealed class CompanionEconomyTests
     {
         var products = Create(ActiveState(used: 10_000_000_000)).ShopProducts;
         Assert.Equal(products.Select(product => product.Price).Order(), products.Select(product => product.Price));
+    }
+
+    [Fact]
+    public void Catalog_EggStageKeepsAllEggProductsVisible()
+    {
+        var eggs = Create(State()).ShopProducts
+            .Where(product => product.ProductKind == ShopProductKind.Egg);
+
+        Assert.Equal(["egg.basic", "egg.uncommon", "egg.rare"], eggs.Select(product => product.Id));
     }
 
     [Theory]
@@ -354,6 +365,7 @@ public sealed class CompanionEconomyTests
     public async Task PremiumEgg_PurchaseDiscardsActiveWithoutDexAndRecordsGuarantee()
     {
         var store = Create(ActiveState(used: 5_000_000_000, usedAtStage: 42));
+        Assert.True(store.IsEggPurchaseAllowed);
         Assert.Equal(PurchaseResult.Success, await store.PurchaseAsync("egg.rare"));
         Assert.Null(store.State.Active);
         Assert.Empty(store.State.Dex);
@@ -361,11 +373,21 @@ public sealed class CompanionEconomyTests
         Assert.Equal(0, store.State.EggUsage);
     }
 
-    [Fact]
-    public async Task PremiumEgg_CannotBeBoughtWhileIncubating()
+    [Theory]
+    [InlineData("egg.basic")]
+    [InlineData("egg.uncommon")]
+    [InlineData("egg.rare")]
+    public async Task EggStage_DirectEggPurchaseIsRejectedWithoutMutation(string productId)
     {
-        Assert.Equal(PurchaseResult.NotAllowed,
-            await Create(State(used: 5_000_000_000)).PurchaseAsync("egg.rare"));
+        var store = Create(State(used: 5_000_000_000));
+        var before = store.State;
+        var balance = store.AvailableTokens;
+
+        Assert.False(store.IsEggPurchaseAllowed);
+        Assert.Equal(PurchaseResult.NotAllowed, await store.PurchaseAsync(productId));
+        Assert.Same(before, store.State);
+        Assert.Equal(balance, store.AvailableTokens);
+        Assert.Equal(0, store.State.SpentTokens);
     }
 
     [Fact]
@@ -443,13 +465,98 @@ public sealed class CompanionEconomyTests
     [Fact]
     public async Task EconomyViewModel_ExposesBalanceShopBagAndDisabledUse()
     {
-        var store = Create(State(used: 1_000_000_000) with { Inventory = Inventory(candy: 1) });
-        var viewModel = new EconomyViewModel(store, _ => Task.CompletedTask);
-        Assert.Contains("1,000,000,000", viewModel.BalanceText);
-        Assert.Equal(3, viewModel.ShopProducts.Count);
+        var store = Create(State(used: 5_000_000_000) with { Inventory = Inventory(candy: 1) });
+        var localization = new LocalizationService(AppLanguage.En);
+        var viewModel = new EconomyViewModel(store, _ => Task.CompletedTask, localization);
+        Assert.Contains("5,000,000,000", viewModel.BalanceText);
+        Assert.Equal(
+            ["mint", "rareCandy", "egg.basic", "egg.uncommon", "shinyCharm", "egg.rare"],
+            viewModel.ShopProducts.Select(product => product.Product.Id));
+        Assert.All(
+            viewModel.ShopProducts.Where(product => product.Product.ProductKind == ShopProductKind.Egg),
+            product =>
+            {
+                Assert.False(product.CanPurchase);
+                Assert.False(product.PurchaseCommand.CanExecute(null));
+                Assert.Equal(localization.EggPurchaseLockedHint, product.UnavailableReason);
+            });
         Assert.Single(viewModel.BagItems);
         Assert.False(viewModel.BagItems[0].CanUse);
         await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task EconomyViewModel_HatchRefreshEnablesEggPurchasesAndClearsReason()
+    {
+        var store = Create(State(used: 5_000_000_000) with
+        {
+            EggUsage = PokemonBalance.EggHatchThreshold,
+        }, api: new EconomyApi());
+        var viewModel = new EconomyViewModel(store, _ => Task.CompletedTask);
+
+        Assert.True(await store.HatchRandomAsync());
+        viewModel.Refresh();
+
+        Assert.True(store.IsEggPurchaseAllowed);
+        var eggs = viewModel.ShopProducts
+            .Where(product => product.Product.ProductKind == ShopProductKind.Egg)
+            .ToArray();
+        Assert.Equal(3, eggs.Length);
+        Assert.All(
+            eggs,
+            product =>
+            {
+                Assert.True(product.CanPurchase);
+                Assert.True(product.PurchaseCommand.CanExecute(null));
+                Assert.Null(product.UnavailableReason);
+            });
+    }
+
+    [Fact]
+    public void EconomyViewModel_ActiveWithoutFundsKeepsNormalDisabledState()
+    {
+        var viewModel = new EconomyViewModel(Create(ActiveState()), _ => Task.CompletedTask);
+
+        Assert.All(
+            viewModel.ShopProducts.Where(product => product.Product.ProductKind == ShopProductKind.Egg),
+            product =>
+            {
+                Assert.False(product.CanPurchase);
+                Assert.False(product.PurchaseCommand.CanExecute(null));
+                Assert.Null(product.UnavailableReason);
+            });
+    }
+
+    [Theory]
+    [InlineData(AppLanguage.Ko, "지금 품고 있는 알이 부화하면 살 수 있어요.")]
+    [InlineData(AppLanguage.En, "Available once your current egg hatches.")]
+    [InlineData(AppLanguage.Ja, "いま抱えているタマゴが孵ると購入できます。")]
+    [InlineData(AppLanguage.Es, "Disponible cuando eclosione tu huevo actual.")]
+    [InlineData(AppLanguage.Fr, "Disponible une fois ton œuf actuel éclos.")]
+    [InlineData(AppLanguage.Pt, "Disponível quando seu ovo atual chocar.")]
+    [InlineData(AppLanguage.De, "Verfügbar, sobald dein aktuelles Ei geschlüpft ist.")]
+    public void EggPurchaseLockedHint_IsLocalized(AppLanguage language, string expected)
+    {
+        Assert.Equal(expected, new LocalizationService(language).EggPurchaseLockedHint);
+    }
+
+    [Fact]
+    public void ShopXaml_WrapsAndCollapsesEggPurchaseReason()
+    {
+        XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        var document = XDocument.Load(Path.Combine(
+            Root(), "src", "PokeTokenBar.Windows.App", "MainWindow.xaml"));
+        var reason = Assert.Single(document.Descendants(presentation + "TextBlock"), element =>
+            element.Attribute("Text")?.Value.Contains("UnavailableReason", StringComparison.Ordinal) == true);
+
+        Assert.Equal("Wrap", reason.Attribute("TextWrapping")?.Value);
+        Assert.Equal("2", reason.Attribute("Grid.ColumnSpan")?.Value);
+        var trigger = Assert.Single(reason.Descendants(presentation + "DataTrigger"));
+        Assert.Contains("UnavailableReason", trigger.Attribute("Binding")?.Value, StringComparison.Ordinal);
+        Assert.Equal("{x:Null}", trigger.Attribute("Value")?.Value);
+        Assert.Contains(trigger.Descendants(presentation + "Setter"), setter =>
+            setter.Attribute("Property")?.Value == "Visibility" &&
+            setter.Attribute("Value")?.Value == "Collapsed");
     }
 
     [Fact]
@@ -484,6 +591,9 @@ public sealed class CompanionEconomyTests
         IPokeApiClient? api = null,
         Random? random = null) =>
         new(api ?? new EconomyApi(), persistence ?? new MemoryPersistence(state), random ?? new Random(1));
+
+    private static string Root() => Path.GetFullPath(Path.Combine(
+        AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
 
     private static async Task<CompanionStore> Loaded(
         CompanionState? state = null,

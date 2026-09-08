@@ -136,6 +136,8 @@ public sealed class CompanionStore
     public int ItemCount(CompanionItemKind kind) =>
         State.Inventory.GetValueOrDefault(kind.Key());
 
+    public bool IsEggPurchaseAllowed => State.Active is not null;
+
     public IReadOnlyList<InventoryStack> OwnedItems =>
         Enum.GetValues<CompanionItemKind>()
             .Select(kind => new InventoryStack(kind, ItemCount(kind)))
@@ -150,14 +152,11 @@ public sealed class CompanionStore
                 .Select(kind => new ShopProduct(
                     kind.Key(), ShopProductKind.Item, kind.Price(), kind))
                 .ToList();
-            if (State.Active is not null)
-            {
-                products.AddRange(CompanionEconomyRules.EggTiers.Select(tier => new ShopProduct(
-                    tier is null ? "egg.basic" : $"egg.{tier.Value.ToString().ToLowerInvariant()}",
-                    ShopProductKind.Egg,
-                    CompanionEconomyRules.EggPrice(tier),
-                    GuaranteedRarity: tier)));
-            }
+            products.AddRange(CompanionEconomyRules.EggTiers.Select(tier => new ShopProduct(
+                tier is null ? "egg.basic" : $"egg.{tier.Value.ToString().ToLowerInvariant()}",
+                ShopProductKind.Egg,
+                CompanionEconomyRules.EggPrice(tier),
+                GuaranteedRarity: tier)));
 
             return products
                 .OrderBy(product => product.ItemKind is CompanionItemKind item &&
@@ -175,14 +174,14 @@ public sealed class CompanionStore
         await _mutationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var product = AllShopProducts().FirstOrDefault(candidate =>
+            var product = ShopProducts.FirstOrDefault(candidate =>
                 candidate.Id.Equals(productId, StringComparison.Ordinal));
             if (product is null)
             {
                 return PurchaseResult.InvalidProduct;
             }
 
-            if (product.ProductKind == ShopProductKind.Egg && State.Active is null)
+            if (product.ProductKind == ShopProductKind.Egg && !IsEggPurchaseAllowed)
             {
                 return PurchaseResult.NotAllowed;
             }
@@ -1101,17 +1100,6 @@ public sealed class CompanionStore
             // Persistence failure does not discard a successfully selected companion.
         }
     }
-
-    private IReadOnlyList<ShopProduct> AllShopProducts() =>
-        Enum.GetValues<CompanionItemKind>()
-            .Select(kind => new ShopProduct(
-                kind.Key(), ShopProductKind.Item, kind.Price(), kind))
-            .Concat(CompanionEconomyRules.EggTiers.Select(tier => new ShopProduct(
-                tier is null ? "egg.basic" : $"egg.{tier.Value.ToString().ToLowerInvariant()}",
-                ShopProductKind.Egg,
-                CompanionEconomyRules.EggPrice(tier),
-                GuaranteedRarity: tier)))
-            .ToArray();
 
     private IReadOnlyDictionary<string, int> DecrementedInventory(CompanionItemKind kind)
     {

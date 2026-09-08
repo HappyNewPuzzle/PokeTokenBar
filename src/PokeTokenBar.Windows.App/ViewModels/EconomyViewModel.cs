@@ -68,6 +68,9 @@ public sealed class EconomyViewModel : INotifyPropertyChanged
                 CanPurchase(product),
                 _localization.Tokens(product.Price),
                 _localization.Buy,
+                product.ProductKind == ShopProductKind.Egg && !_store.IsEggPurchaseAllowed
+                    ? _localization.EggPurchaseLockedHint
+                    : null,
                 token => PurchaseAsync(product, token))).ToArray());
         BagItems = new ReadOnlyCollection<BagItemViewModel>(
             _store.OwnedItems.Select(item => new BagItemViewModel(
@@ -94,7 +97,7 @@ public sealed class EconomyViewModel : INotifyPropertyChanged
 
         if (product.ProductKind == ShopProductKind.Egg)
         {
-            return _store.State.Active is not null;
+            return _store.IsEggPurchaseAllowed;
         }
 
         return product.ItemKind is not CompanionItemKind item ||
@@ -262,6 +265,7 @@ public sealed class ShopProductViewModel
         bool canPurchase,
         string priceText,
         string buyText,
+        string? unavailableReason,
         Func<CancellationToken, Task> purchase)
     {
         Product = product;
@@ -269,6 +273,7 @@ public sealed class ShopProductViewModel
         CanPurchase = canPurchase;
         PriceText = priceText;
         BuyText = buyText;
+        UnavailableReason = unavailableReason;
         PurchaseCommand = new AsyncCommand(purchase, () => CanPurchase);
     }
 
@@ -277,6 +282,7 @@ public sealed class ShopProductViewModel
     public string PriceText { get; }
     public bool CanPurchase { get; }
     public string BuyText { get; }
+    public string? UnavailableReason { get; }
     public AsyncCommand PurchaseCommand { get; }
 }
 

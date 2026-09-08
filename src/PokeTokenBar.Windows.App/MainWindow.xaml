@@ -608,6 +608,10 @@
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
                                         <StackPanel>
                                             <TextBlock Text="{Binding Name, Mode=OneWay}" FontWeight="SemiBold" />
                                             <TextBlock Margin="0,3,0,0" Text="{Binding PriceText, Mode=OneWay}"
@@ -616,6 +620,21 @@
                                         <Button Grid.Column="1" Padding="12,5" Content="{Binding BuyText, Mode=OneWay}"
                                                 IsEnabled="{Binding CanPurchase, Mode=OneWay}"
                                                 Command="{Binding PurchaseCommand, Mode=OneWay}" />
+                                        <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Margin="0,8,0,0"
+                                                   Text="{Binding UnavailableReason, Mode=OneWay}"
+                                                   Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                                   TextWrapping="Wrap">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding UnavailableReason, Mode=OneWay}" Value="{x:Null}">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
                                     </Grid>
                                 </Border>
                             </DataTemplate>
