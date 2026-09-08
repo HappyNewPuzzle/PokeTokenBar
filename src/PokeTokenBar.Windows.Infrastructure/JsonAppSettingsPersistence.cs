@@ -85,8 +85,7 @@ public sealed class JsonAppSettingsPersistence : IAppSettingsPersistence
         settings.WarningThreshold is >= 50 and <= 95 &&
         settings.CriticalThreshold is >= 55 and <= 100 &&
         settings.WarningThreshold < settings.CriticalThreshold &&
-        double.IsFinite(settings.FloatingPetSize) &&
-        settings.FloatingPetSize is >= 48 and <= 192 &&
+        FloatingPetSizeRules.IsSupported(settings.FloatingPetSize) &&
         (settings.FloatingPetPosition is not { } position ||
          (double.IsFinite(position.Left) && double.IsFinite(position.Top)));
 
@@ -137,8 +136,7 @@ public sealed class JsonAppSettingsPersistence : IAppSettingsPersistence
             WarningThreshold = warning,
             CriticalThreshold = critical,
             LimitDisplayMode = Enum.IsDefined(settings.LimitDisplayMode) ? settings.LimitDisplayMode : defaults.LimitDisplayMode,
-            FloatingPetSize = double.IsFinite(settings.FloatingPetSize) && settings.FloatingPetSize is >= 48 and <= 192
-                ? settings.FloatingPetSize : defaults.FloatingPetSize,
+            FloatingPetSize = FloatingPetSizeRules.Clamp(settings.FloatingPetSize),
             AnimationQuality = Enum.IsDefined(settings.AnimationQuality) ? settings.AnimationQuality : defaults.AnimationQuality,
             FloatingPetPosition = settings.FloatingPetPosition is { } position &&
                                   (!double.IsFinite(position.Left) || !double.IsFinite(position.Top))

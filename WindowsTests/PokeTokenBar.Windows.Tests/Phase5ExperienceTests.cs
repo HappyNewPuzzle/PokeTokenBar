@@ -112,12 +112,72 @@ public sealed class Phase5ExperienceTests : IDisposable
     [InlineData(52, 48)]
     [InlineData(101, 104)]
     [InlineData(191, 192)]
-    [InlineData(500, 192)]
+    [InlineData(192, 192)]
+    [InlineData(383, 384)]
+    [InlineData(384, 384)]
+    [InlineData(500, 384)]
+    [InlineData(double.NaN, 96)]
     public void FloatingSize_UsesUpstreamRangeAndEightPixelSteps(double value, double expected)
     {
         var viewModel = Settings();
         viewModel.FloatingPetSize = value;
         Assert.Equal(expected, viewModel.FloatingPetSize);
+    }
+
+    [Fact]
+    public void FloatingSize_RulesKeepExistingMinimumAndDefaultWith384Maximum()
+    {
+        Assert.Equal(48, FloatingPetSizeRules.Minimum);
+        Assert.Equal(96, FloatingPetSizeRules.Default);
+        Assert.Equal(384, FloatingPetSizeRules.Maximum);
+        Assert.Equal(8, FloatingPetSizeRules.Step);
+    }
+
+    [Theory]
+    [InlineData(47, 48)]
+    [InlineData(160, 160)]
+    [InlineData(384, 384)]
+    [InlineData(385, 384)]
+    [InlineData(double.MaxValue, 384)]
+    public void FloatingSize_PersistedValuesAreClampedWithoutResettingValidValues(
+        double persisted, double expected)
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "settings.json");
+        File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(
+            new Dictionary<string, double> { ["floatingPetSize"] = persisted }));
+
+        var loaded = Assert.IsType<AppSettings>(new JsonAppSettingsPersistence(path).Load());
+
+        Assert.Equal(expected, loaded.FloatingPetSize);
+        Assert.Equal(expected, new SettingsViewModel(
+            new MemorySettings(loaded), new AutoStart()).FloatingPetSize);
+    }
+
+    [Fact]
+    public void FloatingSize_RuntimeChangeReachesFloatingViewModelImmediately()
+    {
+        var settings = Settings();
+        using var companion = Companion();
+        using var floating = new FloatingPetViewModel(companion, settings);
+        var changes = new List<string?>();
+        floating.PropertyChanged += (_, args) => changes.Add(args.PropertyName);
+
+        settings.FloatingPetSize = FloatingPetSizeRules.Maximum;
+
+        Assert.Equal(384, floating.Size);
+        Assert.Contains(nameof(FloatingPetViewModel.Size), changes);
+    }
+
+    [Fact]
+    public void FloatingSize_XamlSliderUsesSharedLimits()
+    {
+        var xaml = File.ReadAllText(Path.Combine(
+            Root(), "src", "PokeTokenBar.Windows.App", "MainWindow.xaml"));
+
+        Assert.Contains("Minimum=\"{x:Static core:FloatingPetSizeRules.Minimum}\"", xaml);
+        Assert.Contains("Maximum=\"{x:Static core:FloatingPetSizeRules.Maximum}\"", xaml);
+        Assert.Contains("TickFrequency=\"{x:Static core:FloatingPetSizeRules.Step}\"", xaml);
     }
 
     [Theory]
@@ -159,7 +219,7 @@ public sealed class Phase5ExperienceTests : IDisposable
             WarningThreshold = 70,
             CriticalThreshold = 90,
             LimitDisplayMode = LimitDisplayMode.Used,
-            FloatingPetSize = 160,
+            FloatingPetSize = FloatingPetSizeRules.Maximum,
             AnimationQuality = AnimationQuality.Smooth,
             FloatingBubbleAlertsEnabled = false,
             CustomProviderRoots = new Dictionary<string, string> { ["codex"] = "C:\\logs" },
@@ -318,6 +378,9 @@ public sealed class Phase5ExperienceTests : IDisposable
         double used, IDictionary<string, int> tiers) =>
         LimitNotificationEvaluator.Evaluate(
             [new LimitNotificationWindow("w", "Window", used)], 80, 95, tiers);
+
+    private static string Root() => Path.GetFullPath(Path.Combine(
+        AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
 
     private static SettingsViewModel Settings() =>
         new(new MemorySettings(), new AutoStart());

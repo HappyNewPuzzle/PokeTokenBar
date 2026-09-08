@@ -36,7 +36,7 @@ public sealed class Phase8BDiagnosticsRecoveryTests : IDisposable
         Assert.Equal(AppSettings.Default.RefreshInterval, settings.RefreshInterval);
         Assert.Equal(AppSettings.Default.Language, settings.Language);
         Assert.Equal(AppSettings.Default.WarningThreshold, settings.WarningThreshold);
-        Assert.Equal(AppSettings.Default.FloatingPetSize, settings.FloatingPetSize);
+        Assert.Equal(FloatingPetSizeRules.Maximum, settings.FloatingPetSize);
         Assert.Equal(AppSettings.Default.AnimationQuality, settings.AnimationQuality);
     }
 

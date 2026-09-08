@@ -25,6 +25,23 @@ public enum AnimationQuality
     Smooth,
 }
 
+public static class FloatingPetSizeRules
+{
+    public const double Minimum = 48;
+    public const double Default = 96;
+    public const double Maximum = 384;
+    public const double Step = 8;
+
+    public static bool IsSupported(double value) =>
+        double.IsFinite(value) && value is >= Minimum and <= Maximum;
+
+    public static double Clamp(double value) =>
+        double.IsFinite(value) ? Math.Clamp(value, Minimum, Maximum) : Default;
+
+    public static double Snap(double value) =>
+        Clamp(Math.Round(value / Step) * Step);
+}
+
 public sealed record AppSettings(
     bool FloatingPetEnabled = false,
     FloatingPetPosition? FloatingPetPosition = null,
@@ -36,7 +53,7 @@ public sealed record AppSettings(
     double WarningThreshold = 80,
     double CriticalThreshold = 95,
     LimitDisplayMode LimitDisplayMode = LimitDisplayMode.Remaining,
-    double FloatingPetSize = 96,
+    double FloatingPetSize = FloatingPetSizeRules.Default,
     AnimationQuality AnimationQuality = AnimationQuality.PowerSaver,
     bool FloatingBubbleAlertsEnabled = true,
     IReadOnlyDictionary<string, string>? CustomProviderRoots = null,

@@ -41,7 +41,7 @@ public sealed class FloatingPetViewModel : INotifyPropertyChanged, IDisposable
 
     public bool IsEgg => PokemonId is null;
 
-    public double Size => _settings?.FloatingPetSize ?? 96;
+    public double Size => _settings?.FloatingPetSize ?? FloatingPetSizeRules.Default;
 
     public TimeSpan MinimumFrameDuration => (_settings?.SelectedAnimationQuality ?? AnimationQuality.PowerSaver) switch
     {

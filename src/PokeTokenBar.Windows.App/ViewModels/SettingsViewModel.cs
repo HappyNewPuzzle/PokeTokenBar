@@ -50,7 +50,8 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
         _selectedLanguage = _settings.Language ?? fallbackLanguage ?? AppLanguageRules.SystemDefault;
         _selectedLimitDisplayMode = _settings.LimitDisplayMode;
         _selectedAnimationQuality = _settings.AnimationQuality;
-        _floatingPetSize = _settings.FloatingPetSize;
+        _floatingPetSize = FloatingPetSizeRules.Clamp(_settings.FloatingPetSize);
+        _settings = _settings with { FloatingPetSize = _floatingPetSize };
         _warningThreshold = _settings.WarningThreshold;
         _criticalThreshold = _settings.CriticalThreshold;
         _limitNotificationsEnabled = _settings.LimitNotificationsEnabled;
@@ -194,7 +195,7 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
         get => _floatingPetSize;
         set
         {
-            value = Math.Clamp(Math.Round(value / 8) * 8, 48, 192);
+            value = FloatingPetSizeRules.Snap(value);
             if (!SetField(ref _floatingPetSize, value)) return;
             _settings = _settings with { FloatingPetSize = value };
             SaveSettings();
