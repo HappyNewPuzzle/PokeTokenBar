@@ -16,6 +16,7 @@ public partial class App : System.Windows.Application
     private InitialRefreshController? _initialRefresh;
     private InitialCompanionController? _initialCompanion;
     private PowerLifecycleController? _powerLifecycle;
+    private NetworkReconnectController? _networkReconnect;
     private NotificationController? _notifications;
 
     public App()
@@ -98,6 +99,20 @@ public partial class App : System.Windows.Application
             // Power notifications are an optional lifecycle optimization; the tray app remains usable.
         }
 
+        WindowsNetworkAvailabilityEventSource? networkEvents = null;
+        try
+        {
+            networkEvents = new WindowsNetworkAvailabilityEventSource();
+            _networkReconnect = new NetworkReconnectController(
+                networkEvents,
+                _composition.UsagePolling.RequestRefresh);
+        }
+        catch (Exception)
+        {
+            networkEvents?.Dispose();
+            // Network notifications are optional; periodic and manual refresh remain available.
+        }
+
         _initialRefresh = new InitialRefreshController(viewModel.Usage);
         _initialCompanion = new InitialCompanionController(viewModel.Companion);
         AppReliability.Run(_initialRefresh.StartAsync(), "startup-usage");
@@ -111,6 +126,7 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _networkReconnect?.Dispose();
         _powerLifecycle?.Dispose();
         _notifications?.Dispose();
         _trayController?.Dispose();

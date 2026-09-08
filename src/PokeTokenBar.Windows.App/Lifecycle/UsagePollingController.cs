@@ -98,6 +98,8 @@ internal sealed class UsagePollingController : IDisposable
         }
     }
 
+    internal void RequestRefresh() => StartBackgroundRefresh(scheduleEmptyRetry: true);
+
     public void Reschedule(RefreshIntervalMode interval)
     {
         lock (_sync)

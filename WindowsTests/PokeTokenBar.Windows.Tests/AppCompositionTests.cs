@@ -123,6 +123,9 @@ public sealed partial class AppCompositionTests
         Assert.Contains("new SystemTrayController(", appCode, StringComparison.Ordinal);
         Assert.Contains("new InitialRefreshController(viewModel.Usage)", appCode, StringComparison.Ordinal);
         Assert.Contains("new InitialCompanionController(viewModel.Companion)", appCode, StringComparison.Ordinal);
+        Assert.Contains("new WindowsNetworkAvailabilityEventSource()", appCode, StringComparison.Ordinal);
+        Assert.Contains("_composition.UsagePolling.RequestRefresh", appCode, StringComparison.Ordinal);
+        Assert.Contains("networkEvents?.Dispose()", appCode, StringComparison.Ordinal);
         Assert.Contains("new UsageCompanionController(", compositionCode, StringComparison.Ordinal);
         Assert.Contains("companionStore,", compositionCode, StringComparison.Ordinal);
         Assert.Contains("companion.RefreshAsync", compositionCode, StringComparison.Ordinal);
@@ -132,6 +135,7 @@ public sealed partial class AppCompositionTests
         Assert.Contains("_composition.UsagePolling.Start()", appCode, StringComparison.Ordinal);
         Assert.Contains("_initialCompanion.StartAsync()", appCode, StringComparison.Ordinal);
         Assert.Contains("_initialCompanion?.Dispose()", appCode, StringComparison.Ordinal);
+        Assert.Contains("_networkReconnect?.Dispose()", appCode, StringComparison.Ordinal);
         Assert.Contains("_floatingPet?.Dispose()", appCode, StringComparison.Ordinal);
         Assert.Contains("_composition?.Dispose()", appCode, StringComparison.Ordinal);
         Assert.Contains("ShutdownMode.OnMainWindowClose", appCode, StringComparison.Ordinal);

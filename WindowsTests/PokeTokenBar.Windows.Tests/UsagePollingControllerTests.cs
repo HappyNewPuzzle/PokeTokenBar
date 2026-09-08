@@ -61,6 +61,42 @@ public sealed class UsagePollingControllerTests
     }
 
     [Fact]
+    public async Task RequestedRefreshRunsWhenPeriodicPollingIsManual()
+    {
+        var harness = Create(RefreshIntervalMode.Manual, _ => Task.FromResult<DailyUsage?>(Daily(1)));
+        using var controller = harness.Controller;
+        controller.Start();
+
+        controller.RequestRefresh();
+
+        await WaitUntilAsync(() => harness.Provider.DailyCalls == 1 && !harness.ViewModel.IsRefreshing);
+        Assert.Empty(harness.TimeProvider.ActiveTimers);
+    }
+
+    [Fact]
+    public async Task RequestedRefreshDoesNotOverlapExistingViewModelRefresh()
+    {
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var harness = Create(
+            RefreshIntervalMode.Manual,
+            async token =>
+            {
+                await release.Task.WaitAsync(token);
+                return Daily(1);
+            });
+        using var controller = harness.Controller;
+
+        var activeRefresh = harness.ViewModel.RefreshAsync();
+        await WaitUntilAsync(() => harness.Provider.DailyCalls == 1);
+        controller.RequestRefresh();
+        release.SetResult();
+        await activeRefresh;
+        await WaitUntilAsync(() => !harness.ViewModel.IsRefreshing);
+
+        Assert.Equal(1, harness.Provider.DailyCalls);
+    }
+
+    [Fact]
     public async Task OverlappingTicksDoNotCreateRefreshStorm()
     {
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
