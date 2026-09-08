@@ -412,7 +412,7 @@ public sealed class Phase8BDiagnosticsRecoveryTests : IDisposable
                 : new DiagnosticsReport.FileState(false, null, null));
 
         Assert.Contains("appVersion=2.5.3", report);
-        Assert.Contains("fileVersion=2.5.3.0", report);
+        Assert.Contains("fileVersion=2.5.4.0", report);
         Assert.Contains("runtime=.NET", report);
         Assert.Contains("language=", report);
         Assert.Contains("updateStatus=UpToDate", report);
