@@ -960,22 +960,35 @@ public sealed class UsageViewModel : INotifyPropertyChanged
             return _localization.ResetDue;
         }
 
+        string relative;
         if (remaining < TimeSpan.FromMinutes(1))
         {
-            return _localization.ResetsIn("<1m");
+            relative = _localization.ResetsIn("<1m");
         }
-
-        if (remaining >= TimeSpan.FromDays(1))
+        else if (remaining >= TimeSpan.FromDays(1))
         {
-            return _localization.ResetsIn($"{(int)remaining.TotalDays}d {remaining.Hours}h");
+            relative = _localization.ResetsIn($"{(int)remaining.TotalDays}d {remaining.Hours}h");
         }
-
-        if (remaining >= TimeSpan.FromHours(1))
+        else if (remaining >= TimeSpan.FromHours(1))
         {
-            return _localization.ResetsIn($"{(int)remaining.TotalHours}h {remaining.Minutes}m");
+            relative = _localization.ResetsIn($"{(int)remaining.TotalHours}h {remaining.Minutes}m");
+        }
+        else
+        {
+            relative = _localization.ResetsIn($"{(int)remaining.TotalMinutes}m");
         }
 
-        return _localization.ResetsIn($"{(int)remaining.TotalMinutes}m");
+        var localReset = TimeZoneInfo.ConvertTime(value, _timeProvider.LocalTimeZone);
+        // Match upstream: today's reset or one within six hours needs only its local clock time.
+        var nearby = localReset.Date == _timeProvider.GetLocalNow().Date ||
+            remaining <= TimeSpan.FromHours(6);
+        var culture = _localization.Culture;
+        var absolute = nearby
+            ? localReset.ToString("HH:mm", culture)
+            : $"{localReset.ToString("M", culture)} " +
+              $"({localReset.ToString("ddd", culture)}) " +
+              localReset.ToString("HH:mm", culture);
+        return $"{relative} · {absolute}";
     }
 
     private string? FormatRelative(DateTimeOffset? timestamp)

@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Net;
 using System.Net.Http;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using PokeTokenBar.Windows.App;
 using PokeTokenBar.Windows.App.Lifecycle;
 using PokeTokenBar.Windows.App.ViewModels;
@@ -291,6 +292,9 @@ public sealed partial class AppCompositionTests
         Assert.Contains("Binding Texts.LocalUpdated", xaml, StringComparison.Ordinal);
         Assert.Contains("x:Key=\"OptionalOfficialText\"", xaml, StringComparison.Ordinal);
         Assert.Contains("TextWrapping=\"Wrap\"", xaml, StringComparison.Ordinal);
+        var resetText = XDocument.Parse(xaml).Descendants().Single(element =>
+            element.Attribute("Text")?.Value.Contains("Binding ResetText", StringComparison.Ordinal) == true);
+        Assert.Equal("Wrap", resetText.Attribute("TextWrapping")?.Value);
     }
 
     [Fact]

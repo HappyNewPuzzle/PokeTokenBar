@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text.Json;
+using PokeTokenBar.Windows.App;
 using PokeTokenBar.Windows.App.ViewModels;
 using PokeTokenBar.Windows.Core;
 using PokeTokenBar.Windows.Infrastructure;
@@ -9,6 +11,11 @@ public sealed class CodexRateLimitsTests : IDisposable
 {
     private static readonly DateTimeOffset Now =
         new(2026, 8, 30, 3, 0, 0, TimeSpan.Zero);
+    private static readonly TimeZoneInfo UtcPlusNine = TimeZoneInfo.CreateCustomTimeZone(
+        "PokeTokenBar.Tests.UTC+09",
+        TimeSpan.FromHours(9),
+        "UTC+09",
+        "UTC+09");
 
     private readonly string _temporaryDirectory = Path.Combine(
         Path.GetTempPath(),
@@ -254,20 +261,24 @@ public sealed class CodexRateLimitsTests : IDisposable
     {
         var official = new FakeRateLimitsProvider(
             Status(0, 14, Now.AddHours(1).AddMinutes(24)));
+        var clock = new FixedTimeProvider(Now, UtcPlusNine);
         var store = new UsageStore(
             [new FakeUsageProvider(Daily(130))],
-            new FixedTimeProvider(Now),
+            clock,
             official);
-        var viewModel = new UsageViewModel(store, timeProvider: new FixedTimeProvider(Now));
+        var viewModel = new UsageViewModel(store, timeProvider: clock);
 
         await viewModel.RefreshAsync();
 
         Assert.True(viewModel.HasCodexRateLimits);
         Assert.Equal(100, viewModel.FiveHourRemainingPercent);
         Assert.Equal("100% remaining", viewModel.FiveHourRemainingText);
-        Assert.Equal("Resets in 1h 24m", viewModel.FiveHourResetText);
+        Assert.Equal("Resets in 1h 24m · 13:24", viewModel.FiveHourResetText);
         Assert.Equal(86, viewModel.WeeklyRemainingPercent);
         Assert.Equal("86% remaining", viewModel.WeeklyRemainingText);
+        Assert.Equal(
+            "Resets in 5d 1h · September 4 (Fri) 13:24",
+            viewModel.WeeklyResetText);
 
         var unavailable = new UsageViewModel(
             new UsageStore([new FakeUsageProvider(Daily(1))]),
@@ -276,6 +287,100 @@ public sealed class CodexRateLimitsTests : IDisposable
         Assert.False(unavailable.HasCodexRateLimits);
         Assert.Null(unavailable.FiveHourRemainingText);
         Assert.Null(unavailable.WeeklyRemainingText);
+        Assert.Null(unavailable.FiveHourResetText);
+        Assert.Null(unavailable.WeeklyResetText);
+    }
+
+    [Fact]
+    public async Task ViewModel_PreservesResetDueText()
+    {
+        var clock = new FixedTimeProvider(Now, UtcPlusNine);
+        var store = new UsageStore(
+            [new FakeUsageProvider(Daily(1))],
+            clock,
+            new FakeRateLimitsProvider(Status(10, 20, Now.AddMinutes(-1))));
+        var viewModel = new UsageViewModel(store, timeProvider: clock);
+
+        await viewModel.RefreshAsync();
+
+        Assert.Equal("Reset due", viewModel.FiveHourResetText);
+
+        var unknownStore = new UsageStore(
+            [new FakeUsageProvider(Daily(1))],
+            clock,
+            new FakeRateLimitsProvider(Status(10, 20, null)));
+        var unknown = new UsageViewModel(unknownStore, timeProvider: clock);
+        await unknown.RefreshAsync();
+        Assert.True(unknown.HasFiveHourLimit);
+        Assert.Null(unknown.FiveHourResetText);
+        Assert.Null(unknown.WeeklyResetText);
+    }
+
+    [Theory]
+    [InlineData(AppLanguage.Ko, "2d 3h 후 재설정 · 9월 1일 (화) 15:00")]
+    [InlineData(AppLanguage.En, "Resets in 2d 3h · September 1 (Tue) 15:00")]
+    [InlineData(AppLanguage.Ja, "2d 3h後にリセット · 9月1日 (火) 15:00")]
+    [InlineData(AppLanguage.Es, "Se reinicia en 2d 3h · 1 de septiembre (mar) 15:00")]
+    [InlineData(AppLanguage.Fr, "Réinitialisation dans 2d 3h · 1 septembre (mar.) 15:00")]
+    [InlineData(AppLanguage.Pt, "Redefine em 2d 3h · 1 de setembro (ter.) 15:00")]
+    [InlineData(AppLanguage.De, "Zurücksetzung in 2d 3h · 1. September (Di) 15:00")]
+    public async Task ViewModel_LongResetUsesSelectedCultureAndLocalTimeZone(
+        AppLanguage language,
+        string expected)
+    {
+        var clock = new FixedTimeProvider(Now, UtcPlusNine);
+        var store = new UsageStore(
+            [new FakeUsageProvider(Daily(1))],
+            clock,
+            new FakeRateLimitsProvider(Status(10, 20, Now.AddDays(2).AddHours(3))));
+        var viewModel = new UsageViewModel(
+            store,
+            timeProvider: clock,
+            localization: new LocalizationService(language));
+
+        await viewModel.RefreshAsync();
+
+        Assert.Equal(expected, viewModel.FiveHourResetText);
+    }
+
+    [Theory]
+    [InlineData("2026-08-30T14:30:00Z", "2026-08-30T15:30:00Z", "Resets in 1h 0m · 00:30")]
+    [InlineData("2026-08-29T16:00:00Z", "2026-08-30T14:00:00Z", "Resets in 22h 0m · 23:00")]
+    public async Task ViewModel_NearResetHandlesMidnightAndSameLocalDay(
+        string nowText,
+        string resetText,
+        string expected)
+    {
+        var now = DateTimeOffset.Parse(nowText, CultureInfo.InvariantCulture);
+        var reset = DateTimeOffset.Parse(resetText, CultureInfo.InvariantCulture);
+        var clock = new FixedTimeProvider(now, UtcPlusNine);
+        var store = new UsageStore(
+            [new FakeUsageProvider(Daily(1))],
+            clock,
+            new FakeRateLimitsProvider(Status(10, 20, reset)));
+        var viewModel = new UsageViewModel(store, timeProvider: clock);
+
+        await viewModel.RefreshAsync();
+
+        Assert.Equal(expected, viewModel.FiveHourResetText);
+    }
+
+    [Fact]
+    public async Task ViewModel_AbsoluteResetUsesDaylightOffsetAcrossDstTransition()
+    {
+        var now = new DateTimeOffset(2026, 3, 8, 6, 30, 0, TimeSpan.Zero);
+        var reset = now.AddHours(1);
+        var eastern = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
+        var clock = new FixedTimeProvider(now, eastern);
+        var store = new UsageStore(
+            [new FakeUsageProvider(Daily(1))],
+            clock,
+            new FakeRateLimitsProvider(Status(10, 20, reset)));
+        var viewModel = new UsageViewModel(store, timeProvider: clock);
+
+        await viewModel.RefreshAsync();
+
+        Assert.Equal("Resets in 1h 0m · 03:30", viewModel.FiveHourResetText);
     }
 
     [Fact]
@@ -335,12 +440,12 @@ public sealed class CodexRateLimitsTests : IDisposable
     private static CodexRateLimitStatus Status(
         int primary,
         int secondary,
-        DateTimeOffset reset) =>
+        DateTimeOffset? reset) =>
         new(new CodexRateLimitSnapshot(
             "codex",
             null,
             new CodexRateLimitWindow(primary, 300, reset),
-            new CodexRateLimitWindow(secondary, 10_080, reset.AddDays(5)),
+            new CodexRateLimitWindow(secondary, 10_080, reset?.AddDays(5)),
             null,
             null,
             "plus",
@@ -396,8 +501,12 @@ public sealed class CodexRateLimitsTests : IDisposable
             Task.FromResult(new ProviderEnrichment());
     }
 
-    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+    private sealed class FixedTimeProvider(
+        DateTimeOffset now,
+        TimeZoneInfo? localTimeZone = null) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
+
+        public override TimeZoneInfo LocalTimeZone { get; } = localTimeZone ?? TimeZoneInfo.Utc;
     }
 }

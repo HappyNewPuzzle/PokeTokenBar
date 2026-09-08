@@ -244,11 +244,13 @@ public sealed class LocalizationService : INotifyPropertyChanged
         StateTransferError.CommitFailed => T("불러오기를 되돌렸어요.", "The import was rolled back.", "読み込みをロールバックしました。", "La importación se revirtió.", "L’importation a été annulée.", "A importação foi revertida.", "Der Import wurde zurückgesetzt."),
         _ => OperationFailed,
     };
-    public string LocalDate(DateTimeOffset value) => value.ToLocalTime().ToString("g", CultureInfo.GetCultureInfo(Language switch
+    internal CultureInfo Culture => CultureInfo.GetCultureInfo(Language switch
     {
         AppLanguage.Ko => "ko-KR", AppLanguage.Ja => "ja-JP", AppLanguage.Es => "es-ES",
         AppLanguage.Fr => "fr-FR", AppLanguage.Pt => "pt-BR", AppLanguage.De => "de-DE", _ => "en-US",
-    }));
+    });
+
+    public string LocalDate(DateTimeOffset value) => value.ToLocalTime().ToString("g", Culture);
 
     private string T(string ko, string en, string ja, string es, string fr, string pt, string de) =>
         Language switch

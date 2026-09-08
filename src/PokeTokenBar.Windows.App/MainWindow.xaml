@@ -357,6 +357,7 @@
                                     <TextBlock Margin="0,2,0,0"
                                                Style="{StaticResource OptionalOfficialText}"
                                                Text="{Binding ResetText, Mode=OneWay}"
+                                               TextWrapping="Wrap"
                                                FontSize="11"
                                                Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                                 </StackPanel>

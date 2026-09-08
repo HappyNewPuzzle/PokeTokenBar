@@ -360,11 +360,13 @@ public sealed class AntigravityRateLimitsTests : IDisposable
     [Fact]
     public async Task ViewModelDisplaysEveryQuotaBucketWithoutTwoRowLoss()
     {
+        var clock = new FixedTimeProvider(Now);
         var viewModel = new UsageViewModel(
             new UsageStore(
                 [new FakeUsage("antigravity", Daily(1), reportsCost: false)],
-                new FixedTimeProvider(Now),
-                antigravityRateLimitsProvider: new FakeLimits { Value = Status() }));
+                clock,
+                antigravityRateLimitsProvider: new FakeLimits { Value = Status() }),
+            timeProvider: clock);
 
         await viewModel.RefreshAsync();
 
@@ -374,7 +376,11 @@ public sealed class AntigravityRateLimitsTests : IDisposable
         Assert.Contains(viewModel.AntigravityLimitRows, row =>
             row.Label == "Gemini Models · Five Hour Limit Remaining" &&
             row.RemainingPercent == 85 &&
-            row.RemainingText == "85% remaining");
+            row.RemainingText == "85% remaining" &&
+            row.ResetText == "Resets in 2h 0m · 14:00");
+        Assert.Contains(viewModel.AntigravityLimitRows, row =>
+            row.Label == "Gemini Models · Weekly Limit Remaining" &&
+            row.ResetText == "Resets in 2d 12h · September 2 (Wed) 00:00");
         Assert.Contains(viewModel.AntigravityLimitRows, row => row.Label.StartsWith("Claude and GPT models"));
     }
 
@@ -486,6 +492,8 @@ public sealed class AntigravityRateLimitsTests : IDisposable
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
+
+        public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
     }
 
     private const string SampleJson = """

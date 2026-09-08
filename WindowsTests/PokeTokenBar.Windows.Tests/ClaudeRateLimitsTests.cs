@@ -273,17 +273,23 @@ public sealed class ClaudeRateLimitsTests : IDisposable
                 AccountOrganizationName = "Team",
             },
         };
+        var clock = new FixedTimeProvider(Now);
         var viewModel = new UsageViewModel(new UsageStore(
             [new FakeUsageProvider("claude_code", Daily(25))],
-            new FixedTimeProvider(Now),
-            claudeRateLimitsProvider: limits));
+            clock,
+            claudeRateLimitsProvider: limits),
+            timeProvider: clock);
 
         await viewModel.RefreshAsync();
 
         Assert.True(viewModel.HasCodexRateLimits);
         Assert.Equal(86, viewModel.FiveHourRemainingPercent);
         Assert.Equal("86% remaining", viewModel.FiveHourRemainingText);
+        Assert.Equal("Resets in 2h 0m · 14:00", viewModel.FiveHourResetText);
         Assert.Equal(100, viewModel.WeeklyRemainingPercent);
+        Assert.Equal(
+            "Resets in 2d 0h · September 1 (Tue) 12:00",
+            viewModel.WeeklyResetText);
         Assert.Equal("Max 20x · person@example.com · Team", viewModel.OfficialLimitsMetadataText);
     }
 
@@ -379,5 +385,7 @@ public sealed class ClaudeRateLimitsTests : IDisposable
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
+
+        public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
     }
 }
