@@ -316,7 +316,7 @@ public sealed class Phase6ProductionizationTests : IDisposable
         Assert.Contains("dotnet test", script);
         Assert.Contains("dotnet publish", script);
         Assert.Contains("Compress-Archive", script);
-        Assert.Contains("OpenRead", script);
+        Assert.Contains("Assert-ZipPayload", script);
         Assert.Contains("BuildInstaller", script);
     }
 

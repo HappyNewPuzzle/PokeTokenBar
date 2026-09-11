@@ -14,6 +14,7 @@ build/
 *.xcuserstate
 
 # Signing material — never commit private keys / certs
+*.pfx
 *.p12
 *.pem
 *.key

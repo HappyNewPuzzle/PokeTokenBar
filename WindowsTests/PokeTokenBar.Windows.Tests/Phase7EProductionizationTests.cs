@@ -41,18 +41,21 @@ public sealed class Phase7EProductionizationTests
     }
 
     [Fact]
-    public void ReleaseSigningIsOptInDiscoveredAndVerifiedInArtifactOrder()
+    public void ReleaseSigningIsOptInWithAnExplicitFailClosedProductionMode()
     {
         var script = File.ReadAllText(Path.Combine(Root(), "scripts", "build-release.ps1"));
 
+        Assert.Contains("RequireSigning", script);
         Assert.Contains("CertificateThumbprint", script);
         Assert.Contains("Get-Command signtool.exe", script);
         Assert.Contains("Windows Kits\\10\\bin", script);
-        Assert.Contains("Get-AuthenticodeSignature", script);
-        Assert.True(script.IndexOf("Invoke-AuthenticodeSign (Join-Path $publishDir 'PokeTokenBar.exe')", StringComparison.Ordinal) <
+        Assert.Contains("Assert-AuthenticodeSignature", script);
+        Assert.True(script.IndexOf("Get-ProjectOwnedPePaths", StringComparison.Ordinal) <
                     script.IndexOf("Compress-Archive", StringComparison.Ordinal));
-        Assert.True(script.LastIndexOf("Invoke-AuthenticodeSign $installerPath", StringComparison.Ordinal) >
-                    script.IndexOf("& $isccPath", StringComparison.Ordinal));
+        Assert.True(script.IndexOf("Assert-ZipPayload", StringComparison.Ordinal) <
+                    script.IndexOf("Installer compilation failed", StringComparison.Ordinal));
+        Assert.True(script.IndexOf("New-Sha256Manifest", StringComparison.Ordinal) <
+                    script.IndexOf("Release ready", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -60,7 +63,7 @@ public sealed class Phase7EProductionizationTests
     {
         var script = File.ReadAllText(Path.Combine(Root(), "scripts", "build-release.ps1"));
 
-        Assert.Contains("$signingEnabled = -not [string]::IsNullOrWhiteSpace($CertificateThumbprint)", script);
+        Assert.Contains("$signingEnabled = $configuration.SigningEnabled", script);
         Assert.Contains("[string]$TimestampUrl", script);
         Assert.DoesNotContain("timestamp.digicert.com", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(".pfx", script, StringComparison.OrdinalIgnoreCase);

@@ -26,10 +26,32 @@ PokeTokenBar checks the latest stable `windows-vX.Y.Z` GitHub release at startup
 
 ## Building a release
 
-Run `powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1`. Add `-BuildInstaller` to compile the Inno Setup source when Inno Setup 6 is installed. Portable artifacts are still produced when the installer compiler is unavailable.
+Run `powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1`. Add `-BuildInstaller` to compile the Inno Setup source when Inno Setup 6 is installed. If `-BuildInstaller` is requested and the compiler is unavailable, the build fails.
 
-Unsigned builds remain the default. To Authenticode-sign a release with a trusted certificate already installed in the Windows certificate store, pass `-CertificateThumbprint <SHA1>` and optionally `-CertificateStoreLocation CurrentUser|LocalMachine` and `-TimestampUrl <URL>`. The script discovers `signtool.exe` from PATH or Windows Kits 10, signs and verifies `PokeTokenBar.exe` before creating the portable zip, then signs and verifies the installer after Inno Setup compilation. No certificate, private key, or password is stored by the repository.
+Unsigned release and development builds remain supported and are the default. They require no certificate. `-RequireSigning` is an optional stricter production gate:
 
-Example: `powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1 -BuildInstaller -CertificateThumbprint <SHA1> -TimestampUrl <provider-url>`.
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1 -BuildInstaller
+```
+
+Use `-RequireSigning` for a production signed release. It requires `-BuildInstaller`, a trusted Code Signing certificate with an accessible private key in the selected Windows `My` certificate store, its exact SHA-1 thumbprint, an RFC 3161 timestamp URL, SignTool, and Inno Setup 6:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1 `
+  -RequireSigning -BuildInstaller `
+  -CertificateThumbprint <SHA1> `
+  -CertificateStoreLocation CurrentUser `
+  -TimestampUrl <provider-rfc3161-url>
+```
+
+The production gate signs only `PokeTokenBar.exe`, `PokeTokenBar.dll`, `PokeTokenBar.Windows.Core.dll`, `PokeTokenBar.Windows.Infrastructure.dll`, the Inno uninstaller, and the final installer. Microsoft and .NET runtime files are not re-signed. Application signatures are verified before ZIP creation; ZIP copies are extracted and checked for matching SHA-256 hashes, the expected signer, and timestamps. The final installer is verified before `SHA256SUMS.txt` is generated. A successful run retains `artifacts\publish\win-x64` and promotes final release files to `artifacts\release`; a failed run promotes neither.
+
+Verify an extracted project binary or installer with:
+
+```powershell
+Get-AuthenticodeSignature -LiteralPath .\PokeTokenBar.exe | Format-List Status,SignerCertificate,TimeStamperCertificate
+```
+
+The repository stores no certificate, private key, or password. A trusted production certificate and timestamp service must be supplied by the release environment.
 
 A valid Authenticode signature establishes publisher identity, but SmartScreen reputation is a separate service signal and is not guaranteed by signing alone. Actual signed-artifact, install/uninstall, and trust-prompt QA therefore remains a release-environment check.

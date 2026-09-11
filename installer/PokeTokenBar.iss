@@ -27,6 +27,10 @@ CloseApplications=yes
 RestartApplications=no
 UninstallDisplayIcon={app}\PokeTokenBar.exe
 WizardStyle=modern
+#ifdef ProductionSigning
+SignTool=ptbsign
+SignedUninstaller=yes
+#endif
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked

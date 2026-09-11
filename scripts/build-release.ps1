@@ -1,6 +1,7 @@
 param(
     [switch]$SkipTests,
     [switch]$BuildInstaller,
+    [switch]$RequireSigning,
     [string]$CertificateThumbprint,
     [ValidateSet('CurrentUser', 'LocalMachine')]
     [string]$CertificateStoreLocation = 'CurrentUser',
@@ -16,10 +17,23 @@ if (-not (Test-Path -LiteralPath (Join-Path $repoRoot '.git'))) {
 $project = Join-Path $repoRoot 'src\PokeTokenBar.Windows.App\PokeTokenBar.Windows.App.csproj'
 $solution = Join-Path $repoRoot 'PokeTokenBar.Windows.sln'
 $artifactRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot 'artifacts'))
-$publishDir = Join-Path $artifactRoot 'publish\win-x64'
+$publishRoot = Join-Path $artifactRoot 'publish'
 $releaseRoot = Join-Path $artifactRoot 'release'
-$signingEnabled = -not [string]::IsNullOrWhiteSpace($CertificateThumbprint)
+$stagingRoot = Join-Path $artifactRoot ('.release-staging-' + [guid]::NewGuid().ToString('N'))
+$publishDir = Join-Path $stagingRoot 'publish\win-x64'
+$stagingReleaseRoot = Join-Path $stagingRoot 'release'
+$signingEnabled = $false
 $signToolPath = $null
+$isccPath = $null
+$releaseSucceeded = $false
+
+function Assert-SafeArtifactTarget([string]$Path) {
+    $resolved = [IO.Path]::GetFullPath($Path)
+    if (-not $resolved.StartsWith($artifactRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Unsafe release target: $resolved"
+    }
+    return $resolved
+}
 
 function Find-SignTool {
     $command = Get-Command signtool.exe -ErrorAction SilentlyContinue
@@ -31,13 +45,24 @@ function Find-SignTool {
     foreach ($root in $roots) {
         if (-not (Test-Path -LiteralPath $root)) { continue }
         $candidate = Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |
-            Sort-Object Name -Descending |
+            Sort-Object { try { [version]$_.Name } catch { [version]'0.0' } } -Descending |
             ForEach-Object { Join-Path $_.FullName 'x64\signtool.exe' } |
-            Where-Object { Test-Path -LiteralPath $_ } |
+            Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
             Select-Object -First 1
         if ($candidate) { return $candidate }
     }
     return $null
+}
+
+function Find-InnoCompiler {
+    $command = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+    if ($command) { return $command.Source }
+
+    $candidates = @()
+    if (${env:ProgramFiles(x86)}) { $candidates += Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe' }
+    if ($env:ProgramFiles) { $candidates += Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe' }
+    if ($env:LOCALAPPDATA) { $candidates += Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe' }
+    return $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
 }
 
 function Invoke-AuthenticodeSign([string]$Path) {
@@ -46,101 +71,130 @@ function Invoke-AuthenticodeSign([string]$Path) {
     if ($script:TimestampUrl) { $arguments += @('/tr', $script:TimestampUrl, '/td', 'SHA256') }
     $arguments += $Path
     & $script:signToolPath @arguments
-    if ($LASTEXITCODE -ne 0) { throw "signing failed for $Path with exit code $LASTEXITCODE" }
-    $signature = Get-AuthenticodeSignature -LiteralPath $Path
-    if ($signature.Status -ne 'Valid' -or -not $signature.SignerCertificate) {
-        throw "signature verification failed for ${Path}: $($signature.Status)"
-    }
-    if ($script:TimestampUrl -and -not $signature.TimeStamperCertificate) {
-        throw "timestamp verification failed for $Path"
-    }
+    if ($LASTEXITCODE -ne 0) { throw "Signing failed for $Path with exit code $LASTEXITCODE" }
+    Assert-AuthenticodeSignature $Path $script:CertificateThumbprint ([bool]$script:TimestampUrl) $script:signToolPath
 }
 
-if ($signingEnabled) {
-    $CertificateThumbprint = ($CertificateThumbprint -replace '\s', '').ToUpperInvariant()
-    if ($CertificateThumbprint -notmatch '^[0-9A-F]{40}$') { throw 'CertificateThumbprint must be a 40-character hexadecimal thumbprint.' }
-    if ($TimestampUrl) {
-        $timestampUri = $null
-        if (-not [Uri]::TryCreate($TimestampUrl, [UriKind]::Absolute, [ref]$timestampUri) -or
-            $timestampUri.Scheme -notin @('http', 'https')) {
-            throw 'TimestampUrl must be an absolute HTTP or HTTPS URI.'
-        }
-    }
-    $certificatePath = "Cert:\$CertificateStoreLocation\My\$CertificateThumbprint"
-    $certificate = Get-Item -LiteralPath $certificatePath -ErrorAction SilentlyContinue
-    if (-not $certificate -or -not $certificate.HasPrivateKey) {
-        throw "A signing certificate with a private key was not found at $certificatePath."
-    }
-    $signToolPath = Find-SignTool
-    if (-not $signToolPath) { throw 'signtool.exe was not found on PATH or under Windows Kits 10.' }
+function Invoke-CheckedCommand([string]$FailureMessage, [scriptblock]$Command) {
+    & $Command
+    if ($LASTEXITCODE -ne 0) { throw "$FailureMessage with exit code $LASTEXITCODE" }
 }
 
-foreach ($target in @($publishDir, $releaseRoot)) {
-    $resolved = [IO.Path]::GetFullPath($target)
-    if (-not $resolved.StartsWith($artifactRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Unsafe release target: $resolved"
-    }
-    if (Test-Path -LiteralPath $resolved) { Remove-Item -LiteralPath $resolved -Recurse -Force }
+$publishRoot = Assert-SafeArtifactTarget $publishRoot
+$releaseRoot = Assert-SafeArtifactTarget $releaseRoot
+$stagingRoot = Assert-SafeArtifactTarget $stagingRoot
+[IO.Directory]::CreateDirectory($artifactRoot) | Out-Null
+
+# A run owns these generated locations. Clearing them before preflight prevents a failed
+# attempt from leaving an older release that can be mistaken for the current result.
+foreach ($target in @($publishRoot, $releaseRoot)) {
+    if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
 }
 
-dotnet restore $solution
-if ($LASTEXITCODE -ne 0) { throw "solution restore failed with exit code $LASTEXITCODE" }
-dotnet restore $project -r win-x64
-if ($LASTEXITCODE -ne 0) { throw "win-x64 restore failed with exit code $LASTEXITCODE" }
-dotnet clean $solution -c Release
-if ($LASTEXITCODE -ne 0) { throw "dotnet clean failed with exit code $LASTEXITCODE" }
-if (-not $SkipTests) {
-    dotnet test $solution -c Release
-    if ($LASTEXITCODE -ne 0) { throw "dotnet test failed with exit code $LASTEXITCODE" }
-}
-dotnet publish $project -c Release -r win-x64 --self-contained true -o $publishDir
-if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE" }
+Import-Module (Join-Path $PSScriptRoot 'ReleaseSigning.psm1') -Force
 
-if ($signingEnabled) {
-    Invoke-AuthenticodeSign (Join-Path $publishDir 'PokeTokenBar.exe')
-}
-
-$version = (dotnet msbuild $project -nologo -getProperty:Version | Select-Object -Last 1).Trim()
-if ($LASTEXITCODE -ne 0) { throw "version lookup failed with exit code $LASTEXITCODE" }
-if ($version -notmatch '^\d+\.\d+\.\d+([-.+][0-9A-Za-z.-]+)?$') {
-    throw "Invalid project version: $version"
-}
-
-$portableName = "PokeTokenBar-$version-win-x64"
-$portableDir = Join-Path $releaseRoot $portableName
-New-Item -ItemType Directory -Path $portableDir -Force | Out-Null
-Copy-Item -Path (Join-Path $publishDir '*') -Destination $portableDir -Recurse
-$zipPath = Join-Path $releaseRoot "$portableName.zip"
-Compress-Archive -Path (Join-Path $portableDir '*') -DestinationPath $zipPath -CompressionLevel Optimal
-
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-$archive = [IO.Compression.ZipFile]::OpenRead($zipPath)
 try {
-    if (-not ($archive.Entries | Where-Object FullName -eq 'PokeTokenBar.exe')) {
-        throw 'Portable archive does not contain PokeTokenBar.exe.'
-    }
-} finally { $archive.Dispose() }
+    $configuration = Assert-ReleaseSigningConfiguration `
+        ([bool]$RequireSigning) ([bool]$BuildInstaller) $CertificateThumbprint $TimestampUrl
+    $signingEnabled = $configuration.SigningEnabled
+    $CertificateThumbprint = $configuration.Thumbprint
+    $TimestampUrl = $configuration.TimestampUrl
 
-if ($BuildInstaller) {
-    $iscc = Get-Command ISCC.exe -ErrorAction SilentlyContinue
-    $isccPath = if ($iscc) { $iscc.Source } else { $null }
-    if (-not $isccPath) {
-        $candidates = @()
-        if (${env:ProgramFiles(x86)}) { $candidates += Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe' }
-        if ($env:ProgramFiles) { $candidates += Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe' }
-        if ($env:LOCALAPPDATA) { $candidates += Join-Path $env:LOCALAPPDATA 'Programs\Inno Setup 6\ISCC.exe' }
-
-        $isccPath = $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+    if ($BuildInstaller) {
+        $isccPath = Find-InnoCompiler
+        if (-not $isccPath) { throw 'BuildInstaller was requested, but Inno Setup 6 was not found.' }
     }
-    if ($isccPath) {
-        & $isccPath "/DMyAppVersion=$version" "/DSourceDir=$publishDir" "/DOutputDir=$releaseRoot" (Join-Path $repoRoot 'installer\PokeTokenBar.iss')
-        if ($LASTEXITCODE -ne 0) { throw "installer compilation failed with exit code $LASTEXITCODE" }
-        $installerPath = Join-Path $releaseRoot "PokeTokenBar-Setup-$version.exe"
-        if (-not (Test-Path -LiteralPath $installerPath)) { throw "installer output was not found: $installerPath" }
-        if ($signingEnabled) { Invoke-AuthenticodeSign $installerPath }
-    } else {
-        Write-Warning 'Inno Setup 6 was not found; portable artifacts are complete and installer compilation was skipped.'
+
+    if ($signingEnabled) {
+        $certificate = Assert-CodeSigningCertificate $CertificateStoreLocation $CertificateThumbprint
+        $signToolPath = Find-SignTool
+        if (-not $signToolPath) { throw 'signtool.exe was not found on PATH or under Windows Kits 10.' }
+    }
+
+    [IO.Directory]::CreateDirectory($publishDir) | Out-Null
+    [IO.Directory]::CreateDirectory($stagingReleaseRoot) | Out-Null
+
+    Invoke-CheckedCommand 'Solution restore failed' { dotnet restore $solution }
+    Invoke-CheckedCommand 'win-x64 restore failed' { dotnet restore $project -r win-x64 }
+    Invoke-CheckedCommand 'dotnet clean failed' { dotnet clean $solution -c Release }
+    if (-not $SkipTests) {
+        Invoke-CheckedCommand 'dotnet test failed' { dotnet test $solution -c Release }
+    }
+    Invoke-CheckedCommand 'dotnet publish failed' {
+        dotnet publish $project -c Release -r win-x64 --self-contained true -o $publishDir
+    }
+
+    Assert-NoReleaseSigningMaterial $publishDir
+    $ownedPeNames = @(Get-ProjectOwnedPeNames)
+    $ownedPePaths = @(Get-ProjectOwnedPePaths $publishDir)
+    if ($signingEnabled) {
+        foreach ($path in $ownedPePaths) { Invoke-AuthenticodeSign $path }
+    }
+
+    $version = (dotnet msbuild $project -nologo -getProperty:Version | Select-Object -Last 1).Trim()
+    if ($LASTEXITCODE -ne 0) { throw "Version lookup failed with exit code $LASTEXITCODE" }
+    if ($version -notmatch '^\d+\.\d+\.\d+([-.+][0-9A-Za-z.-]+)?$') {
+        throw "Invalid project version: $version"
+    }
+
+    $portableName = "PokeTokenBar-$version-win-x64"
+    $portableDir = Join-Path $stagingReleaseRoot $portableName
+    [IO.Directory]::CreateDirectory($portableDir) | Out-Null
+    Copy-Item -Path (Join-Path $publishDir '*') -Destination $portableDir -Recurse
+    Assert-NoReleaseSigningMaterial $portableDir
+
+    $zipPath = Join-Path $stagingReleaseRoot "$portableName.zip"
+    Compress-Archive -Path (Join-Path $portableDir '*') -DestinationPath $zipPath -CompressionLevel Optimal
+    Assert-ZipPayload $zipPath $publishDir $ownedPeNames $CertificateThumbprint ([bool]$TimestampUrl) $signToolPath
+
+    $finalArtifacts = @($zipPath)
+    if ($BuildInstaller) {
+        $innoArguments = @(
+            "/DMyAppVersion=$version"
+            "/DSourceDir=$publishDir"
+            "/DOutputDir=$stagingReleaseRoot"
+        )
+        if ($RequireSigning) {
+            $innoArguments += '/DProductionSigning=1'
+            $innoArguments += New-InnoSignToolArgument `
+                $signToolPath $CertificateThumbprint $CertificateStoreLocation $TimestampUrl
+        }
+        $innoArguments += (Join-Path $repoRoot 'installer\PokeTokenBar.iss')
+        Invoke-CheckedCommand 'Installer compilation failed' { & $isccPath @innoArguments }
+
+        $installerPath = Join-Path $stagingReleaseRoot "PokeTokenBar-Setup-$version.exe"
+        if (-not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
+            throw "Installer output was not found: $installerPath"
+        }
+        if ($RequireSigning) {
+            Assert-AuthenticodeSignature $installerPath $CertificateThumbprint $true $signToolPath
+        } elseif ($signingEnabled) {
+            Invoke-AuthenticodeSign $installerPath
+        }
+        $finalArtifacts += $installerPath
+    }
+
+    $manifestPath = Join-Path $stagingReleaseRoot 'SHA256SUMS.txt'
+    $hashLines = @(New-Sha256Manifest $manifestPath $finalArtifacts)
+
+    Move-Item -LiteralPath $stagingReleaseRoot -Destination $releaseRoot
+    Move-Item -LiteralPath (Join-Path $stagingRoot 'publish') -Destination $publishRoot
+    [IO.Directory]::Delete($stagingRoot)
+    $releaseSucceeded = $true
+    foreach ($line in $hashLines) { Write-Host $line }
+} catch {
+    if (-not $releaseSucceeded -and (Test-Path -LiteralPath $releaseRoot)) {
+        Remove-Item -LiteralPath $releaseRoot -Recurse -Force
+    }
+    if (-not $releaseSucceeded -and (Test-Path -LiteralPath $publishRoot)) {
+        Remove-Item -LiteralPath $publishRoot -Recurse -Force
+    }
+    throw
+} finally {
+    if (Test-Path -LiteralPath $stagingRoot) {
+        Remove-Item -LiteralPath $stagingRoot -Recurse -Force
     }
 }
 
+if (-not $releaseSucceeded) { throw 'Release did not complete.' }
 Write-Host "Release ready: $releaseRoot"
