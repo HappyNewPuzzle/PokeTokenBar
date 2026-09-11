@@ -26,6 +26,8 @@ build/
 # (Must ignore docs/* rather than docs/ — git cannot re-include inside an excluded directory.)
 docs/*
 !docs/reference/
+!docs/WINDOWS_FEATURES.ko.md
+!docs/WINDOWS_CODE_STRUCTURE.ko.md
 
 # Agent worktrees / local state
 .claude/
