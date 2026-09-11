@@ -558,7 +558,7 @@ public sealed class UsageViewModelTests : IDisposable
     {
         var path = Path.GetFullPath(Path.Combine(root, relativePath));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var timestamp = now.AddMinutes(-5).ToUniversalTime().ToString(
+        var timestamp = now.ToUniversalTime().ToString(
             "yyyy-MM-dd'T'HH:mm:ss.fff'Z'",
             CultureInfo.InvariantCulture);
         var meta = "{\"type\":\"session_meta\",\"payload\":{\"id\":\"" + sessionId
