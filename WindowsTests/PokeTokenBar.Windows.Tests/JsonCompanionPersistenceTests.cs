@@ -62,6 +62,41 @@ public sealed class JsonCompanionPersistenceTests : IDisposable
     }
 
     [Fact]
+    public void LegacyDexWithoutReleasedAt_LoadsAsGraduated()
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(StatePath, """
+            {
+              "dex": [
+                { "baseID": 1, "finalID": 1, "chainOrder": [1], "rarity": "common" }
+              ]
+            }
+            """);
+
+        var entry = Assert.Single(new JsonCompanionPersistence(StatePath).Load()!.Dex);
+
+        Assert.Null(entry.ReleasedAt);
+        Assert.False(entry.IsReleased);
+    }
+
+    [Fact]
+    public void ReleasedAt_RoundTripsWithNormalCompanionSerialization()
+    {
+        var persistence = new JsonCompanionPersistence(StatePath);
+        var releasedAt = new DateTimeOffset(2026, 9, 11, 1, 2, 3, TimeSpan.Zero);
+        var state = State(1, 2) with
+        {
+            Dex = [State(1, 2).Dex[0] with { ReleasedAt = releasedAt }],
+        };
+
+        persistence.Save(state);
+        var entry = Assert.Single(persistence.Load()!.Dex);
+
+        Assert.Equal(releasedAt, entry.ReleasedAt);
+        Assert.True(entry.IsReleased);
+    }
+
+    [Fact]
     public void Save_OverwritesPreviousValueAtomically()
     {
         var persistence = new JsonCompanionPersistence(StatePath);

@@ -177,7 +177,8 @@ public sealed class EconomyViewModel : INotifyPropertyChanged
                     _store.CurrentIsShiny,
                     active.Nature,
                     speciesId == active.CurrentId,
-                    null);
+                    null,
+                    false);
             }
         }
 
@@ -189,7 +190,8 @@ public sealed class EconomyViewModel : INotifyPropertyChanged
                     ? _store.State.Language.ResolveName(names) ?? $"#{speciesId}"
                     : $"#{speciesId}";
                 yield return Collection(
-                    speciesId, name, entry.Rarity, entry.IsShiny, entry.Nature, false, entry.CaughtAt);
+                    speciesId, name, entry.Rarity, entry.IsShiny, entry.Nature, false, entry.CaughtAt,
+                    entry.IsReleased);
             }
         }
     }
@@ -201,7 +203,8 @@ public sealed class EconomyViewModel : INotifyPropertyChanged
         bool shiny,
         PokemonNature? nature,
         bool current,
-        DateTimeOffset? caughtAt) => new(
+        DateTimeOffset? caughtAt,
+        bool released) => new(
             speciesId,
             name,
             CompanionDisplayTexts.Rarity(rarity, _localization.Language),
@@ -213,7 +216,7 @@ public sealed class EconomyViewModel : INotifyPropertyChanged
             _store.State.RepresentativeSpeciesId == speciesId,
             caughtAt,
             shiny ? _localization.Shiny : _localization.Normal,
-            current ? _localization.Current :
+            current ? _localization.Current : released ? _localization.Released :
                 _store.State.RepresentativeSpeciesId == speciesId
                     ? _localization.Representative : _localization.Caught,
             caughtAt is DateTimeOffset caught ? _localization.LocalDate(caught) : null,

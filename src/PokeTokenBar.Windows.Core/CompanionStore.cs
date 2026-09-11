@@ -210,17 +210,21 @@ public sealed class CompanionStore
                     : PurchaseResult.PersistenceFailed;
             }
 
+            var active = State.Active!;
+            var released = ReleasedDexEntry(active);
             next = next with
             {
+                Dex = State.Dex.Append(released).ToArray(),
                 Active = null,
-                RepresentativeSpeciesId = State.RepresentativeSpeciesId is int selected &&
-                                          State.Dex.Any(entry => entry.ChainOrder.Contains(selected))
-                    ? selected
-                    : null,
                 EggUsage = 0,
                 EggTier = product.GuaranteedRarity,
                 PendingHatchId = null,
             };
+            if (next.RepresentativeSpeciesId is int selected && !next.OwnsSpecies(selected))
+            {
+                next = next with { RepresentativeSpeciesId = null };
+            }
+
             if (!CommitEconomyState(next))
             {
                 return PurchaseResult.PersistenceFailed;
@@ -945,6 +949,36 @@ public sealed class CompanionStore
         CurrentLine = null;
         DisplayState = CompanionStateKind.Egg;
         RefreshRepresentativeSubject();
+    }
+
+    private DexEntry ReleasedDexEntry(MonState active)
+    {
+        var reachedCount = (int)Math.Min(
+            active.PathIds.Count,
+            Math.Max(1L, (long)active.StageIndex + 1));
+        var chain = active.PathIds.Take(reachedCount).ToArray();
+        if (chain.Length == 0)
+        {
+            chain = [active.BaseId];
+        }
+
+        var now = _timeProvider.GetUtcNow();
+        return new DexEntry
+        {
+            BaseId = active.BaseId,
+            FinalId = chain[^1],
+            ChainOrder = chain,
+            Rarity = active.Rarity,
+            CaughtAt = now,
+            IsShiny = CurrentIsShiny,
+            Nature = active.Nature,
+            Names = CurrentLine is null
+                ? null
+                : chain.Distinct()
+                    .Where(CurrentLine.Names.ContainsKey)
+                    .ToDictionary(id => id, id => CurrentLine.Names[id]),
+            ReleasedAt = now,
+        };
     }
 
     private static long AddClamped(long value, long delta) =>

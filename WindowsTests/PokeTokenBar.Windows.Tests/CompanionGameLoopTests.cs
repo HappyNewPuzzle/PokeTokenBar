@@ -397,6 +397,7 @@ public sealed class CompanionGameLoopTests
         var entry = Assert.Single(fixture.Store.State.Dex);
         Assert.Equal([1], entry.ChainOrder);
         Assert.Equal(caughtAt, entry.CaughtAt);
+        Assert.False(entry.IsReleased);
         Assert.True(entry.IsShiny);
         Assert.Equal(PokemonNature.Jolly, entry.Nature);
         Assert.NotNull(entry.Names);

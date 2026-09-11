@@ -170,6 +170,7 @@ public sealed class LocalizationService : INotifyPropertyChanged
     public string Current => T("현재", "Current", "現在", "Actual", "Actuel", "Atual", "Aktuell");
     public string Representative => T("대표", "Representative", "代表", "Representante", "Représentatif", "Representante", "Repräsentativ");
     public string Caught => T("포획", "Caught", "捕獲済み", "Capturado", "Capturé", "Capturado", "Gefangen");
+    public string Released => T("놓아줌", "Released", "逃がした", "Liberado", "Relâché", "Solto", "Freigelassen");
     public string Shiny => T("이로치", "Shiny", "色違い", "Variocolor", "Chromatique", "Shiny", "Schillernd");
     public string Normal => T("일반", "Normal", "通常", "Normal", "Normal", "Normal", "Normal");
     public string UnknownNature => T("성격 미상", "Unknown nature", "性格不明", "Naturaleza desconocida", "Nature inconnue", "Natureza desconhecida", "Unbekanntes Wesen");

@@ -362,15 +362,115 @@ public sealed class CompanionEconomyTests
     }
 
     [Fact]
-    public async Task PremiumEgg_PurchaseDiscardsActiveWithoutDexAndRecordsGuarantee()
+    public async Task BasicEgg_ReleasesOnlyReachedFormsAndPreservesCompanionRecord()
     {
-        var store = Create(ActiveState(used: 5_000_000_000, usedAtStage: 42));
+        var releasedAt = new DateTimeOffset(2026, 9, 11, 1, 2, 3, TimeSpan.Zero);
+        var state = ActiveState(used: 5_000_000_000, usedAtStage: 42) with
+        {
+            Active = ActiveState().Active! with
+            {
+                PathIds = [1, 2, 3],
+                PlannedPathIds = [1, 2, 3],
+                StageIndex = 1,
+                Rarity = PokemonRarity.Uncommon,
+                IsShiny = true,
+                Nature = PokemonNature.Jolly,
+            },
+            CollectedFinals = new HashSet<string> { "9:9" },
+            RepresentativeSpeciesId = 2,
+        };
+        var persistence = new MemoryPersistence(state);
+        var store = Create(persistence: persistence, timeProvider: new FixedTimeProvider(releasedAt));
+        Assert.True(await store.LoadCurrentLineAsync());
+        var savesBeforePurchase = persistence.SaveCount;
+
         Assert.True(store.IsEggPurchaseAllowed);
-        Assert.Equal(PurchaseResult.Success, await store.PurchaseAsync("egg.rare"));
+        Assert.Equal(PurchaseResult.Success, await store.PurchaseAsync("egg.basic"));
+
         Assert.Null(store.State.Active);
-        Assert.Empty(store.State.Dex);
-        Assert.Equal(PokemonRarity.Rare, store.State.EggTier);
+        var entry = Assert.Single(store.State.Dex);
+        Assert.True(entry.IsReleased);
+        Assert.Equal(releasedAt, entry.ReleasedAt);
+        Assert.Equal(releasedAt, entry.CaughtAt);
+        Assert.Equal(1, entry.BaseId);
+        Assert.Equal(2, entry.FinalId);
+        Assert.Equal([1, 2], entry.ChainOrder);
+        Assert.Equal(PokemonRarity.Uncommon, entry.Rarity);
+        Assert.True(entry.IsShiny);
+        Assert.Equal(PokemonNature.Jolly, entry.Nature);
+        Assert.Equal([1, 2], entry.Names!.Keys.Order());
+        Assert.Equal(["9:9"], store.State.CollectedFinals);
+        Assert.Equal(2, store.State.RepresentativeSpeciesId);
+        Assert.Equal(2, store.RepresentativeSubject.SpeciesId);
+        Assert.True(store.State.OwnsSpecies(1));
+        Assert.True(store.State.OwnsSpecies(2));
+        Assert.False(store.State.OwnsSpecies(3));
+        Assert.Equal(1_000_000_000, store.State.SpentTokens);
+        Assert.Null(store.State.EggTier);
         Assert.Equal(0, store.State.EggUsage);
+        Assert.Null(store.State.PendingHatchId);
+        Assert.Equal(CompanionStateKind.Egg, store.DisplayState);
+        Assert.Equal(savesBeforePurchase + 1, persistence.SaveCount);
+    }
+
+    [Theory]
+    [InlineData("egg.uncommon", PokemonRarity.Uncommon)]
+    [InlineData("egg.rare", PokemonRarity.Rare)]
+    public async Task PremiumEgg_UsesSameReleaseRecord(string productId, PokemonRarity tier)
+    {
+        var store = Create(ActiveState(used: 5_000_000_000));
+
+        Assert.Equal(PurchaseResult.Success, await store.PurchaseAsync(productId));
+
+        Assert.True(Assert.Single(store.State.Dex).IsReleased);
+        Assert.Equal(tier, store.State.EggTier);
+    }
+
+    [Theory]
+    [InlineData(int.MinValue, 1)]
+    [InlineData(int.MaxValue, 3)]
+    public async Task EggPurchase_ExtremeStageIndexCannotExposeWrongFormsOrCrash(
+        int stageIndex,
+        int expectedCount)
+    {
+        var state = ActiveState(used: 5_000_000_000) with
+        {
+            Active = ActiveState().Active! with
+            {
+                PathIds = [1, 2, 3],
+                PlannedPathIds = [1, 2, 3],
+                StageIndex = stageIndex,
+            },
+        };
+        var store = Create(state);
+
+        Assert.Equal(PurchaseResult.Success, await store.PurchaseAsync("egg.basic"));
+
+        var entry = Assert.Single(store.State.Dex);
+        Assert.Equal(Enumerable.Range(1, expectedCount), entry.ChainOrder);
+        if (expectedCount < 3)
+        {
+            Assert.False(store.State.OwnsSpecies(expectedCount + 1));
+        }
+    }
+
+    [Fact]
+    public async Task EggPurchase_DoesNotRevealHiddenDittoShinyState()
+    {
+        var state = ActiveState(used: 5_000_000_000) with
+        {
+            Active = ActiveState().Active! with
+            {
+                IsShiny = true,
+                DittoDisguise = 1,
+                DittoRevealed = false,
+            },
+        };
+        var store = Create(state);
+
+        Assert.Equal(PurchaseResult.Success, await store.PurchaseAsync("egg.basic"));
+
+        Assert.False(Assert.Single(store.State.Dex).IsShiny);
     }
 
     [Theory]
@@ -388,6 +488,7 @@ public sealed class CompanionEconomyTests
         Assert.Same(before, store.State);
         Assert.Equal(balance, store.AvailableTokens);
         Assert.Equal(0, store.State.SpentTokens);
+        Assert.Empty(store.State.Dex);
     }
 
     [Fact]
@@ -396,6 +497,8 @@ public sealed class CompanionEconomyTests
         var store = Create(ActiveState(used: 3_000_000_000));
         Assert.Equal(PurchaseResult.InsufficientFunds, await store.PurchaseAsync("egg.rare"));
         Assert.NotNull(store.State.Active);
+        Assert.Empty(store.State.Dex);
+        Assert.Equal(0, store.State.SpentTokens);
     }
 
     [Fact]
@@ -406,13 +509,20 @@ public sealed class CompanionEconomyTests
     }
 
     [Fact]
-    public async Task PremiumEgg_PersistenceFailureKeepsActiveAndFunds()
+    public async Task PremiumEgg_PersistenceFailureRollsBackThenRetryCreatesOneRelease()
     {
         var persistence = new MemoryPersistence(ActiveState(used: 5_000_000_000)) { FailNextSave = true };
         var store = Create(persistence: persistence);
+        var before = store.State;
         Assert.Equal(PurchaseResult.PersistenceFailed, await store.PurchaseAsync("egg.rare"));
+        Assert.Same(before, store.State);
         Assert.NotNull(store.State.Active);
+        Assert.Empty(store.State.Dex);
         Assert.Equal(0, store.State.SpentTokens);
+        Assert.Equal(CompanionStateKind.Idle, store.DisplayState);
+
+        Assert.Equal(PurchaseResult.Success, await store.PurchaseAsync("egg.rare"));
+        Assert.Single(store.State.Dex);
     }
 
     [Fact]
@@ -450,6 +560,23 @@ public sealed class CompanionEconomyTests
         Assert.Equal(2, viewModel.CollectionEntries.Count);
         Assert.Contains(viewModel.CollectionEntries, entry => entry.IsCurrent && entry.SpeciesId == 1);
         Assert.Contains(viewModel.CollectionEntries, entry => entry.SpeciesId == 25 && entry.IsShiny);
+    }
+
+    [Fact]
+    public void Collection_DistinguishesReleasedFromGraduatedEntries()
+    {
+        var releasedAt = new DateTimeOffset(2026, 9, 11, 0, 0, 0, TimeSpan.Zero);
+        var state = State() with
+        {
+            Dex = [Dex(25) with { ReleasedAt = releasedAt }, Dex(26)],
+        };
+        var localization = new LocalizationService(AppLanguage.En);
+        var viewModel = new EconomyViewModel(Create(state), _ => Task.CompletedTask, localization);
+
+        Assert.Equal(localization.Released,
+            Assert.Single(viewModel.CollectionEntries, entry => entry.SpeciesId == 25).RoleText);
+        Assert.Equal(localization.Caught,
+            Assert.Single(viewModel.CollectionEntries, entry => entry.SpeciesId == 26).RoleText);
     }
 
     [Fact]
@@ -540,6 +667,19 @@ public sealed class CompanionEconomyTests
         Assert.Equal(expected, new LocalizationService(language).EggPurchaseLockedHint);
     }
 
+    [Theory]
+    [InlineData(AppLanguage.Ko, "놓아줌")]
+    [InlineData(AppLanguage.En, "Released")]
+    [InlineData(AppLanguage.Ja, "逃がした")]
+    [InlineData(AppLanguage.Es, "Liberado")]
+    [InlineData(AppLanguage.Fr, "Relâché")]
+    [InlineData(AppLanguage.Pt, "Solto")]
+    [InlineData(AppLanguage.De, "Freigelassen")]
+    public void Released_IsLocalized(AppLanguage language, string expected)
+    {
+        Assert.Equal(expected, new LocalizationService(language).Released);
+    }
+
     [Fact]
     public void ShopXaml_WrapsAndCollapsesEggPurchaseReason()
     {
@@ -589,8 +729,10 @@ public sealed class CompanionEconomyTests
         CompanionState? state = null,
         MemoryPersistence? persistence = null,
         IPokeApiClient? api = null,
-        Random? random = null) =>
-        new(api ?? new EconomyApi(), persistence ?? new MemoryPersistence(state), random ?? new Random(1));
+        Random? random = null,
+        TimeProvider? timeProvider = null) =>
+        new(api ?? new EconomyApi(), persistence ?? new MemoryPersistence(state), random ?? new Random(1),
+            timeProvider);
 
     private static string Root() => Path.GetFullPath(Path.Combine(
         AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
@@ -668,9 +810,11 @@ public sealed class CompanionEconomyTests
     {
         public CompanionState? State { get; private set; } = state;
         public bool FailNextSave { get; set; }
+        public int SaveCount { get; private set; }
         public CompanionState? Load() => State;
         public void Save(CompanionState state)
         {
+            SaveCount++;
             if (FailNextSave)
             {
                 FailNextSave = false;
@@ -709,5 +853,10 @@ public sealed class CompanionEconomyTests
             Task.FromResult<IReadOnlyList<BaseSpecies>>([]);
         public Task<BaseSpecies?> GetBaseSpeciesAsync(int speciesId, CancellationToken cancellationToken = default) =>
             Task.FromResult<BaseSpecies?>(null);
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 }

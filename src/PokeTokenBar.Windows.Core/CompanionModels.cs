@@ -309,6 +309,10 @@ public sealed record DexEntry
     public bool IsShiny { get; init; }
     public PokemonNature? Nature { get; init; }
     public IReadOnlyDictionary<int, IReadOnlyDictionary<string, string>>? Names { get; init; }
+    public DateTimeOffset? ReleasedAt { get; init; }
+
+    [JsonIgnore]
+    public bool IsReleased => ReleasedAt is not null;
 }
 
 public sealed record CompanionState
