@@ -12,7 +12,8 @@ public static class CodexCumulativeEpochAssigner
             rollout.FilePath,
             rollout.RolloutMetadata,
             rollout.TokenEvents,
-            static (_, tokenEvent) => tokenEvent.SessionId);
+            static (_, tokenEvent) => tokenEvent.SessionId,
+            trustGrowingTotalOnlyLast: false);
     }
 
     public static CodexEpochRollout ReassignOwnedEvents(CodexEpochRollout rollout)
@@ -26,14 +27,16 @@ public static class CodexCumulativeEpochAssigner
             (sourceRollout, tokenEvent) =>
                 CodexCanonicalUsageKeyFactory.ResolveOwnerSessionId(
                     sourceRollout,
-                    tokenEvent));
+                    tokenEvent),
+            trustGrowingTotalOnlyLast: true);
     }
 
     private static CodexEpochRollout Assign(
         string filePath,
         CodexSessionMetaParseResult? rolloutMetadata,
         IEnumerable<CodexRolloutTokenEvent> tokenEvents,
-        Func<CodexEpochRollout, CodexRolloutTokenEvent, string?> ownerSelector)
+        Func<CodexEpochRollout, CodexRolloutTokenEvent, string?> ownerSelector,
+        bool trustGrowingTotalOnlyLast)
     {
         var sourceRollout = new CodexEpochRollout(
             filePath,
@@ -76,6 +79,10 @@ public static class CodexCumulativeEpochAssigner
                 continue;
             }
 
+            var assignedTokenEvent = trustGrowingTotalOnlyLast
+                ? TrustGrowingTotalOnlyLast(tokenEvent, previousCumulative)
+                : tokenEvent;
+
             if (previousCumulative is CodexUsageVector previous
                 && cumulative.Value.HasDecreasedFrom(previous))
             {
@@ -83,12 +90,38 @@ public static class CodexCumulativeEpochAssigner
             }
 
             previousCumulative = cumulative;
-            assignedEvents.Add(new CodexEpochTokenEvent(tokenEvent, epoch));
+            assignedEvents.Add(new CodexEpochTokenEvent(assignedTokenEvent, epoch));
         }
 
         return new CodexEpochRollout(
             filePath,
             rolloutMetadata,
             assignedEvents);
+    }
+
+    private static CodexRolloutTokenEvent TrustGrowingTotalOnlyLast(
+        CodexRolloutTokenEvent tokenEvent,
+        CodexUsageVector? previousCumulative)
+    {
+        var tokenCount = tokenEvent.TokenCount;
+        var last = tokenCount.LastUsageVector;
+        var cumulative = tokenCount.CumulativeUsageVector;
+        if (tokenCount.Entry.TotalTokens != 0
+            || last.BillableComponentTokens != 0
+            || last.TotalTokens <= 0
+            || previousCumulative is not CodexUsageVector previous
+            || cumulative is not CodexUsageVector current
+            || current.TotalTokens <= previous.TotalTokens)
+        {
+            return tokenEvent;
+        }
+
+        return tokenEvent with
+        {
+            TokenCount = tokenCount with
+            {
+                Entry = new CodexUsageEntry(last.TotalTokens, 0, 0, 0),
+            },
+        };
     }
 }

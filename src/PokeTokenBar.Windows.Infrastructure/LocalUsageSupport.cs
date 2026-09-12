@@ -152,6 +152,7 @@ internal static class LocalUsageSupport
             "claude-sonnet-4-6" => (3d, 15d, 3.75d, 0.3d),
             "claude-haiku-4-5-20251001" => (1d, 5d, 1.25d, 0.1d),
             "claude-fable-5" => (10d, 50d, 12.5d, 1d),
+            "claude-fable-5-1" => (10d, 50d, 12.5d, 0.25d),
             "gpt-5.5" => (5d, 30d, 0d, 0.5d),
             "gemini-2.5-pro" => (1.25d, 10d, 0d, 0.3125d),
             "gemini-2.5-flash" => (0.30d, 2.5d, 0d, 0.075d),

@@ -401,6 +401,60 @@ public sealed class CodexLocalUsageServiceTests : IDisposable
     }
 
     [Fact]
+    public void LoadFromRoots_MidSessionTotalOnlyLastCountsWhenCumulativeTotalGrows()
+    {
+        var root = Root("sessions");
+        WriteRollout(
+            root,
+            "total-only-growth.jsonl",
+            Now,
+            SessionMeta("growth"),
+            StateLine(Instant(Now.AddHours(-2)), 1_000, Entry(input: 1_000, output: 100)),
+            TotalOnlyStateLine(
+                Instant(Now.AddHours(-1)),
+                cumulativeInput: 1_000,
+                cumulativeOutput: 100,
+                cumulativeTotal: 6_100,
+                lastTotal: 5_000));
+
+        var result = Load([root]);
+
+        AssertAll(result, new CodexUsageEntry(6_000, 100, 0, 0));
+    }
+
+    [Fact]
+    public void LoadFromRoots_ForkPostReplayTotalOnlyLastStaysZeroWhenCumulativeDoesNotGrow()
+    {
+        var root = Root("sessions");
+        var replay = StateLine(
+            Instant(Now.AddHours(-2)),
+            100,
+            Entry(input: 100, output: 10));
+        WriteRollout(
+            root,
+            "parent.jsonl",
+            ScanStart.AddDays(-1),
+            SessionMeta("parent"),
+            replay);
+        WriteRollout(
+            root,
+            "child.jsonl",
+            Now,
+            SessionMeta("child", "parent"),
+            replay,
+            TotalOnlyStateLine(
+                Instant(Now.AddHours(-1)),
+                cumulativeInput: 100,
+                cumulativeOutput: 10,
+                cumulativeTotal: 110,
+                lastTotal: 6_742));
+
+        var result = Load([root]);
+
+        AssertZero(result);
+    }
+
+    [Fact]
     public void LoadFromRoots_PostReplayOwnedResetStartsFreshAndKeepsOwnedDecrease()
     {
         var root = Root("sessions");
@@ -636,6 +690,23 @@ public sealed class CodexLocalUsageServiceTests : IDisposable
             + $"\"cache_write_input_tokens\":0,\"output_tokens\":{entry.OutputTokens},"
             + $"\"reasoning_output_tokens\":0,\"total_tokens\":{lastTotal}}}}}}}}}";
     }
+
+    private static string TotalOnlyStateLine(
+        string timestamp,
+        long cumulativeInput,
+        long cumulativeOutput,
+        long cumulativeTotal,
+        long lastTotal) =>
+        "{\"type\":\"event_msg\",\"timestamp\":\"" + timestamp
+        + "\",\"payload\":{\"type\":\"token_count\",\"info\":{"
+        + "\"total_token_usage\":{"
+        + $"\"input_tokens\":{cumulativeInput},\"cached_input_tokens\":0,"
+        + $"\"cache_write_input_tokens\":0,\"output_tokens\":{cumulativeOutput},"
+        + $"\"reasoning_output_tokens\":0,\"total_tokens\":{cumulativeTotal}}},"
+        + "\"last_token_usage\":{"
+        + "\"input_tokens\":0,\"cached_input_tokens\":0,"
+        + "\"cache_write_input_tokens\":0,\"output_tokens\":0,"
+        + $"\"reasoning_output_tokens\":0,\"total_tokens\":{lastTotal}}}}}}}}}";
 
     private static string LastOnlyLine(string timestamp, long input) =>
         "{\"type\":\"event_msg\",\"timestamp\":\"" + timestamp

@@ -41,6 +41,35 @@ public class CodexTokenCountParserTests
     }
 
     [Fact]
+    public void TryParse_TotalOnlyLastWithoutCumulative_MapsTotalToInput()
+    {
+        var result = Parse(CreateLine(
+            lastUsage: """{"input_tokens":0,"cached_input_tokens":0,"output_tokens":0,"total_tokens":51293}"""));
+
+        Assert.Equal(new CodexUsageEntry(51_293, 0, 0, 0), result.Entry);
+    }
+
+    [Fact]
+    public void TryParse_TotalOnlyLastWithTotalOnlyCumulative_MapsTotalToInput()
+    {
+        var result = Parse(CreateLine(
+            lastUsage: """{"input_tokens":0,"cached_input_tokens":0,"output_tokens":0,"total_tokens":5000}""",
+            cumulativeUsage: """{"input_tokens":0,"cached_input_tokens":0,"output_tokens":0,"total_tokens":6000}"""));
+
+        Assert.Equal(new CodexUsageEntry(5_000, 0, 0, 0), result.Entry);
+    }
+
+    [Fact]
+    public void TryParse_TotalOnlyLastMatchingCumulativeTotal_MapsTotalToInput()
+    {
+        var result = Parse(CreateLine(
+            lastUsage: """{"input_tokens":0,"cached_input_tokens":0,"output_tokens":0,"total_tokens":51293}""",
+            cumulativeUsage: """{"input_tokens":1000,"cached_input_tokens":100,"output_tokens":100,"total_tokens":51293}"""));
+
+        Assert.Equal(new CodexUsageEntry(51_293, 0, 0, 0), result.Entry);
+    }
+
+    [Fact]
     public void TryParse_NonTokenCountPayload_ReturnsFalse()
     {
         var line = CreateLine(lastUsage: "{}", payloadType: "agent_message");

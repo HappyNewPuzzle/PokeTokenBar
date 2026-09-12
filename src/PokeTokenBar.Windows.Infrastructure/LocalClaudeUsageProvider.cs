@@ -156,6 +156,7 @@ public sealed class LocalClaudeUsageProvider : IUsageProvider
             "claude-sonnet-4-6" => (3d, 15d, 3.75d, 0.3d),
             "claude-haiku-4-5-20251001" => (1d, 5d, 1.25d, 0.1d),
             "claude-fable-5" => (10d, 50d, 12.5d, 1d),
+            "claude-fable-5-1" => (10d, 50d, 12.5d, 0.25d),
             _ when lower.Contains("fable", StringComparison.Ordinal) => (10d, 50d, 12.5d, 1d),
             _ when lower.Contains("opus", StringComparison.Ordinal) => (5d, 25d, 6.25d, 0.5d),
             _ when lower.Contains("sonnet", StringComparison.Ordinal) => (3d, 15d, 3.75d, 0.3d),

@@ -37,20 +37,26 @@ public static class CodexTokenCountParser
                 return false;
             }
 
-            var lastUsageVector = ParseUsageVector(lastUsage);
-            var entry = new CodexUsageEntry(
-                InputTokens: Math.Max(
-                    0,
-                    lastUsageVector.InputTokens - lastUsageVector.CachedInputTokens),
-                OutputTokens: lastUsageVector.OutputTokens,
-                CacheReadTokens: lastUsageVector.CachedInputTokens,
-                CacheWriteTokens: 0);
-
             CodexUsageVector? cumulativeUsageVector = null;
             if (TryGetObject(info, "total_token_usage", out var cumulativeUsage))
             {
                 cumulativeUsageVector = ParseUsageVector(cumulativeUsage);
             }
+
+            var lastUsageVector = ParseUsageVector(lastUsage);
+            var entry = ShouldTrustTotalOnlyLast(lastUsageVector, cumulativeUsageVector)
+                ? new CodexUsageEntry(
+                    InputTokens: lastUsageVector.TotalTokens,
+                    OutputTokens: 0,
+                    CacheReadTokens: 0,
+                    CacheWriteTokens: 0)
+                : new CodexUsageEntry(
+                    InputTokens: Math.Max(
+                        0,
+                        lastUsageVector.InputTokens - lastUsageVector.CachedInputTokens),
+                    OutputTokens: lastUsageVector.OutputTokens,
+                    CacheReadTokens: lastUsageVector.CachedInputTokens,
+                    CacheWriteTokens: 0);
 
             result = new CodexTokenCountParseResult(
                 timestamp,
@@ -73,6 +79,15 @@ public static class CodexTokenCountParser
             OutputTokens: ReadTokenValue(usage, "output_tokens"),
             ReasoningOutputTokens: ReadTokenValue(usage, "reasoning_output_tokens"),
             TotalTokens: ReadTokenValue(usage, "total_tokens"));
+
+    private static bool ShouldTrustTotalOnlyLast(
+        CodexUsageVector last,
+        CodexUsageVector? cumulative) =>
+        last.BillableComponentTokens == 0
+        && last.TotalTokens > 0
+        && (cumulative is null
+            || cumulative.Value is { BillableComponentTokens: 0, TotalTokens: > 0 }
+            || cumulative.Value.TotalTokens == last.TotalTokens);
 
     private static long ReadTokenValue(JsonElement usage, string propertyName)
     {

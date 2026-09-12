@@ -8,6 +8,11 @@ public readonly record struct CodexUsageVector(
     long ReasoningOutputTokens,
     long TotalTokens)
 {
+    public long BillableComponentTokens =>
+        Math.Max(0, InputTokens - CachedInputTokens)
+        + CachedInputTokens
+        + OutputTokens;
+
     public bool HasDecreasedFrom(CodexUsageVector previous) =>
         InputTokens < previous.InputTokens
         || CachedInputTokens < previous.CachedInputTokens

@@ -119,6 +119,25 @@ public sealed class LocalClaudeUsageProviderTests : IDisposable
         Assert.Equal(6.75, cost, precision: 6);
     }
 
+    [Theory]
+    [InlineData("claude-fable-5-1", 0.25)]
+    [InlineData("claude-fable-5", 1.0)]
+    [InlineData("claude-fable-future", 1.0)]
+    [InlineData("unknown", 0.0)]
+    public void FableCacheReadPricingPreservesExactAndFallbackRates(
+        string model,
+        double expected)
+    {
+        Assert.Equal(
+            expected,
+            LocalClaudeUsageProvider.CalculateCost(model, 0, 0, 0, 1_000_000),
+            precision: 6);
+        Assert.Equal(
+            expected,
+            LocalUsageSupport.CalculateCost(model, 0, 0, 0, 1_000_000),
+            precision: 6);
+    }
+
     [Fact]
     public async Task TodayFiveHourWeekAndMonthUseLocalCalendarWindows()
     {
