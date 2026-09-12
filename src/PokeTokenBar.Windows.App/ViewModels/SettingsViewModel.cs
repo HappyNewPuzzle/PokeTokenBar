@@ -119,7 +119,7 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
         new("cursor", "Cursor"), new("opencode", "OpenCode"),
         new("hermes", "Hermes Agent"), new("grok", "Grok"),
         new("copilot", "GitHub Copilot"), new("kiro", "Kiro"),
-        new("pi", "Pi"), new("omp", "omp"),
+        new("pi", "Pi"), new("omp", "omp"), new("aside", "Aside"),
     ];
 
     public RefreshIntervalMode SelectedRefreshInterval

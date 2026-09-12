@@ -407,6 +407,9 @@ public sealed class Phase7AProviderUxTests : IDisposable
             CustomProviderRoots: new Dictionary<string, string> { ["codex"] = _temp }));
         var settings = new SettingsViewModel(persistence, new FakeAutoStart(), AppLanguage.En);
 
+        Assert.Contains(settings.ProviderRootOptions, option =>
+            option.Id == "aside" && option.Label == "Aside");
+
         settings.UpdateProviderStatuses([
             new ProviderStatusSnapshot("codex", "Codex", ProviderRuntimeStatus.LocalDataOnly,
                 ProviderAuthStatus.QuotaUnavailable),

@@ -146,6 +146,7 @@ public static class AppComposition
                 new LocalOpenCodeUsageProvider(), new LocalHermesUsageProvider(),
                 new LocalGrokUsageProvider(), new LocalCopilotUsageProvider(),
                 new LocalKiroUsageProvider(), new LocalPiUsageProvider(), new LocalOmpUsageProvider(),
+                new LocalAsideUsageProvider(),
             ]
             : CreateConfiguredProviders(httpClient ?? new HttpClient(), customRoots);
         ICodexRateLimitsProvider codexRateLimitsProvider = new CodexRateLimitsProvider();
@@ -191,6 +192,8 @@ public static class AppComposition
             roots => new LocalPiUsageProvider(roots)),
         Configured("omp", "omp", true, () => LocalOmpUsageProvider.GetDefaultRoots(), customRoots,
             roots => new LocalOmpUsageProvider(roots)),
+        Configured("aside", "Aside", true, () => LocalAsideUsageProvider.GetDefaultRoots(), customRoots,
+            roots => new LocalAsideUsageProvider(roots)),
     ];
 
     private static IUsageProvider Configured(

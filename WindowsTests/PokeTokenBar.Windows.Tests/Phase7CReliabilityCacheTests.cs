@@ -153,7 +153,7 @@ public sealed class Phase7CUsageCacheTests : IDisposable
             _ => Array.Empty<string>(),
             snapshotPersistence: persistence);
 
-        Assert.Equal(12, usage.RegisteredProviderIds.Count);
+        Assert.Equal(13, usage.RegisteredProviderIds.Count);
         Assert.Equal("codex", usage.SelectedProviderId);
         Assert.Equal(456, usage.MonthTokens);
         Assert.Equal(ProviderRuntimeStatus.Stale, usage.ProviderStatuses.Single(x => x.ProviderId == "codex").RuntimeStatus);
@@ -181,12 +181,12 @@ public sealed class Phase7CUsageCacheTests : IDisposable
     }
 
     [Fact]
-    public void AllTwelveCanonicalProvidersRestoreById()
+    public void AllThirteenCanonicalProvidersRestoreById()
     {
         var ids = new[]
         {
             "codex", "claude_code", "gemini", "antigravity", "cursor", "opencode",
-            "hermes", "grok", "copilot", "kiro", "pi", "omp",
+            "hermes", "grok", "copilot", "kiro", "pi", "omp", "aside",
         };
         var store = Store(
             ids.Select(Provider).ToArray(),

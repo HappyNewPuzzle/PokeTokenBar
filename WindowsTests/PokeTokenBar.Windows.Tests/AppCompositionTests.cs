@@ -42,9 +42,10 @@ public sealed partial class AppCompositionTests
             provider => Assert.IsType<LocalCopilotUsageProvider>(provider),
             provider => Assert.IsType<LocalKiroUsageProvider>(provider),
             provider => Assert.IsType<LocalPiUsageProvider>(provider),
-            provider => Assert.IsType<LocalOmpUsageProvider>(provider));
+            provider => Assert.IsType<LocalOmpUsageProvider>(provider),
+            provider => Assert.IsType<LocalAsideUsageProvider>(provider));
         Assert.Equal(
-            ["codex", "claude_code", "gemini", "antigravity", "cursor", "opencode", "hermes", "grok", "copilot", "kiro", "pi", "omp"],
+            ["codex", "claude_code", "gemini", "antigravity", "cursor", "opencode", "hermes", "grok", "copilot", "kiro", "pi", "omp", "aside"],
             providers.Select(provider => provider.Id));
         Assert.IsType<CodexRateLimitsProvider>(rateLimitsProvider);
         Assert.IsType<ClaudeRateLimitsProvider>(claudeRateLimitsProvider);
