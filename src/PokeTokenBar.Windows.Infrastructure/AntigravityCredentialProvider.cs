@@ -70,15 +70,10 @@ public sealed class AntigravityCredentialProvider : IAntigravityCredentialProvid
                     continue;
                 }
 
-                await using var stream = File.OpenRead(path);
-                using var document = await JsonDocument.ParseAsync(
-                    stream,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
-                if (document.RootElement.TryGetProperty("token", out var token) &&
-                    token.ValueKind == JsonValueKind.String &&
-                    !string.IsNullOrWhiteSpace(token.GetString()))
+                var raw = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+                if (ParseCredential(raw) is { } credential)
                 {
-                    return new AntigravityOAuthCredential(token.GetString()!);
+                    return credential;
                 }
             }
             catch (OperationCanceledException)
@@ -135,7 +130,15 @@ public sealed class AntigravityCredentialProvider : IAntigravityCredentialProvid
         try
         {
             using var document = JsonDocument.Parse(json);
-            if (!document.RootElement.TryGetProperty("token", out var token))
+            var root = document.RootElement;
+            if (root.TryGetProperty("access_token", out var directAccess) &&
+                directAccess.ValueKind == JsonValueKind.String &&
+                !string.IsNullOrWhiteSpace(directAccess.GetString()))
+            {
+                return Credential(root, directAccess);
+            }
+
+            if (!root.TryGetProperty("token", out var token))
             {
                 return null;
             }
@@ -156,24 +159,31 @@ public sealed class AntigravityCredentialProvider : IAntigravityCredentialProvid
                 return null;
             }
 
-            var refresh = token.TryGetProperty("refresh_token", out var refreshToken) &&
-                          refreshToken.ValueKind == JsonValueKind.String
-                ? refreshToken.GetString()
-                : null;
-            var expiry = token.TryGetProperty("expiry", out var expiryValue) &&
-                         expiryValue.ValueKind == JsonValueKind.String &&
-                         DateTimeOffset.TryParse(
-                             expiryValue.GetString(),
-                             CultureInfo.InvariantCulture,
-                             DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-                             out var parsedExpiry)
-                ? parsedExpiry
-                : (DateTimeOffset?)null;
-            return new AntigravityOAuthCredential(access.GetString()!, refresh, expiry);
+            return Credential(token, access);
         }
         catch (JsonException)
         {
             return null;
         }
+    }
+
+    private static AntigravityOAuthCredential Credential(
+        JsonElement container,
+        JsonElement access)
+    {
+        var refresh = container.TryGetProperty("refresh_token", out var refreshToken) &&
+                      refreshToken.ValueKind == JsonValueKind.String
+            ? refreshToken.GetString()
+            : null;
+        var expiry = container.TryGetProperty("expiry", out var expiryValue) &&
+                     expiryValue.ValueKind == JsonValueKind.String &&
+                     DateTimeOffset.TryParse(
+                         expiryValue.GetString(),
+                         CultureInfo.InvariantCulture,
+                         DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                         out var parsedExpiry)
+            ? parsedExpiry
+            : (DateTimeOffset?)null;
+        return new AntigravityOAuthCredential(access.GetString()!, refresh, expiry);
     }
 }

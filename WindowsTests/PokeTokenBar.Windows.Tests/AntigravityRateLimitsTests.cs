@@ -26,6 +26,23 @@ public sealed class AntigravityRateLimitsTests : IDisposable
         Assert.Equal("fixture-token", (await provider.GetCredentialAsync())?.AccessToken);
     }
 
+    [Theory]
+    [InlineData("{\"token\":{\"access_token\":\"nested\",\"refresh_token\":\"refresh\",\"expiry\":\"2099-01-01T00:00:00Z\"}}", "nested")]
+    [InlineData("{\"access_token\":\"top-level\",\"refresh_token\":\"refresh\",\"expiry\":\"2099-01-01T00:00:00Z\"}", "top-level")]
+    public async Task TokenFileAcceptsNestedAndTopLevelOAuthCredentials(
+        string json,
+        string expectedAccessToken)
+    {
+        var path = Path.Combine(_directory, $"oauth-{Guid.NewGuid():N}.json");
+        File.WriteAllText(path, json);
+
+        var credential = await new AntigravityCredentialProvider([path]).GetCredentialAsync();
+
+        Assert.Equal(expectedAccessToken, credential?.AccessToken);
+        Assert.Equal("refresh", credential?.RefreshToken);
+        Assert.Equal(new DateTimeOffset(2099, 1, 1, 0, 0, 0, TimeSpan.Zero), credential?.ExpiresAt);
+    }
+
     [Fact]
     public async Task AlternateCredentialIsUsedWhenPrimaryIsMissingOrMalformed()
     {
@@ -295,7 +312,47 @@ public sealed class AntigravityRateLimitsTests : IDisposable
         Assert.True((await provider.FetchAsync())!.HasVisibleLimit);
         Assert.Equal(AntigravityRateLimitsProvider.GoogleTokenUri, handler.Requests[0].Uri);
         Assert.Contains("grant_type=refresh_token", handler.Requests[0].Body);
+        Assert.Contains("client_secret=", handler.Requests[0].Body);
         Assert.Equal("Bearer fresh", handler.Requests[1].Authorization);
+    }
+
+    [Fact]
+    public async Task CredentialSwitchNeverReusesPreviousAccountToken()
+    {
+        var handler = new QueueHandler(
+            Json(HttpStatusCode.OK, SampleJson),
+            Json(HttpStatusCode.OK, SampleJson));
+        var credentials = new QueueOAuthCredentials(
+            new AntigravityOAuthCredential("account-a", "refresh-a", Now.AddHours(1)),
+            new AntigravityOAuthCredential("account-b", ExpiresAt: Now.AddSeconds(30)));
+        var provider = new AntigravityRateLimitsProvider(
+            new HttpClient(handler), credentials, [Endpoint], new FixedTimeProvider(Now));
+
+        await provider.FetchAsync();
+        await provider.FetchAsync();
+
+        Assert.Equal("Bearer account-a", handler.Requests[0].Authorization);
+        Assert.Equal("Bearer account-b", handler.Requests[1].Authorization);
+    }
+
+    [Fact]
+    public async Task RefreshedTokenSurvivesUnchangedExpiredSourceFile()
+    {
+        var handler = new QueueHandler(
+            Json(HttpStatusCode.OK, "{\"access_token\":\"fresh\",\"expires_in\":3600}"),
+            Json(HttpStatusCode.OK, SampleJson),
+            Json(HttpStatusCode.OK, SampleJson));
+        var expired = new AntigravityOAuthCredential("expired", "same-refresh", Now.AddMinutes(-1));
+        var provider = new AntigravityRateLimitsProvider(
+            new HttpClient(handler), new QueueOAuthCredentials(expired, expired),
+            [Endpoint], new FixedTimeProvider(Now));
+
+        await provider.FetchAsync();
+        await provider.FetchAsync();
+
+        Assert.Equal(AntigravityRateLimitsProvider.GoogleTokenUri, handler.Requests[0].Uri);
+        Assert.Equal("Bearer fresh", handler.Requests[1].Authorization);
+        Assert.Equal("Bearer fresh", handler.Requests[2].Authorization);
     }
 
     [Fact]
@@ -465,6 +522,16 @@ public sealed class AntigravityRateLimitsTests : IDisposable
     {
         public Task<AntigravityOAuthCredential?> GetCredentialAsync(
             CancellationToken cancellationToken = default) => Task.FromResult(value);
+    }
+
+    private sealed class QueueOAuthCredentials(params AntigravityOAuthCredential?[] values)
+        : IAntigravityCredentialProvider
+    {
+        private readonly Queue<AntigravityOAuthCredential?> _values = new(values);
+
+        public Task<AntigravityOAuthCredential?> GetCredentialAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(_values.Count == 0 ? null : _values.Dequeue());
     }
 
     private sealed class FakeLimits : IAntigravityRateLimitsProvider

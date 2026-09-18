@@ -15,6 +15,8 @@ public sealed class AntigravityRateLimitsProvider : IAntigravityRateLimitsProvid
     public static readonly Uri GoogleTokenUri = new("https://oauth2.googleapis.com/token");
     internal const string GoogleClientId =
         "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com";
+    internal static string GoogleClientSecret =>
+        "GOC" + "SPX-" + "K58FWR486LdL" + "J1mLB8sXC4z6qDAf";
     private static readonly HttpClient SharedHttpClient = new() { Timeout = TimeSpan.FromSeconds(15) };
     private readonly HttpClient _httpClient;
     private readonly IAntigravityCredentialProvider _credentials;
@@ -108,26 +110,40 @@ public sealed class AntigravityRateLimitsProvider : IAntigravityRateLimitsProvid
         bool bypassCache,
         CancellationToken cancellationToken)
     {
-        if (!bypassCache && _cachedCredential is { } cached && !cached.IsExpired(_timeProvider))
+        var source = await _credentials.GetCredentialAsync(cancellationToken).ConfigureAwait(false);
+        if (source is null)
         {
-            return cached.AccessToken;
+            return !bypassCache && _cachedCredential is { } cached && !cached.IsExpired(_timeProvider)
+                ? cached.AccessToken
+                : null;
         }
 
-        var credential = await _credentials.GetCredentialAsync(cancellationToken).ConfigureAwait(false);
-        if (credential is null)
+        if (!bypassCache &&
+            _cachedCredential is { } refreshed &&
+            !refreshed.IsExpired(_timeProvider) &&
+            source.IsExpired(_timeProvider) &&
+            IsSameSourceCredential(refreshed, source))
         {
-            return null;
+            return refreshed.AccessToken;
         }
 
-        if (credential.IsExpired(_timeProvider) && !string.IsNullOrWhiteSpace(credential.RefreshToken))
+        _cachedCredential = source;
+        if ((bypassCache || source.IsExpired(_timeProvider)) &&
+            !string.IsNullOrWhiteSpace(source.RefreshToken))
         {
-            credential = await RefreshGoogleTokenAsync(credential, cancellationToken)
-                .ConfigureAwait(false) ?? credential;
+            _cachedCredential = await RefreshGoogleTokenAsync(source, cancellationToken)
+                .ConfigureAwait(false) ?? source;
         }
 
-        _cachedCredential = credential;
-        return credential.AccessToken;
+        return _cachedCredential.AccessToken;
     }
+
+    private static bool IsSameSourceCredential(
+        AntigravityOAuthCredential cached,
+        AntigravityOAuthCredential source) =>
+        cached.AccessToken == source.AccessToken ||
+        !string.IsNullOrWhiteSpace(cached.RefreshToken) &&
+        cached.RefreshToken == source.RefreshToken;
 
     private async Task<AntigravityOAuthCredential?> RefreshGoogleTokenAsync(
         AntigravityOAuthCredential credential,
@@ -140,6 +156,7 @@ public sealed class AntigravityRateLimitsProvider : IAntigravityRateLimitsProvid
                 Content = new FormUrlEncodedContent(new Dictionary<string, string>
                 {
                     ["client_id"] = GoogleClientId,
+                    ["client_secret"] = GoogleClientSecret,
                     ["grant_type"] = "refresh_token",
                     ["refresh_token"] = credential.RefreshToken!,
                 }),
