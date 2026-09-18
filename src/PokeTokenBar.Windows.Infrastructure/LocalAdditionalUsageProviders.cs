@@ -203,10 +203,11 @@ public sealed class LocalOpenCodeUsageProvider : LocalAdditionalUsageProvider
             var read = AdditionalJson.Token(cache, "read");
             var total = AdditionalJson.Token(tokens, "total");
             var parts = input + output + write + read;
+            var incompleteBuckets = total > parts;
             if (total > parts) output += total - parts;
             if (input + output + write + read == 0) return null;
             var reportedCost = AdditionalJson.Double(root, "cost");
-            var estimatedCost = reportedCost is null
+            var estimatedCost = reportedCost is null && !incompleteBuckets
                 ? LocalUsageSupport.EstimatedCost(model, input, output, write, read)
                 : null;
             var cost = reportedCost ?? estimatedCost ?? 0;
@@ -940,11 +941,15 @@ public sealed class LocalOmpUsageProvider : LocalAdditionalUsageProvider
             }
             else return null;
             if (timestamp < modifiedSince) return null;
+            var hasGranularUsage = AdditionalJson.TryToken(usage, "input", out _);
+            hasGranularUsage |= AdditionalJson.TryToken(usage, "output", out _);
+            hasGranularUsage |= AdditionalJson.TryToken(usage, "cacheWrite", out _);
+            hasGranularUsage |= AdditionalJson.TryToken(usage, "cacheRead", out _);
             var buckets = LocalPiUsageProvider.UsageBuckets(usage);
             if (buckets is null) return null;
             var sourceCost = AdditionalJson.Object(usage, "cost", out var costObject)
                 ? AdditionalJson.Double(costObject, "total") : null;
-            var estimatedCost = sourceCost is null
+            var estimatedCost = sourceCost is null && hasGranularUsage
                 ? LocalUsageSupport.EstimatedCost(
                     model, buckets.Value.Input, buckets.Value.Output, buckets.Value.Write, buckets.Value.Read)
                 : null;
@@ -955,9 +960,7 @@ public sealed class LocalOmpUsageProvider : LocalAdditionalUsageProvider
             var id = AdditionalJson.String(envelope, "id") ?? $"missing-{lineIndex}";
             return AdditionalJson.Entry($"omp|{file}|{id}", timestamp, timeZone,
                 buckets.Value.Input, buckets.Value.Output, buckets.Value.Write, buckets.Value.Read, cost, model,
-                buckets.Value.Input + buckets.Value.Output + buckets.Value.Write + buckets.Value.Read > 0
-                    ? coverage
-                    : CostCoverage.Unavailable);
+                coverage);
         }
         catch (JsonException) { return null; }
     }

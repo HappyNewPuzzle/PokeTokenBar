@@ -137,6 +137,22 @@ public sealed class LocalCodexUsageProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task FetchDailyAsync_TotalOnlyTurnKeepsTokensButCostIsUnavailable()
+    {
+        var root = Root("sessions");
+        WriteRollout(root, "total-only.jsonl", Now, SessionMeta("total-only"),
+            ModelLine("gpt-5.5"),
+            TotalOnlyLine(Instant(Now.AddHours(-1)), 70));
+        var provider = new LocalCodexUsageProvider([root]);
+
+        var daily = Assert.IsType<DailyUsage>(await FetchDaily(provider));
+
+        Assert.Equal(70, daily.TotalTokens);
+        Assert.Equal(0, daily.TotalCost);
+        Assert.Equal(CostCoverage.Unavailable, daily.CostCoverage);
+    }
+
+    [Fact]
     public async Task FetchEnrichmentAsync_MapsRecentFiveHoursToActiveBlock()
     {
         var root = Root("sessions");
@@ -460,6 +476,12 @@ public sealed class LocalCodexUsageProviderTests : IDisposable
             + $"\"cache_write_input_tokens\":0,\"output_tokens\":{entry.OutputTokens},"
             + $"\"reasoning_output_tokens\":0,\"total_tokens\":{lastTotal}}}}}}}}}";
     }
+
+    private static string TotalOnlyLine(string timestamp, long total) =>
+        "{\"type\":\"event_msg\",\"timestamp\":\"" + timestamp
+        + "\",\"payload\":{\"type\":\"token_count\",\"info\":{\"last_token_usage\":{"
+        + "\"input_tokens\":0,\"cached_input_tokens\":0,\"output_tokens\":0,"
+        + $"\"total_tokens\":{total}}}}}}}}}";
 
     private static string Instant(DateTimeOffset timestamp) =>
         timestamp.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'");

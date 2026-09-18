@@ -76,6 +76,33 @@ public sealed class UsageCostSemanticsTests
         Assert.Equal(CostCoverage.Source, entry.CostCoverage);
     }
 
+    [Fact]
+    public void OpenCodeAndOmpTotalOnlyUsageRemainUnpriced()
+    {
+        var openCode = Assert.IsType<LocalUsageEntry>(LocalOpenCodeUsageProvider.ParseMessage(
+            """
+            {"id":"m","providerID":"openai","modelID":"gpt-5.5",
+             "time":{"created":1789718400000},"tokens":{"total":1000}}
+            """,
+            "fallback",
+            DateTimeOffset.MinValue,
+            TimeZoneInfo.Utc));
+        var omp = Assert.IsType<LocalUsageEntry>(LocalOmpUsageProvider.ParseLine(
+            """
+            {"type":"message","message":{"role":"assistant","model":"gpt-5.5",
+             "timestamp":"2026-09-18T12:00:00Z","usage":{"totalTokens":1000}}}
+            """,
+            "session.jsonl",
+            0,
+            DateTimeOffset.MinValue,
+            TimeZoneInfo.Utc));
+
+        Assert.Equal(CostCoverage.Unavailable, openCode.CostCoverage);
+        Assert.Equal(CostCoverage.Unavailable, omp.CostCoverage);
+        Assert.Equal(0, openCode.Cost);
+        Assert.Equal(0, omp.Cost);
+    }
+
     [Theory]
     [InlineData(0, false, false, true)]
     [InlineData(1.25, false, true, false)]
@@ -125,6 +152,37 @@ public sealed class UsageCostSemanticsTests
                 snapshotPersistence: new JsonUsageSnapshotPersistence(path));
 
             Assert.Equal(CostCoverage.Unavailable, store.Snapshot("legacy")?.Today?.CostCoverage);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void ExplicitZeroCoverageRoundTripsThroughUsageCache()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"usage-cost-{Guid.NewGuid():N}.json");
+        try
+        {
+            var persistence = new JsonUsageSnapshotPersistence(path);
+            persistence.Save(new UsageSnapshotCache(Now,
+            [
+                new CachedProviderUsage(
+                    "legacy",
+                    new DailyUsage("2026-09-18", 500, 0, 0, 0, 500, 0, CostCoverage.Source),
+                    null,
+                    null,
+                    null,
+                    Now),
+            ]));
+
+            var store = new UsageStore(
+                [new EmptyProvider()],
+                new FixedTimeProvider(Now),
+                snapshotPersistence: new JsonUsageSnapshotPersistence(path));
+
+            Assert.Equal(CostCoverage.Source, store.Snapshot("legacy")?.Today?.CostCoverage);
         }
         finally
         {

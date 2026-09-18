@@ -131,6 +131,24 @@ public sealed class AntigravityCredentialProvider : IAntigravityCredentialProvid
         {
             using var document = JsonDocument.Parse(json);
             var root = document.RootElement;
+            if (root.TryGetProperty("token", out var token) &&
+                token.ValueKind == JsonValueKind.Object &&
+                token.TryGetProperty("access_token", out var access) &&
+                access.ValueKind == JsonValueKind.String &&
+                !string.IsNullOrWhiteSpace(access.GetString()))
+            {
+                return Credential(token, access);
+            }
+
+            if (token.ValueKind == JsonValueKind.String)
+            {
+                var accessToken = token.GetString();
+                if (!string.IsNullOrWhiteSpace(accessToken))
+                {
+                    return new AntigravityOAuthCredential(accessToken);
+                }
+            }
+
             if (root.TryGetProperty("access_token", out var directAccess) &&
                 directAccess.ValueKind == JsonValueKind.String &&
                 !string.IsNullOrWhiteSpace(directAccess.GetString()))
@@ -138,28 +156,7 @@ public sealed class AntigravityCredentialProvider : IAntigravityCredentialProvid
                 return Credential(root, directAccess);
             }
 
-            if (!root.TryGetProperty("token", out var token))
-            {
-                return null;
-            }
-
-            if (token.ValueKind == JsonValueKind.String)
-            {
-                var accessToken = token.GetString();
-                return string.IsNullOrWhiteSpace(accessToken)
-                    ? null
-                    : new AntigravityOAuthCredential(accessToken);
-            }
-
-            if (token.ValueKind != JsonValueKind.Object ||
-                !token.TryGetProperty("access_token", out var access) ||
-                access.ValueKind != JsonValueKind.String ||
-                string.IsNullOrWhiteSpace(access.GetString()))
-            {
-                return null;
-            }
-
-            return Credential(token, access);
+            return null;
         }
         catch (JsonException)
         {

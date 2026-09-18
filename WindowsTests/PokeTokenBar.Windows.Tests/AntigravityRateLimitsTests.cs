@@ -44,6 +44,19 @@ public sealed class AntigravityRateLimitsTests : IDisposable
     }
 
     [Fact]
+    public void NestedOAuthCredentialTakesPriorityOverLegacyTopLevelFields()
+    {
+        var credential = AntigravityCredentialProvider.ParseCredential(
+            """
+            {"token":{"access_token":"nested","refresh_token":"nested-refresh"},
+             "access_token":"top-level","refresh_token":"top-level-refresh"}
+            """);
+
+        Assert.Equal("nested", credential?.AccessToken);
+        Assert.Equal("nested-refresh", credential?.RefreshToken);
+    }
+
+    [Fact]
     public async Task AlternateCredentialIsUsedWhenPrimaryIsMissingOrMalformed()
     {
         var missing = Path.Combine(_directory, "missing.json");
