@@ -89,24 +89,7 @@ public sealed class LocalGeminiUsageProvider : IUsageProvider
         long output,
         long cacheWrite,
         long cacheRead)
-    {
-        var lower = model.ToLowerInvariant();
-        var rates = lower switch
-        {
-            "gemini-2.5-pro" => (1.25d, 10d, 0d, 0.3125d),
-            "gemini-2.5-flash" => (0.30d, 2.5d, 0d, 0.075d),
-            "gemini-2.0-flash" => (0.10d, 0.4d, 0d, 0.025d),
-            _ when lower.StartsWith("gemini", StringComparison.Ordinal) &&
-                       lower.Contains("pro", StringComparison.Ordinal) => (1.25d, 10d, 0d, 0.3125d),
-            _ when lower.StartsWith("gemini", StringComparison.Ordinal) &&
-                       lower.Contains("flash", StringComparison.Ordinal) => (0.30d, 2.5d, 0d, 0.075d),
-            _ => (0d, 0d, 0d, 0d),
-        };
-        return ((input * rates.Item1) +
-                (output * rates.Item2) +
-                (cacheWrite * rates.Item3) +
-                (cacheRead * rates.Item4)) / 1_000_000d;
-    }
+        => LocalUsageSupport.CalculateCost(model, input, output, cacheWrite, cacheRead);
 
     private Task<IReadOnlyList<LocalUsageEntry>> LoadEntriesAsync(
         DateTimeOffset modifiedSince,
@@ -267,6 +250,8 @@ public sealed class LocalGeminiUsageProvider : IUsageProvider
         var output = Token(tokens, "output") + Token(tokens, "thoughts");
         var nonCachedInput = Math.Max(0, input - cached) + Token(tokens, "tool");
         var model = String(value, "model") ?? "gemini";
+        var estimatedCost = LocalUsageSupport.EstimatedCost(
+            model, nonCachedInput, output, 0, cached);
         var entry = new LocalUsageEntry(
             $"gemini|{fileName}|{id}",
             timestamp.Value,
@@ -275,7 +260,8 @@ public sealed class LocalGeminiUsageProvider : IUsageProvider
             output,
             0,
             cached,
-            CalculateCost(model, nonCachedInput, output, 0, cached));
+            estimatedCost ?? 0,
+            estimatedCost is null ? CostCoverage.Unavailable : CostCoverage.Estimate);
         if (!byId.ContainsKey(id))
         {
             order.Add(id);

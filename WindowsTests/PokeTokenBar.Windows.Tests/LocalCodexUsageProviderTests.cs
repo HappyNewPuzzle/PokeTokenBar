@@ -75,7 +75,7 @@ public sealed class LocalCodexUsageProviderTests : IDisposable
         var result = await FetchDaily(provider);
 
         Assert.Equal(
-            new DailyUsage("2026-08-28", 80, 10, 0, 40, 130, 0),
+            new DailyUsage("2026-08-28", 80, 10, 0, 40, 130, 0, CostCoverage.Unavailable),
             result);
     }
 
@@ -107,7 +107,7 @@ public sealed class LocalCodexUsageProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task FetchDailyAsync_CodexCostIsZero()
+    public async Task FetchDailyAsync_CodexCostIsUnavailableNotExplicitZero()
     {
         var root = Root("sessions");
         WriteRollout(root, "cost.jsonl", Now, SessionMeta("cost"),
@@ -116,7 +116,24 @@ public sealed class LocalCodexUsageProviderTests : IDisposable
 
         var result = await FetchDaily(provider);
 
-        Assert.Equal(0, Assert.IsType<DailyUsage>(result).TotalCost);
+        var daily = Assert.IsType<DailyUsage>(result);
+        Assert.Equal(0, daily.TotalCost);
+        Assert.Equal(CostCoverage.Unavailable, daily.CostCoverage);
+    }
+
+    [Fact]
+    public async Task FetchDailyAsync_KnownModelCostIsEstimated()
+    {
+        var root = Root("sessions");
+        WriteRollout(root, "priced.jsonl", Now, SessionMeta("priced"),
+            ModelLine("gpt-5.5"),
+            StateLine(Instant(Now.AddHours(-1)), 1_000, Entry(1_000, 50)));
+        var provider = new LocalCodexUsageProvider([root]);
+
+        var daily = Assert.IsType<DailyUsage>(await FetchDaily(provider));
+
+        Assert.Equal(0.0065, daily.TotalCost, precision: 6);
+        Assert.Equal(CostCoverage.Estimate, daily.CostCoverage);
     }
 
     [Fact]
@@ -151,7 +168,9 @@ public sealed class LocalCodexUsageProviderTests : IDisposable
 
         var result = await FetchEnrichment(provider);
 
-        Assert.Equal(new PeriodUsage("2026-08-24", 30, 0), result.WeekTotal);
+        Assert.Equal(
+            new PeriodUsage("2026-08-24", 30, 0, CostCoverage.Unavailable),
+            result.WeekTotal);
     }
 
     [Fact]
@@ -164,7 +183,9 @@ public sealed class LocalCodexUsageProviderTests : IDisposable
 
         var result = await FetchEnrichment(provider);
 
-        Assert.Equal(new PeriodUsage("2026-08", 40, 0), result.MonthTotal);
+        Assert.Equal(
+            new PeriodUsage("2026-08", 40, 0, CostCoverage.Unavailable),
+            result.MonthTotal);
     }
 
     [Fact]
@@ -416,6 +437,9 @@ public sealed class LocalCodexUsageProviderTests : IDisposable
         return "{\"type\":\"session_meta\",\"timestamp\":\"2026-08-28T00:00:00.000Z\","
             + $"\"payload\":{{\"id\":\"{sessionId}\"{parentFields},\"thread_source\":\"user\"}}}}";
     }
+
+    private static string ModelLine(string model) =>
+        $"{{\"type\":\"turn_context\",\"payload\":{{\"turn_context\":{{\"model\":\"{model}\"}}}}}}";
 
     private static string StateLine(
         string timestamp,

@@ -205,10 +205,16 @@ public sealed class LocalOpenCodeUsageProvider : LocalAdditionalUsageProvider
             var parts = input + output + write + read;
             if (total > parts) output += total - parts;
             if (input + output + write + read == 0) return null;
-            var cost = AdditionalJson.Double(root, "cost") ??
-                LocalUsageSupport.CalculateCost(model, input, output, write, read);
+            var reportedCost = AdditionalJson.Double(root, "cost");
+            var estimatedCost = reportedCost is null
+                ? LocalUsageSupport.EstimatedCost(model, input, output, write, read)
+                : null;
+            var cost = reportedCost ?? estimatedCost ?? 0;
+            var coverage = reportedCost is not null
+                ? CostCoverage.Source
+                : estimatedCost is not null ? CostCoverage.Estimate : CostCoverage.Unavailable;
             return AdditionalJson.Entry("opencode|" + (AdditionalJson.String(root, "id") ?? fallbackId),
-                timestamp, timeZone, input, output, write, read, cost);
+                timestamp, timeZone, input, output, write, read, cost, model, coverage);
         }
         catch (JsonException) { return null; }
     }
@@ -280,10 +286,13 @@ public sealed class LocalHermesUsageProvider : LocalAdditionalUsageProvider
         var read = AdditionalJson.Long(row[7]);
         var write = AdditionalJson.Long(row[8]);
         if (input + output + read + write == 0) return null;
-        var estimated = AdditionalJson.Number(row[10]);
-        var actual = AdditionalJson.Number(row[11]);
+        var estimated = AdditionalJson.NumberOrNull(row[10]);
+        var actual = AdditionalJson.NumberOrNull(row[11]);
+        var cost = actual ?? estimated;
         return AdditionalJson.Entry("hermes|" + row[0]!.Trim(), timestamp, timeZone,
-            input, output, write, read, actual > 0 ? actual : estimated);
+            input, output, write, read, cost ?? 0, row[1]!.Trim(),
+            cost is null ? CostCoverage.Unavailable
+                : actual is not null ? CostCoverage.Source : CostCoverage.Estimate);
     }
 }
 
@@ -362,17 +371,18 @@ public sealed class LocalGrokUsageProvider : LocalAdditionalUsageProvider
             var parts = input + output + read;
             if (reportedTotal > parts) output += reportedTotal - parts;
             if (input + output + read == 0) return null;
-            var cost = 0d;
+            double? cost = null;
             if (!AdditionalJson.Bool(usage, "usageIsIncomplete") &&
                 !AdditionalJson.Bool(usage, "usage_is_incomplete") &&
                 !AdditionalJson.Bool(usage, "costIsPartial") &&
                 !AdditionalJson.Bool(usage, "cost_is_partial"))
             {
-                var ticks = AdditionalJson.DoubleAny(usage, "costUsdTicks", "cost_usd_ticks") ?? 0;
-                if (ticks > 0) cost = ticks / 1e10;
+                var ticks = AdditionalJson.DoubleAny(usage, "costUsdTicks", "cost_usd_ticks");
+                if (ticks is >= 0) cost = ticks.Value / 1e10;
             }
             return AdditionalJson.Entry("grok|" + turnId, timestamp, timeZone,
-                input, output, 0, read, cost, GrokModel(usage) ?? "grok");
+                input, output, 0, read, cost ?? 0, GrokModel(usage) ?? "grok",
+                cost is null ? CostCoverage.Unavailable : CostCoverage.Source);
         }
         catch (JsonException) { return null; }
     }
@@ -408,7 +418,6 @@ public sealed class LocalCopilotUsageProvider : LocalAdditionalUsageProvider
     public LocalCopilotUsageProvider(IEnumerable<string> roots) : base(roots) { }
     public override string Id => "copilot";
     public override string DisplayName => "Copilot";
-    public override bool ReportsCost => false;
 
     public static IReadOnlyList<string> GetDefaultRoots(string? userProfile = null, string? environmentValue = null)
     {
@@ -455,8 +464,10 @@ public sealed class LocalCopilotUsageProvider : LocalAdditionalUsageProvider
         var write = AdditionalJson.Long(row[5]);
         var input = Math.Max(0, fullInput - read - write);
         if (input + output + read + write == 0) return null;
+        var estimatedCost = LocalUsageSupport.EstimatedCost(model, input, output, write, read);
         return AdditionalJson.Entry($"copilot|{Path.GetFullPath(database)}|{id}", timestamp, timeZone,
-            input, output, write, read, 0, model);
+            input, output, write, read, estimatedCost ?? 0, model,
+            estimatedCost is null ? CostCoverage.Unavailable : CostCoverage.Estimate);
     }
 }
 
@@ -466,7 +477,6 @@ public sealed class LocalKiroUsageProvider : LocalAdditionalUsageProvider
     public LocalKiroUsageProvider(IEnumerable<string> roots) : base(roots) { }
     public override string Id => "kiro";
     public override string DisplayName => "Kiro";
-    public override bool ReportsCost => false;
     protected override bool PreserveMissingEntries => true;
 
     public static IReadOnlyList<string> GetDefaultRoots(
@@ -564,7 +574,8 @@ public sealed class LocalKiroUsageProvider : LocalAdditionalUsageProvider
                         entries.Add(AdditionalJson.Entry(
                             $"kiro|{conversation}|{timestamp.ToUnixTimeMilliseconds()}", timestamp, timeZone,
                             input, output, 0, 0, 0,
-                            AdditionalJson.String(metadata, "model_id") ?? "unknown"));
+                            AdditionalJson.String(metadata, "model_id") ?? "unknown",
+                            CostCoverage.Unavailable));
                     }
                 }
                 accumulated += user + assistant;
@@ -608,7 +619,7 @@ public sealed class LocalKiroUsageProvider : LocalAdditionalUsageProvider
                 var output = assistant / 4;
                 if (input + output > 0) entries.Add(AdditionalJson.Entry(
                     $"kiro|cli|{session}|{timestamp.ToUnixTimeMilliseconds()}", timestamp, timeZone,
-                    input, output, 0, 0, 0, model));
+                    input, output, 0, 0, 0, model, CostCoverage.Unavailable));
             }
             history += prompt + assistant + tools;
             prompt = assistant = tools = 0;
@@ -675,7 +686,8 @@ public sealed class LocalKiroUsageProvider : LocalAdditionalUsageProvider
                 var input = (history + prompt) / 4;
                 var output = assistant / 4;
                 if (input + output > 0) entries.Add(AdditionalJson.Entry(
-                    $"kiro|v3|{session}|{index}", stamp, timeZone, input, output, 0, 0, 0, model));
+                    $"kiro|v3|{session}|{index}", stamp, timeZone, input, output, 0, 0, 0, model,
+                    CostCoverage.Unavailable));
             }
             if (had) index++;
             history += prompt + assistant;
@@ -772,7 +784,6 @@ public sealed class LocalPiUsageProvider : LocalAdditionalUsageProvider
     public LocalPiUsageProvider(IEnumerable<string> roots) : base(roots) { }
     public override string Id => "pi";
     public override string DisplayName => "Pi";
-    public override bool ReportsCost => false;
 
     public static IReadOnlyList<string> GetDefaultRoots(
         string? userProfile = null, string? agentDirectory = null, string? sessionDirectory = null)
@@ -840,7 +851,8 @@ public sealed class LocalPiUsageProvider : LocalAdditionalUsageProvider
             var buckets = UsageBuckets(usage);
             if (buckets is null) return null;
             return AdditionalJson.Entry(id, timestamp, timeZone,
-                buckets.Value.Input, buckets.Value.Output, buckets.Value.Write, buckets.Value.Read, 0, "pi");
+                buckets.Value.Input, buckets.Value.Output, buckets.Value.Write, buckets.Value.Read, 0, "pi",
+                CostCoverage.Unavailable);
         }
         catch (JsonException) { return null; }
     }
@@ -932,11 +944,20 @@ public sealed class LocalOmpUsageProvider : LocalAdditionalUsageProvider
             if (buckets is null) return null;
             var sourceCost = AdditionalJson.Object(usage, "cost", out var costObject)
                 ? AdditionalJson.Double(costObject, "total") : null;
-            var cost = sourceCost is > 0 ? sourceCost.Value : LocalUsageSupport.CalculateCost(
-                model, buckets.Value.Input, buckets.Value.Output, buckets.Value.Write, buckets.Value.Read);
+            var estimatedCost = sourceCost is null
+                ? LocalUsageSupport.EstimatedCost(
+                    model, buckets.Value.Input, buckets.Value.Output, buckets.Value.Write, buckets.Value.Read)
+                : null;
+            var cost = sourceCost ?? estimatedCost ?? 0;
+            var coverage = sourceCost is not null
+                ? CostCoverage.Estimate
+                : estimatedCost is not null ? CostCoverage.Estimate : CostCoverage.Unavailable;
             var id = AdditionalJson.String(envelope, "id") ?? $"missing-{lineIndex}";
             return AdditionalJson.Entry($"omp|{file}|{id}", timestamp, timeZone,
-                buckets.Value.Input, buckets.Value.Output, buckets.Value.Write, buckets.Value.Read, cost, model);
+                buckets.Value.Input, buckets.Value.Output, buckets.Value.Write, buckets.Value.Read, cost, model,
+                buckets.Value.Input + buckets.Value.Output + buckets.Value.Write + buckets.Value.Read > 0
+                    ? coverage
+                    : CostCoverage.Unavailable);
         }
         catch (JsonException) { return null; }
     }
@@ -948,9 +969,11 @@ internal static class AdditionalJson
 
     public static LocalUsageEntry Entry(
         string id, DateTimeOffset timestamp, TimeZoneInfo timeZone,
-        long input, long output, long write, long read, double cost, string model = "unknown") =>
+        long input, long output, long write, long read, double cost, string model = "unknown",
+        CostCoverage costCoverage = default) =>
         new(id, timestamp, LocalUsageSupport.LocalDate(timestamp, timeZone),
-            input, output, write, read, double.IsFinite(cost) && cost > 0 ? cost : 0);
+            input, output, write, read, double.IsFinite(cost) && cost >= 0 ? cost : 0,
+            costCoverage);
 
     public static bool Object(JsonElement parent, string property, out JsonElement value)
     {
@@ -1005,7 +1028,7 @@ internal static class AdditionalJson
         (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number) ||
          value.ValueKind == JsonValueKind.String && double.TryParse(
              value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out number)) &&
-        double.IsFinite(number) ? number : null;
+        double.IsFinite(number) && number >= 0 ? number : null;
 
     public static double? DoubleAny(JsonElement parent, string first, string second) =>
         Double(parent, first) ?? Double(parent, second);
@@ -1017,6 +1040,10 @@ internal static class AdditionalJson
     public static double Number(string? value) =>
         double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) &&
         double.IsFinite(parsed) ? parsed : 0;
+
+    public static double? NumberOrNull(string? value) =>
+        double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) &&
+        double.IsFinite(parsed) && parsed >= 0 ? parsed : null;
 
     public static bool Timestamp(JsonElement parent, string property, out DateTimeOffset timestamp)
     {

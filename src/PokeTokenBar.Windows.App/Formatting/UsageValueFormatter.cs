@@ -1,4 +1,5 @@
 using System.Globalization;
+using PokeTokenBar.Windows.Core;
 
 namespace PokeTokenBar.Windows.App.Formatting;
 
@@ -24,12 +25,18 @@ public static class UsageValueFormatter
     public static string Cost(double usd) =>
         string.Create(CultureInfo.InvariantCulture, $"${usd:F2}");
 
+    public static string Cost(UsageCost cost) =>
+        cost.Coverage.Unknown && !cost.Coverage.HasKnown ? "$—" : Cost(cost.Amount);
+
     public static string CompactCost(double usd) => usd switch
     {
         < 100 => string.Create(CultureInfo.InvariantCulture, $"${usd:F1}"),
         < 10_000 => string.Create(CultureInfo.InvariantCulture, $"${usd:F0}"),
         _ => string.Create(CultureInfo.InvariantCulture, $"${usd / 1_000:F1}K"),
     };
+
+    public static string CompactCost(UsageCost cost) =>
+        cost.Coverage.Unknown && !cost.Coverage.HasKnown ? "$—" : CompactCost(cost.Amount);
 
     private static string Trim(double value, int decimals) =>
         value.ToString($"F{decimals}", CultureInfo.InvariantCulture)

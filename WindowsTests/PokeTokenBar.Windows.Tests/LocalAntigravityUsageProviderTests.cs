@@ -20,7 +20,7 @@ public sealed class LocalAntigravityUsageProviderTests : IDisposable
 
         Assert.Equal("antigravity", provider.Id);
         Assert.Equal("Antigravity", provider.DisplayName);
-        Assert.False(provider.ReportsCost);
+        Assert.True(provider.ReportsCost);
     }
 
     [Fact]

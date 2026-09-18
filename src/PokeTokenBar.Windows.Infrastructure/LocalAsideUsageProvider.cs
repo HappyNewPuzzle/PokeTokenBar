@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Microsoft.Win32.SafeHandles;
+using PokeTokenBar.Windows.Core;
 
 namespace PokeTokenBar.Windows.Infrastructure;
 
@@ -142,16 +143,9 @@ public sealed class LocalAsideUsageProvider : LocalAdditionalUsageProvider
 
             if (input + output + cacheWrite + cacheRead == 0) return null;
 
-            // sessions.model is current session metadata, not historical per-turn truth.
-            // It is used only for cost fallback; Aside usage stays aggregate-only.
-            var model = ModelId(row[3]);
             var explicitCost = AdditionalJson.Object(usage, "cost", out var cost)
                 ? AdditionalJson.Double(cost, "total")
                 : null;
-            var totalCost = explicitCost is >= 0
-                ? explicitCost.Value
-                : LocalUsageSupport.CalculateCost(
-                    model, input, output, cacheWrite, cacheRead);
             var canonicalDatabase = Path.GetFullPath(database);
             return AdditionalJson.Entry(
                 $"aside|{canonicalDatabase}#{databaseIdentity}:{row[0]!.Trim()}",
@@ -161,7 +155,10 @@ public sealed class LocalAsideUsageProvider : LocalAdditionalUsageProvider
                 output,
                 cacheWrite,
                 cacheRead,
-                totalCost);
+                explicitCost ?? 0,
+                costCoverage: explicitCost is null
+                    ? CostCoverage.Unavailable
+                    : CostCoverage.Source);
         }
         catch (JsonException)
         {
@@ -197,19 +194,6 @@ public sealed class LocalAsideUsageProvider : LocalAdditionalUsageProvider
             exception is IOException or UnauthorizedAccessException)
         {
             return "fallback-unavailable";
-        }
-    }
-
-    private static string ModelId(string? json)
-    {
-        try
-        {
-            using var document = JsonDocument.Parse(json ?? string.Empty);
-            return AdditionalJson.String(document.RootElement, "modelId") ?? "aside";
-        }
-        catch (JsonException)
-        {
-            return "aside";
         }
     }
 

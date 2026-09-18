@@ -24,7 +24,7 @@ public sealed class LocalAntigravityUsageProvider : IUsageProvider
 
     public string Id => "antigravity";
     public string DisplayName => "Antigravity";
-    public bool ReportsCost => false;
+    public bool ReportsCost => true;
 
     public Task<DailyUsage?> FetchDailyAsync(CancellationToken cancellationToken = default) =>
         FetchDailyAsync(
@@ -366,7 +366,8 @@ internal static class AntigravityProto
             output,
             cacheWrite,
             cacheRead,
-            Cost: 0);
+            Cost: 0,
+            CostCoverage: CostCoverage.Unavailable);
     }
 
     public static string? ResponseId(byte[] blob) =>

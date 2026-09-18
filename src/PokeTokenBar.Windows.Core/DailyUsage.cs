@@ -7,4 +7,9 @@ public sealed record DailyUsage(
     long CacheCreationTokens,
     long CacheReadTokens,
     long TotalTokens,
-    double TotalCost);
+    double TotalCost,
+    CostCoverage CostCoverage = default)
+{
+    [System.Text.Json.Serialization.JsonIgnore]
+    public UsageCost UsageCost => new(TotalCost, CostCoverage);
+}

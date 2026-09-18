@@ -61,7 +61,8 @@ public sealed class LocalCodexUsageProvider : IUsageProvider
             today.CacheWriteTokens,
             today.CacheReadTokens,
             today.TotalTokens,
-            TotalCost: 0);
+            snapshot.TodayCost.Amount,
+            snapshot.TodayCost.Coverage);
     }
 
     public Task<ProviderEnrichment> FetchEnrichmentAsync(
@@ -100,11 +101,13 @@ public sealed class LocalCodexUsageProvider : IUsageProvider
                 WeekTotal: new PeriodUsage(
                     weekStart.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                     periods.ThisWeek.TotalTokens,
-                    TotalCost: 0),
+                    snapshot.WeekCost.Amount,
+                    snapshot.WeekCost.Coverage),
                 MonthTotal: new PeriodUsage(
                     localToday.ToString("yyyy-MM", CultureInfo.InvariantCulture),
                     periods.ThisMonth.TotalTokens,
-                    TotalCost: 0),
+                    snapshot.MonthCost.Amount,
+                    snapshot.MonthCost.Coverage),
                 PeriodsOK: true);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -158,8 +161,9 @@ public sealed class LocalCodexUsageProvider : IUsageProvider
             FormatInstant(first + BlockWindow),
             IsActive: true,
             totalTokens,
-            CostUSD: 0,
-            TokensPerMinute: totalTokens / minutes);
+            snapshot.RecentCost.Amount,
+            TokensPerMinute: totalTokens / minutes,
+            snapshot.RecentCost.Coverage);
     }
 
     private static DateOnly LocalDate(

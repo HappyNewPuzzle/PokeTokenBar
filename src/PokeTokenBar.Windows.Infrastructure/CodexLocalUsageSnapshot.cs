@@ -4,4 +4,8 @@ namespace PokeTokenBar.Windows.Infrastructure;
 
 internal sealed record CodexLocalUsageSnapshot(
     CodexUsagePeriods UsagePeriods,
-    DateTimeOffset? FirstRecentTimestamp);
+    DateTimeOffset? FirstRecentTimestamp,
+    UsageCost TodayCost,
+    UsageCost WeekCost,
+    UsageCost MonthCost,
+    UsageCost RecentCost);

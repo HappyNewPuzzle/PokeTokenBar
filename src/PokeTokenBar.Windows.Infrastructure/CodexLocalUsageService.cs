@@ -104,19 +104,62 @@ public static class CodexLocalUsageService
             now,
             timeZone,
             firstDayOfWeek);
+        var localToday = DateOnly.FromDateTime(
+            TimeZoneInfo.ConvertTime(now, timeZone).DateTime);
+        var weekStart = localToday.AddDays(
+            -DaysSinceWeekStart(localToday.DayOfWeek, firstDayOfWeek));
+        var monthStart = new DateOnly(localToday.Year, localToday.Month, 1);
         var recentStart = now - RecentWindow;
         DateTimeOffset? firstRecentTimestamp = null;
+        var todayCost = default(UsageCost);
+        var weekCost = default(UsageCost);
+        var monthCost = default(UsageCost);
+        var recentCost = default(UsageCost);
         foreach (var canonicalEvent in canonicalEvents)
         {
-            var timestamp = canonicalEvent.TokenEvent.TokenEvent.TokenCount.Timestamp;
+            var tokenCount = canonicalEvent.TokenEvent.TokenEvent.TokenCount;
+            var timestamp = tokenCount.Timestamp;
+            var localDay = DateOnly.FromDateTime(
+                TimeZoneInfo.ConvertTime(timestamp, timeZone).DateTime);
+            var eventCost = EventCost(tokenCount);
+            if (localDay == localToday) todayCost = todayCost.Add(eventCost);
+            if (localDay >= weekStart && localDay <= localToday) weekCost = weekCost.Add(eventCost);
+            if (localDay >= monthStart && localDay <= localToday) monthCost = monthCost.Add(eventCost);
             if (timestamp >= recentStart
                 && (firstRecentTimestamp is null || timestamp < firstRecentTimestamp.Value))
             {
                 firstRecentTimestamp = timestamp;
             }
+            if (timestamp >= recentStart) recentCost = recentCost.Add(eventCost);
         }
 
-        return new CodexLocalUsageSnapshot(usagePeriods, firstRecentTimestamp);
+        return new CodexLocalUsageSnapshot(
+            usagePeriods, firstRecentTimestamp, todayCost, weekCost, monthCost, recentCost);
+    }
+
+    private static UsageCost EventCost(CodexTokenCountParseResult tokenCount)
+    {
+        if (tokenCount.Entry.TotalTokens == 0)
+        {
+            return default;
+        }
+
+        if (tokenCount.LastUsageVector.BillableComponentTokens == 0 &&
+            tokenCount.LastUsageVector.TotalTokens > 0)
+        {
+            return new UsageCost(0, CostCoverage.Unavailable);
+        }
+
+        var entry = tokenCount.Entry;
+        var estimate = LocalUsageSupport.EstimatedCost(
+            tokenCount.Model,
+            entry.InputTokens,
+            entry.OutputTokens,
+            entry.CacheWriteTokens,
+            entry.CacheReadTokens);
+        return estimate is double amount
+            ? new UsageCost(amount, CostCoverage.Estimate)
+            : new UsageCost(0, CostCoverage.Unavailable);
     }
 
     private static DateTimeOffset CalculateModifiedSince(

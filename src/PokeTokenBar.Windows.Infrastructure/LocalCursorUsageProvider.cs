@@ -49,7 +49,7 @@ public sealed class LocalCursorUsageProvider : IUsageProvider
 
     public string Id => "cursor";
     public string DisplayName => "Cursor";
-    public bool ReportsCost => false;
+    public bool ReportsCost => true;
 
     public Task<DailyUsage?> FetchDailyAsync(CancellationToken cancellationToken = default) =>
         FetchDailyAsync(
@@ -138,7 +138,8 @@ public sealed class LocalCursorUsageProvider : IUsageProvider
                 output,
                 CacheWrite: 0,
                 CacheRead: 0,
-                Cost: 0);
+                Cost: 0,
+                CostCoverage: CostCoverage.Unavailable);
         }
         catch (JsonException)
         {
@@ -630,14 +631,18 @@ internal sealed class CursorDashboardClient
         var id = stableId is null
             ? $"cursor|api|{stamp}|{model}|{rowIndex}"
             : $"cursor|api|{stableId}";
-        var cost = 0d;
+        double? reportedCost = null;
         if (usage.ValueKind == JsonValueKind.Object &&
             usage.TryGetProperty("totalCents", out var cents) &&
             TryDouble(cents, out var parsedCost) &&
-            double.IsFinite(parsedCost))
+            double.IsFinite(parsedCost) && parsedCost >= 0)
         {
-            cost = parsedCost / 100;
+            reportedCost = parsedCost / 100;
         }
+
+        var estimatedCost = reportedCost is null
+            ? LocalUsageSupport.EstimatedCost(model, input, output, cacheWrite, cacheRead)
+            : null;
 
         return new LocalUsageEntry(
             id,
@@ -647,7 +652,10 @@ internal sealed class CursorDashboardClient
             output,
             cacheWrite,
             cacheRead,
-            cost);
+            reportedCost ?? estimatedCost ?? 0,
+            reportedCost is not null
+                ? CostCoverage.Source
+                : estimatedCost is not null ? CostCoverage.Estimate : CostCoverage.Unavailable);
     }
 
     internal static bool HasNextPage(JsonElement root, int page, int eventCount)

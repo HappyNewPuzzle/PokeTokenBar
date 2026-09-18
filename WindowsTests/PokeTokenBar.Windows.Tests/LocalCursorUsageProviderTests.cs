@@ -22,7 +22,7 @@ public sealed class LocalCursorUsageProviderTests : IDisposable
         var provider = Provider(new QueueHandler(), credential: null);
         Assert.Equal("cursor", provider.Id);
         Assert.Equal("Cursor", provider.DisplayName);
-        Assert.False(provider.ReportsCost);
+        Assert.True(provider.ReportsCost);
     }
 
     [Fact]

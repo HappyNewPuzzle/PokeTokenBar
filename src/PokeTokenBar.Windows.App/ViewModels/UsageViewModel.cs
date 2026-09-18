@@ -29,12 +29,18 @@ public sealed class UsageViewModel : INotifyPropertyChanged
     private double? _todayCost;
     private double? _weekCost;
     private double? _monthCost;
+    private CostCoverage? _todayCostCoverage;
+    private CostCoverage? _weekCostCoverage;
+    private CostCoverage? _monthCostCoverage;
     private long _totalTodayTokens;
     private long _totalWeekTokens;
     private long _totalMonthTokens;
     private double _totalTodayCost;
     private double _totalWeekCost;
     private double _totalMonthCost;
+    private CostCoverage _totalTodayCostCoverage;
+    private CostCoverage _totalWeekCostCoverage;
+    private CostCoverage _totalMonthCostCoverage;
     private bool _showsCost;
     private bool _isRefreshing;
     private string? _errorMessage;
@@ -364,7 +370,18 @@ public sealed class UsageViewModel : INotifyPropertyChanged
     }
 
     public string? TodayCostText =>
-        TodayCost is double value ? UsageValueFormatter.Cost(value) : null;
+        TodayCost is double value && TodayCostCoverage is CostCoverage coverage
+            ? UsageValueFormatter.Cost(new UsageCost(value, coverage))
+            : null;
+
+    public CostCoverage? TodayCostCoverage
+    {
+        get => _todayCostCoverage;
+        private set
+        {
+            if (SetField(ref _todayCostCoverage, value)) OnPropertyChanged(nameof(TodayCostText));
+        }
+    }
 
     public double? WeekCost
     {
@@ -379,7 +396,18 @@ public sealed class UsageViewModel : INotifyPropertyChanged
     }
 
     public string? WeekCostText =>
-        WeekCost is double value ? UsageValueFormatter.Cost(value) : null;
+        WeekCost is double value && WeekCostCoverage is CostCoverage coverage
+            ? UsageValueFormatter.Cost(new UsageCost(value, coverage))
+            : null;
+
+    public CostCoverage? WeekCostCoverage
+    {
+        get => _weekCostCoverage;
+        private set
+        {
+            if (SetField(ref _weekCostCoverage, value)) OnPropertyChanged(nameof(WeekCostText));
+        }
+    }
 
     public double? MonthCost
     {
@@ -394,7 +422,18 @@ public sealed class UsageViewModel : INotifyPropertyChanged
     }
 
     public string? MonthCostText =>
-        MonthCost is double value ? UsageValueFormatter.Cost(value) : null;
+        MonthCost is double value && MonthCostCoverage is CostCoverage coverage
+            ? UsageValueFormatter.Cost(new UsageCost(value, coverage))
+            : null;
+
+    public CostCoverage? MonthCostCoverage
+    {
+        get => _monthCostCoverage;
+        private set
+        {
+            if (SetField(ref _monthCostCoverage, value)) OnPropertyChanged(nameof(MonthCostText));
+        }
+    }
 
     public long TotalTodayTokens
     {
@@ -453,7 +492,18 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         }
     }
 
-    public string TotalTodayCostText => UsageValueFormatter.Cost(TotalTodayCost);
+    public string TotalTodayCostText => UsageValueFormatter.Cost(
+        new UsageCost(TotalTodayCost, TotalTodayCostCoverage));
+
+    public CostCoverage TotalTodayCostCoverage
+    {
+        get => _totalTodayCostCoverage;
+        private set
+        {
+            if (SetField(ref _totalTodayCostCoverage, value))
+                OnPropertyChanged(nameof(TotalTodayCostText));
+        }
+    }
 
     public double TotalWeekCost
     {
@@ -467,7 +517,18 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         }
     }
 
-    public string TotalWeekCostText => UsageValueFormatter.Cost(TotalWeekCost);
+    public string TotalWeekCostText => UsageValueFormatter.Cost(
+        new UsageCost(TotalWeekCost, TotalWeekCostCoverage));
+
+    public CostCoverage TotalWeekCostCoverage
+    {
+        get => _totalWeekCostCoverage;
+        private set
+        {
+            if (SetField(ref _totalWeekCostCoverage, value))
+                OnPropertyChanged(nameof(TotalWeekCostText));
+        }
+    }
 
     public double TotalMonthCost
     {
@@ -481,7 +542,18 @@ public sealed class UsageViewModel : INotifyPropertyChanged
         }
     }
 
-    public string TotalMonthCostText => UsageValueFormatter.Cost(TotalMonthCost);
+    public string TotalMonthCostText => UsageValueFormatter.Cost(
+        new UsageCost(TotalMonthCost, TotalMonthCostCoverage));
+
+    public CostCoverage TotalMonthCostCoverage
+    {
+        get => _totalMonthCostCoverage;
+        private set
+        {
+            if (SetField(ref _totalMonthCostCoverage, value))
+                OnPropertyChanged(nameof(TotalMonthCostText));
+        }
+    }
 
     public bool ShowsCost
     {
@@ -739,15 +811,21 @@ public sealed class UsageViewModel : INotifyPropertyChanged
 
         var reportsCost = selected?.ReportsCost == true;
         TodayCost = reportsCost ? selected?.Today?.TotalCost : null;
+        TodayCostCoverage = reportsCost ? selected?.Today?.CostCoverage : null;
         WeekCost = reportsCost ? selected?.WeekTotal?.TotalCost : null;
+        WeekCostCoverage = reportsCost ? selected?.WeekTotal?.CostCoverage : null;
         MonthCost = reportsCost ? selected?.MonthTotal?.TotalCost : null;
+        MonthCostCoverage = reportsCost ? selected?.MonthTotal?.CostCoverage : null;
 
         TotalTodayTokens = _store.TodayTotalTokens;
         TotalWeekTokens = _store.WeekTotalTokens;
         TotalMonthTokens = _store.MonthTotalTokens;
         TotalTodayCost = _store.TodayCostTotal;
+        TotalTodayCostCoverage = _store.TodayUsageCost.Coverage;
         TotalWeekCost = _store.WeekCostTotal;
+        TotalWeekCostCoverage = _store.WeekUsageCost.Coverage;
         TotalMonthCost = _store.MonthCostTotal;
+        TotalMonthCostCoverage = _store.MonthUsageCost.Coverage;
         ShowsCost = _store.ShowsCost;
         ErrorMessage = _store.LastErrorDescription;
         LastUpdated = _store.LastUpdated;

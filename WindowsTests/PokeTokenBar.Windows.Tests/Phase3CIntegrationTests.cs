@@ -24,7 +24,8 @@ public sealed class Phase3CIntegrationTests
         Assert.Equal(125, usage.RecentFiveHourTokens);
         Assert.Equal(125, usage.WeekTokens);
         Assert.Equal(125, usage.MonthTokens);
-        Assert.False(usage.ShowsCost);
+        Assert.True(usage.ShowsCost);
+        Assert.Equal("$—", usage.TodayCostText);
     }
 
     [Fact]

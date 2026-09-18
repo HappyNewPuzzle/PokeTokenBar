@@ -143,9 +143,16 @@ public sealed class LocalAdditionalUsageProvidersTests
         using var fixture = new ProviderFixture(id, [Now.AddHours(-1)]);
 
         var usage = Assert.IsType<DailyUsage>(await Daily(fixture.Provider));
-        var reportsCost = id is not ("copilot" or "kiro" or "pi");
-        Assert.Equal(reportsCost, fixture.Provider.ReportsCost);
-        Assert.Equal(reportsCost ? 1.25 : 0, usage.TotalCost, 6);
+        Assert.True(fixture.Provider.ReportsCost);
+        if (id is "copilot" or "kiro" or "pi")
+        {
+            Assert.Equal(0, usage.TotalCost);
+            Assert.Equal(CostCoverage.Unavailable, usage.CostCoverage);
+        }
+        else
+        {
+            Assert.Equal(1.25, usage.TotalCost, 6);
+        }
     }
 
     [Theory]
@@ -171,8 +178,10 @@ public sealed class LocalAdditionalUsageProvidersTests
             case "hermes":
             {
                 var row = new string?[] { "id", "model", "provider", Now.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture), "1", "1", "1", "0", "0", "1", "2.5", "0" };
-                Assert.Equal(2.5, Assert.IsType<LocalUsageEntry>(
-                    LocalHermesUsageProvider.ParseRow(row, since, Utc)).Cost);
+                var entry = Assert.IsType<LocalUsageEntry>(
+                    LocalHermesUsageProvider.ParseRow(row, since, Utc));
+                Assert.Equal(0, entry.Cost);
+                Assert.Equal(CostCoverage.Source, entry.CostCoverage);
                 break;
             }
             case "grok":
@@ -239,7 +248,8 @@ public sealed class LocalAdditionalUsageProvidersTests
                 });
                 var entry = Assert.IsType<LocalUsageEntry>(LocalOmpUsageProvider.ParseLine(line, "x", 7, since, Utc));
                 Assert.StartsWith("omp|x|missing-7", entry.Id, StringComparison.Ordinal);
-                Assert.True(entry.Cost > 0);
+                Assert.Equal(0, entry.Cost);
+                Assert.Equal(CostCoverage.Unavailable, entry.CostCoverage);
                 break;
             }
         }

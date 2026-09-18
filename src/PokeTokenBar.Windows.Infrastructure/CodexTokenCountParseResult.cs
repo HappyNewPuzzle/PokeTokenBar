@@ -6,4 +6,5 @@ public sealed record CodexTokenCountParseResult(
     DateTimeOffset Timestamp,
     CodexUsageEntry Entry,
     CodexUsageVector LastUsageVector,
-    CodexUsageVector? CumulativeUsageVector);
+    CodexUsageVector? CumulativeUsageVector,
+    string Model = "unknown");

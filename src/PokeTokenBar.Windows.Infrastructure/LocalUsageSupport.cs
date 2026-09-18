@@ -11,7 +11,8 @@ internal sealed record LocalUsageEntry(
     long Output,
     long CacheWrite,
     long CacheRead,
-    double Cost)
+    double Cost,
+    CostCoverage CostCoverage = default)
 {
     public long TotalTokens => Input + Output + CacheWrite + CacheRead;
 }
@@ -34,7 +35,8 @@ internal static class LocalUsageSupport
                 total.CacheWrite,
                 total.CacheRead,
                 total.TotalTokens,
-                total.Cost);
+                total.Cost,
+                total.CostCoverage);
     }
 
     public static ProviderEnrichment Enrichment(
@@ -60,11 +62,13 @@ internal static class LocalUsageSupport
             WeekTotal: new PeriodUsage(
                 weekStart.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                 week.TotalTokens,
-                week.Cost),
+                week.Cost,
+                week.CostCoverage),
             MonthTotal: new PeriodUsage(
                 today.ToString("yyyy-MM", CultureInfo.InvariantCulture),
                 month.TotalTokens,
-                month.Cost),
+                month.Cost,
+                month.CostCoverage),
             PeriodsOK: true);
     }
 
@@ -138,45 +142,98 @@ internal static class LocalUsageSupport
         return byId.Values.ToArray();
     }
 
-    public static double CalculateCost(
+    public static double? EstimatedCost(
         string model,
         long input,
         long output,
         long cacheWrite,
         long cacheRead)
     {
-        var lower = model.ToLowerInvariant();
-        var rates = lower switch
+        var key = ModelKey(model);
+        (double Input, double Output, double Write, double Read)? rates = key switch
         {
+            "claude-opus-4-20250514" => (15d, 75d, 18.75d, 1.5d),
+            "claude-sonnet-4-20250514" or "claude-sonnet-4-5-20250929" =>
+                (3d, 15d, 3.75d, 0.3d),
             "claude-opus-4-8" or "claude-opus-4-7" => (5d, 25d, 6.25d, 0.5d),
             "claude-sonnet-4-6" => (3d, 15d, 3.75d, 0.3d),
             "claude-haiku-4-5-20251001" => (1d, 5d, 1.25d, 0.1d),
             "claude-fable-5" => (10d, 50d, 12.5d, 1d),
             "claude-fable-5-1" => (10d, 50d, 12.5d, 0.25d),
+            "gpt-6-astra" => (10d, 50d, 12.5d, 1d),
+            "gpt-5.6-sol" => (4d, 20d, 5d, 0.4d),
+            "gpt-5.6-terra" => (2d, 12d, 2.5d, 0.2d),
+            "gpt-5.6-luna" => (0.2d, 1.2d, 0.25d, 0.02d),
+            "gpt-5" or "gpt-5-codex" or "gpt-5.1" or "gpt-5.1-codex" =>
+                (1.25d, 10d, 0d, 0.125d),
+            "gpt-5.2" or "gpt-5.2-codex" or "gpt-5.3-codex" =>
+                (1.75d, 14d, 0d, 0.175d),
+            "gpt-5.4" => (2.5d, 15d, 0d, 0.25d),
             "gpt-5.5" => (5d, 30d, 0d, 0.5d),
-            "gemini-2.5-pro" => (1.25d, 10d, 0d, 0.3125d),
-            "gemini-2.5-flash" => (0.30d, 2.5d, 0d, 0.075d),
+            "gemini-2.5-pro" => (1.25d, 10d, 0d, 0.125d),
+            "gemini-2.5-flash" => (0.30d, 2.5d, 0d, 0.03d),
             "gemini-2.0-flash" => (0.10d, 0.4d, 0d, 0.025d),
-            _ when lower.StartsWith("grok", StringComparison.Ordinal) => (0d, 0d, 0d, 0d),
-            _ when lower.Contains("fable", StringComparison.Ordinal) => (10d, 50d, 12.5d, 1d),
-            _ when lower.Contains("opus", StringComparison.Ordinal) => (5d, 25d, 6.25d, 0.5d),
-            _ when lower.Contains("sonnet", StringComparison.Ordinal) => (3d, 15d, 3.75d, 0.3d),
-            _ when lower.Contains("haiku", StringComparison.Ordinal) => (1d, 5d, 1.25d, 0.1d),
-            _ when lower.Contains("gpt", StringComparison.Ordinal) ||
-                   lower.Contains("codex", StringComparison.Ordinal) ||
-                   lower.Contains("o4", StringComparison.Ordinal) ||
-                   lower.Contains("o3", StringComparison.Ordinal) => (5d, 30d, 0d, 0.5d),
-            _ when lower.StartsWith("gemini", StringComparison.Ordinal) &&
-                   lower.Contains("pro", StringComparison.Ordinal) => (1.25d, 10d, 0d, 0.3125d),
-            _ when lower.StartsWith("gemini", StringComparison.Ordinal) &&
-                   lower.Contains("flash", StringComparison.Ordinal) => (0.30d, 2.5d, 0d, 0.075d),
-            _ => (0d, 0d, 0d, 0d),
+            _ => null,
         };
-        return ((input * rates.Item1) +
-                (output * rates.Item2) +
-                (cacheWrite * rates.Item3) +
-                (cacheRead * rates.Item4)) / 1_000_000d;
+        if (rates is not { } known || input < 0 || output < 0 || cacheWrite < 0 || cacheRead < 0)
+        {
+            return null;
+        }
+
+        if (cacheWrite > 0 && known.Write == 0)
+        {
+            return null;
+        }
+
+        var prompt = (double)input + cacheWrite + cacheRead;
+        var longContext =
+            (key is "gpt-6-astra" or "gpt-5.6-sol" or "gpt-5.6-terra" or
+                "gpt-5.6-luna" or "gpt-5.5" or "gpt-5.4") && prompt > 272_000 ||
+            key == "gemini-2.5-pro" && prompt > 200_000;
+        var inputMultiplier = longContext ? 2d : 1d;
+        var outputMultiplier = longContext ? 1.5d : 1d;
+        return (((input * known.Input) +
+                (cacheWrite * known.Write) +
+                (cacheRead * known.Read)) * inputMultiplier +
+                (output * known.Output) * outputMultiplier) / 1_000_000d;
     }
+
+    private static string ModelKey(string model)
+    {
+        var key = model.Trim().ToLowerInvariant();
+        foreach (var prefix in ModelPrefixes)
+        {
+            if (!key.StartsWith(prefix, StringComparison.Ordinal)) continue;
+            key = key[prefix.Length..];
+            break;
+        }
+
+        return key switch
+        {
+            "gpt-5.6" => "gpt-5.6-sol",
+            "claude-sonnet-4" => "claude-sonnet-4-20250514",
+            "claude-opus-4" => "claude-opus-4-20250514",
+            "claude-sonnet-4-5" => "claude-sonnet-4-5-20250929",
+            "claude-haiku-4-5" => "claude-haiku-4-5-20251001",
+            "gpt-5-2025-08-07" => "gpt-5",
+            "gpt-5.1-2025-11-13" => "gpt-5.1",
+            "gpt-5.2-2025-12-11" => "gpt-5.2",
+            "gpt-5.4-2026-03-05" => "gpt-5.4",
+            "gpt-5.5-2026-04-23" => "gpt-5.5",
+            _ => key,
+        };
+    }
+
+    private static readonly string[] ModelPrefixes =
+        ["openai/", "anthropic/", "google/", "models/"];
+
+    public static double CalculateCost(
+        string model,
+        long input,
+        long output,
+        long cacheWrite,
+        long cacheRead) =>
+        EstimatedCost(model, input, output, cacheWrite, cacheRead) ?? 0;
 
     private static BlockUsage? ActiveBlock(IReadOnlyList<LocalUsageEntry> recent, DateTimeOffset now)
     {
@@ -195,7 +252,8 @@ internal static class LocalUsageSupport
             IsActive: true,
             total.TotalTokens,
             total.Cost,
-            total.TotalTokens / minutes);
+            total.TotalTokens / minutes,
+            total.CostCoverage);
     }
 
     private static Totals Sum(IEnumerable<LocalUsageEntry> entries)
@@ -208,6 +266,10 @@ internal static class LocalUsageSupport
             total.CacheWrite += entry.CacheWrite;
             total.CacheRead += entry.CacheRead;
             total.Cost += entry.Cost;
+            if (entry.TotalTokens > 0)
+            {
+                total.CostCoverage = total.CostCoverage.Merge(entry.CostCoverage);
+            }
         }
 
         return total;
@@ -223,6 +285,7 @@ internal static class LocalUsageSupport
         public long CacheWrite { get; set; }
         public long CacheRead { get; set; }
         public double Cost { get; set; }
+        public CostCoverage CostCoverage { get; set; }
         public long TotalTokens => Input + Output + CacheWrite + CacheRead;
     }
 }

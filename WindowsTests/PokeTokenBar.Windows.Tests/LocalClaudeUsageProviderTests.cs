@@ -95,12 +95,12 @@ public sealed class LocalClaudeUsageProviderTests : IDisposable
 
     [Theory]
     [InlineData("claude-opus-4-8", 5)]
-    [InlineData("claude-opus-future", 5)]
+    [InlineData("claude-opus-future", 0)]
     [InlineData("claude-sonnet-4-6", 3)]
     [InlineData("claude-haiku-4-5-20251001", 1)]
     [InlineData("claude-fable-5", 10)]
     [InlineData("unknown", 0)]
-    public void ModelPricingMatchesMacOSTableAndFamilyFallback(string model, double expected) =>
+    public void ModelPricingUsesDocumentedModelsOnly(string model, double expected) =>
         Assert.Equal(
             expected,
             LocalClaudeUsageProvider.CalculateCost(model, 1_000_000, 0, 0, 0),
@@ -122,9 +122,9 @@ public sealed class LocalClaudeUsageProviderTests : IDisposable
     [Theory]
     [InlineData("claude-fable-5-1", 0.25)]
     [InlineData("claude-fable-5", 1.0)]
-    [InlineData("claude-fable-future", 1.0)]
+    [InlineData("claude-fable-future", 0.0)]
     [InlineData("unknown", 0.0)]
-    public void FableCacheReadPricingPreservesExactAndFallbackRates(
+    public void FableCacheReadPricingPreservesExactRates(
         string model,
         double expected)
     {

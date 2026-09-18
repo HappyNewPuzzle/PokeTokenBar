@@ -122,13 +122,13 @@ public sealed class LocalGeminiUsageProviderTests : IDisposable
     }
 
     [Theory]
-    [InlineData("gemini-2.5-pro", 1.25)]
+    [InlineData("gemini-2.5-pro", 2.5)]
     [InlineData("gemini-2.5-flash", 0.30)]
     [InlineData("gemini-2.0-flash", 0.10)]
-    [InlineData("gemini-3.1-pro-preview", 1.25)]
-    [InlineData("gemini-3-flash-lite", 0.30)]
+    [InlineData("gemini-3.1-pro-preview", 0)]
+    [InlineData("gemini-3-flash-lite", 0)]
     [InlineData("gemini-nano-banana", 0)]
-    public void PricingMatchesMacOSTableAndFamilyFallback(string model, double expected) =>
+    public void PricingUsesDocumentedModelsOnly(string model, double expected) =>
         Assert.Equal(
             expected,
             LocalGeminiUsageProvider.CalculateCost(model, 1_000_000, 0, 0, 0),
@@ -145,7 +145,7 @@ public sealed class LocalGeminiUsageProviderTests : IDisposable
             600);
 
         Assert.Equal(
-            420 * 1.25e-6 + 80 * 10e-6 + 600 * 0.3125e-6,
+            420 * 1.25e-6 + 80 * 10e-6 + 600 * 0.125e-6,
             cost,
             precision: 12);
     }
@@ -184,7 +184,7 @@ public sealed class LocalGeminiUsageProviderTests : IDisposable
         Assert.Null(await Daily());
         var enrichment = await Enrichment();
         Assert.Equal(1_000_000, enrichment.MonthTotal!.TotalTokens);
-        Assert.Equal(1.25, enrichment.MonthTotal.TotalCost, precision: 6);
+        Assert.Equal(2.5, enrichment.MonthTotal.TotalCost, precision: 6);
     }
 
     [Fact]

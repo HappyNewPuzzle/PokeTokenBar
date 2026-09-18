@@ -14,6 +14,7 @@ public static class CodexRolloutReader
 
         CodexSessionMetaParseResult? rolloutMetadata = null;
         CodexSessionMetaParseResult? currentSessionMetadata = null;
+        var currentModel = "unknown";
         var tokenEvents = new List<CodexRolloutTokenEvent>();
 
         string? line;
@@ -38,13 +39,20 @@ public static class CodexRolloutReader
                         StringComparison.Ordinal))
                 {
                     currentSessionMetadata = sessionMetadata;
+                    currentModel = "unknown";
                 }
+            }
+
+            if (line.Contains("\"model\"", StringComparison.Ordinal) &&
+                TryParseModel(line) is { } model)
+            {
+                currentModel = model;
             }
 
             if (CodexTokenCountParser.TryParse(line, out var tokenCount))
             {
                 tokenEvents.Add(new CodexRolloutTokenEvent(
-                    tokenCount,
+                    tokenCount with { Model = currentModel },
                     currentSessionMetadata?.SessionId,
                     currentSessionMetadata?.ParentSessionId,
                     currentSessionMetadata?.IsSubagent ?? false));
@@ -55,5 +63,35 @@ public static class CodexRolloutReader
             absolutePath,
             rolloutMetadata,
             tokenEvents);
+    }
+
+    private static string? TryParseModel(string line)
+    {
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(line);
+            if (!document.RootElement.TryGetProperty("payload", out var payload) ||
+                payload.ValueKind != System.Text.Json.JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            if (payload.TryGetProperty("model", out var model) &&
+                model.ValueKind == System.Text.Json.JsonValueKind.String)
+            {
+                return model.GetString();
+            }
+
+            return payload.TryGetProperty("turn_context", out var context) &&
+                   context.ValueKind == System.Text.Json.JsonValueKind.Object &&
+                   context.TryGetProperty("model", out model) &&
+                   model.ValueKind == System.Text.Json.JsonValueKind.String
+                ? model.GetString()
+                : null;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
     }
 }

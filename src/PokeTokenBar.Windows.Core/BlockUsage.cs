@@ -7,4 +7,9 @@ public sealed record BlockUsage(
     bool IsActive,
     long TotalTokens,
     double CostUSD,
-    double? TokensPerMinute);
+    double? TokensPerMinute,
+    CostCoverage CostCoverage = default)
+{
+    [System.Text.Json.Serialization.JsonIgnore]
+    public UsageCost UsageCost => new(CostUSD, CostCoverage);
+}

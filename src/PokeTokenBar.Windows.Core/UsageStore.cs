@@ -205,27 +205,42 @@ public sealed class UsageStore
 
     public bool ShowsCost => CostingSnapshots.Count > 0;
 
-    public double TodayCostTotal
+    public UsageCost TodayUsageCost
     {
         get
         {
             var todayKey = TodayKey();
-            return CostingSnapshots.Sum(snapshot =>
-                snapshot.Today?.Date == todayKey ? snapshot.Today.TotalCost : 0);
+            return CostingSnapshots.Aggregate(
+                default(UsageCost),
+                (total, snapshot) => snapshot.Today?.Date == todayKey
+                    ? total.Add(snapshot.Today.UsageCost)
+                    : total);
         }
     }
+
+    public double TodayCostTotal => TodayUsageCost.Amount;
 
     public long WeekTotalTokens =>
         Snapshots.Sum(static snapshot => snapshot.WeekTotal?.TotalTokens ?? 0);
 
-    public double WeekCostTotal =>
-        CostingSnapshots.Sum(static snapshot => snapshot.WeekTotal?.TotalCost ?? 0);
+    public UsageCost WeekUsageCost => CostingSnapshots.Aggregate(
+        default(UsageCost),
+        static (total, snapshot) => snapshot.WeekTotal is { } period
+            ? total.Add(period.UsageCost)
+            : total);
+
+    public double WeekCostTotal => WeekUsageCost.Amount;
 
     public long MonthTotalTokens =>
         Snapshots.Sum(static snapshot => snapshot.MonthTotal?.TotalTokens ?? 0);
 
-    public double MonthCostTotal =>
-        CostingSnapshots.Sum(static snapshot => snapshot.MonthTotal?.TotalCost ?? 0);
+    public UsageCost MonthUsageCost => CostingSnapshots.Aggregate(
+        default(UsageCost),
+        static (total, snapshot) => snapshot.MonthTotal is { } period
+            ? total.Add(period.UsageCost)
+            : total);
+
+    public double MonthCostTotal => MonthUsageCost.Amount;
 
     public double? ClaudeBurnPerMinute =>
         Snapshots.FirstOrDefault(static snapshot => snapshot.ProviderId == "claude_code")
@@ -891,14 +906,16 @@ public sealed class UsageStore
         IUsageProvider provider)
     {
         var today = DateOnly.FromDateTime(_timeProvider.GetLocalNow().DateTime);
-        var todayValue = cached.Today?.Date == TodayKey() ? cached.Today : null;
+        var todayValue = cached.Today?.Date == TodayKey()
+            ? WithLegacyCoverage(cached.Today)
+            : null;
         var activeBlock = cached.ActiveBlock is { IsActive: true } block &&
                           DateTimeOffset.TryParse(
                               block.EndTime,
                               CultureInfo.InvariantCulture,
                               DateTimeStyles.AssumeUniversal,
                               out var end) && end > Now()
-            ? block
+            ? WithLegacyCoverage(block)
             : null;
         var week = cached.WeekTotal is { } weekValue &&
                    DateOnly.TryParseExact(
@@ -908,10 +925,10 @@ public sealed class UsageStore
                        DateTimeStyles.None,
                        out var weekStart) &&
                    weekStart <= today && today <= weekStart.AddDays(6)
-            ? weekValue
+            ? WithLegacyCoverage(weekValue)
             : null;
         var month = cached.MonthTotal?.Period == today.ToString("yyyy-MM", CultureInfo.InvariantCulture)
-            ? cached.MonthTotal
+            ? WithLegacyCoverage(cached.MonthTotal)
             : null;
         return new ProviderSnapshot(
             provider.Id,
@@ -923,6 +940,21 @@ public sealed class UsageStore
             cached.FetchedAt,
             provider.ReportsCost);
     }
+
+    private static DailyUsage? WithLegacyCoverage(DailyUsage? usage) =>
+        usage is not null && usage.CostCoverage == default
+            ? usage with { CostCoverage = CostCoverage.FromLegacy(usage.TotalTokens, usage.TotalCost) }
+            : usage;
+
+    private static PeriodUsage? WithLegacyCoverage(PeriodUsage? usage) =>
+        usage is not null && usage.CostCoverage == default
+            ? usage with { CostCoverage = CostCoverage.FromLegacy(usage.TotalTokens, usage.TotalCost) }
+            : usage;
+
+    private static BlockUsage? WithLegacyCoverage(BlockUsage? usage) =>
+        usage is not null && usage.CostCoverage == default
+            ? usage with { CostCoverage = CostCoverage.FromLegacy(usage.TotalTokens, usage.CostUSD) }
+            : usage;
 
     private static CachedProviderUsage ToCached(ProviderSnapshot snapshot) => new(
         snapshot.ProviderId,

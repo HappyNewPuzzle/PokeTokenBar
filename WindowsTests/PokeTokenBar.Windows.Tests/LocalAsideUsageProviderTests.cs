@@ -246,7 +246,8 @@ public sealed class LocalAsideUsageProviderTests : IDisposable
         var provider = Provider(database);
 
         var daily = Assert.IsType<DailyUsage>(await Daily(provider, Now));
-        Assert.Equal(10, daily.TotalCost, precision: 6);
+        Assert.Equal(0, daily.TotalCost, precision: 6);
+        Assert.Equal(CostCoverage.Unavailable, daily.CostCoverage);
         Assert.DoesNotContain(
             typeof(DailyUsage).GetProperties(BindingFlags.Instance | BindingFlags.Public),
             property => property.Name.Contains("Model", StringComparison.OrdinalIgnoreCase));

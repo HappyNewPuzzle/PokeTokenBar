@@ -55,7 +55,8 @@ public sealed class LocalClaudeUsageProvider : IUsageProvider
                 total.CacheWrite,
                 total.CacheRead,
                 total.TotalTokens,
-                total.Cost);
+                total.Cost,
+                total.CostCoverage);
     }
 
     public Task<ProviderEnrichment> FetchEnrichmentAsync(
@@ -101,11 +102,13 @@ public sealed class LocalClaudeUsageProvider : IUsageProvider
                 WeekTotal: new PeriodUsage(
                     weekStart.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                     week.TotalTokens,
-                    week.Cost),
+                    week.Cost,
+                    week.CostCoverage),
                 MonthTotal: new PeriodUsage(
                     localToday.ToString("yyyy-MM", CultureInfo.InvariantCulture),
                     month.TotalTokens,
-                    month.Cost),
+                    month.Cost,
+                    month.CostCoverage),
                 PeriodsOK: true);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -148,26 +151,7 @@ public sealed class LocalClaudeUsageProvider : IUsageProvider
         long output,
         long cacheWrite,
         long cacheRead)
-    {
-        var lower = model.ToLowerInvariant();
-        var rates = lower switch
-        {
-            "claude-opus-4-8" or "claude-opus-4-7" => (5d, 25d, 6.25d, 0.5d),
-            "claude-sonnet-4-6" => (3d, 15d, 3.75d, 0.3d),
-            "claude-haiku-4-5-20251001" => (1d, 5d, 1.25d, 0.1d),
-            "claude-fable-5" => (10d, 50d, 12.5d, 1d),
-            "claude-fable-5-1" => (10d, 50d, 12.5d, 0.25d),
-            _ when lower.Contains("fable", StringComparison.Ordinal) => (10d, 50d, 12.5d, 1d),
-            _ when lower.Contains("opus", StringComparison.Ordinal) => (5d, 25d, 6.25d, 0.5d),
-            _ when lower.Contains("sonnet", StringComparison.Ordinal) => (3d, 15d, 3.75d, 0.3d),
-            _ when lower.Contains("haiku", StringComparison.Ordinal) => (1d, 5d, 1.25d, 0.1d),
-            _ => (0d, 0d, 0d, 0d),
-        };
-        return ((input * rates.Item1) +
-                (output * rates.Item2) +
-                (cacheWrite * rates.Item3) +
-                (cacheRead * rates.Item4)) / 1_000_000d;
-    }
+        => LocalUsageSupport.CalculateCost(model, input, output, cacheWrite, cacheRead);
 
     private Task<IReadOnlyList<Entry>> LoadEntriesAsync(
         DateTimeOffset modifiedSince,
@@ -282,6 +266,8 @@ public sealed class LocalClaudeUsageProvider : IUsageProvider
             var model = TryString(message, "model", out var parsedModel) ? parsedModel : "unknown";
             var messageId = TryString(message, "id", out var parsedMessageId) ? parsedMessageId : string.Empty;
             var requestId = TryString(root, "requestId", out var parsedRequestId) ? parsedRequestId : string.Empty;
+            var estimatedCost = LocalUsageSupport.EstimatedCost(
+                model, input, output, cacheWrite, cacheRead);
             entry = new Entry(
                 $"{messageId}|{requestId}",
                 timestamp,
@@ -290,7 +276,8 @@ public sealed class LocalClaudeUsageProvider : IUsageProvider
                 output,
                 cacheWrite,
                 cacheRead,
-                CalculateCost(model, input, output, cacheWrite, cacheRead));
+                estimatedCost ?? 0,
+                estimatedCost is null ? CostCoverage.Unavailable : CostCoverage.Estimate);
             return true;
         }
         catch (JsonException)
@@ -328,6 +315,10 @@ public sealed class LocalClaudeUsageProvider : IUsageProvider
             total.CacheWrite += entry.CacheWrite;
             total.CacheRead += entry.CacheRead;
             total.Cost += entry.Cost;
+            if (entry.TotalTokens > 0)
+            {
+                total.CostCoverage = total.CostCoverage.Merge(entry.CostCoverage);
+            }
         }
 
         return total;
@@ -350,7 +341,8 @@ public sealed class LocalClaudeUsageProvider : IUsageProvider
             IsActive: true,
             total.TotalTokens,
             total.Cost,
-            total.TotalTokens / minutes);
+            total.TotalTokens / minutes,
+            total.CostCoverage);
     }
 
     private static IReadOnlyList<string> NormalizeRoots(IEnumerable<string> roots)
@@ -412,7 +404,8 @@ public sealed class LocalClaudeUsageProvider : IUsageProvider
         long Output,
         long CacheWrite,
         long CacheRead,
-        double Cost)
+        double Cost,
+        CostCoverage CostCoverage)
     {
         public long TotalTokens => Input + Output + CacheWrite + CacheRead;
     }
@@ -424,6 +417,7 @@ public sealed class LocalClaudeUsageProvider : IUsageProvider
         public long CacheWrite { get; set; }
         public long CacheRead { get; set; }
         public double Cost { get; set; }
+        public CostCoverage CostCoverage { get; set; }
         public long TotalTokens => Input + Output + CacheWrite + CacheRead;
     }
 }
