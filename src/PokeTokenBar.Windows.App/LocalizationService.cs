@@ -28,6 +28,18 @@ public sealed class LocalizationService : INotifyPropertyChanged
     public string Bag => T("가방", "Bag", "バッグ", "Bolsa", "Sac", "Bolsa", "Beutel");
     public string Collection => T("컬렉션", "Collection", "コレクション", "Colección", "Collection", "Coleção", "Sammlung");
     public string Settings => T("설정", "Settings", "設定", "Ajustes", "Réglages", "Configurações", "Einstellungen");
+    public string Difficulty => T("난이도", "Difficulty", "難易度", "Dificultad", "Difficulté", "Dificuldade", "Schwierigkeit");
+    public string Growth => T("성장", "Growth", "成長", "Crecimiento", "Croissance", "Crescimento", "Wachstum");
+    public string Save => T("저장", "Save", "保存", "Guardar", "Enregistrer", "Salvar", "Speichern");
+    public string DifficultyHint => T(
+        "10%–200% · 낮을수록 빠른 성장 / 저렴한 상점. 저장할 때 적용되며 현재 진행률은 유지됩니다.",
+        "10%–200% · Lower means faster growth / cheaper prices. Applied on Save; current progress is preserved.",
+        "10%–200% · 低いほど成長が速く、価格が安くなります。保存時に適用し、現在の進捗率を維持します。",
+        "10%–200% · Un valor menor acelera el crecimiento o reduce los precios. Se aplica al guardar y conserva el progreso actual.",
+        "10%–200% · Une valeur plus basse accélère la croissance ou réduit les prix. Enregistrez pour appliquer sans perdre la progression.",
+        "10%–200% · Valores menores aceleram o crescimento ou reduzem os preços. Aplicado ao salvar, preservando o progresso atual.",
+        "10%–200% · Niedrigere Werte bedeuten schnelleres Wachstum oder günstigere Preise. Beim Speichern bleibt der bisherige Fortschritt erhalten.");
+    public string DifficultySaveFailed => T("난이도를 저장하지 못했어요. 다시 시도하세요.", "Could not save difficulty. Please retry.", "難易度を保存できませんでした。再試行してください。", "No se pudo guardar la dificultad. Inténtalo de nuevo.", "Impossible d’enregistrer la difficulté. Réessayez.", "Não foi possível salvar a dificuldade. Tente novamente.", "Die Schwierigkeit konnte nicht gespeichert werden. Bitte erneut versuchen.");
     public string Companion => T("컴패니언", "Companion", "コンパニオン", "Compañero", "Compagnon", "Companheiro", "Begleiter");
     public string NoUsageData => T("사용량 데이터 없음", "No usage data", "使用量データなし", "Sin datos de uso", "Aucune donnée", "Sem dados de uso", "Keine Nutzungsdaten");
     public string Refresh => T("새로고침", "Refresh", "更新", "Actualizar", "Actualiser", "Atualizar", "Aktualisieren");

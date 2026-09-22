@@ -16,13 +16,19 @@ public sealed class CompanionStore
         ICompanionPersistence persistence,
         Random? random = null,
         TimeProvider? timeProvider = null,
-        bool dittoDisguiseRollingEnabled = false)
+        bool dittoDisguiseRollingEnabled = false,
+        IAppSettingsPersistence? settingsPersistence = null)
     {
         _provider = provider ?? throw new ArgumentNullException(nameof(provider));
         _persistence = persistence ?? throw new ArgumentNullException(nameof(persistence));
         _random = random ?? Random.Shared;
         _timeProvider = timeProvider ?? TimeProvider.System;
         _dittoDisguiseRollingEnabled = dittoDisguiseRollingEnabled;
+        AppSettings? settings = null;
+        try { settings = settingsPersistence?.Load(); }
+        catch (Exception) { /* Settings UI reports persistence failures. */ }
+        GrowthDifficulty = PokemonBalance.ClampDifficulty(settings?.GrowthDifficulty ?? 1.0);
+        ShopDifficulty = PokemonBalance.ClampDifficulty(settings?.ShopDifficulty ?? 1.0);
         State = NormalizeState(TryLoad() ?? new CompanionState());
         DisplayState = State.Active is null
             ? CompanionStateKind.Egg
@@ -31,6 +37,50 @@ public sealed class CompanionStore
     }
 
     public CompanionState State { get; private set; }
+
+    public double GrowthDifficulty { get; private set; }
+    public double ShopDifficulty { get; private set; }
+    public long EggHatchThreshold => PokemonBalance.Scale(PokemonBalance.EggHatchThreshold, GrowthDifficulty);
+    public long StageThreshold(MonState mon) => PokemonBalance.Scale(
+        PokemonBalance.PhaseThreshold(mon.Rarity, mon.TotalForms, mon.StageIndex), GrowthDifficulty);
+
+    /// <summary>Save both preferences and repriced credits before publishing either live multiplier.</summary>
+    public async Task SaveDifficultyAsync(
+        double growth, double shop, Action savePreferences, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(savePreferences);
+        growth = PokemonBalance.ClampDifficulty(growth);
+        shop = PokemonBalance.ClampDifficulty(shop);
+        await _mutationGate.WaitAsync(cancellationToken);
+        try
+        {
+            var previous = State;
+            var next = previous;
+            if (growth != GrowthDifficulty)
+            {
+                next = previous.Active is { } active
+                    ? previous with { Active = active with { UsedAtStage = PokemonBalance.RescaleProgress(
+                        active.UsedAtStage, StageThreshold(active), PokemonBalance.Scale(
+                            PokemonBalance.PhaseThreshold(active.Rarity, active.TotalForms, active.StageIndex), growth)) } }
+                    : previous with { EggUsage = PokemonBalance.RescaleProgress(
+                        previous.EggUsage, EggHatchThreshold, PokemonBalance.Scale(PokemonBalance.EggHatchThreshold, growth)) };
+                _persistence.Save(next);
+            }
+
+            try { savePreferences(); }
+            catch
+            {
+                if (next != previous) _persistence.Save(previous);
+                throw;
+            }
+
+            State = next;
+            GrowthDifficulty = growth;
+            ShopDifficulty = shop;
+            // Configuration is not usage: no maintenance, zero-delta replay or game events here.
+        }
+        finally { _mutationGate.Release(); }
+    }
 
     public CompanionStateKind DisplayState { get; private set; }
 
@@ -150,12 +200,12 @@ public sealed class CompanionStore
         {
             var products = Enum.GetValues<CompanionItemKind>()
                 .Select(kind => new ShopProduct(
-                    kind.Key(), ShopProductKind.Item, kind.Price(), kind))
+                    kind.Key(), ShopProductKind.Item, PokemonBalance.Scale(kind.Price(), ShopDifficulty), kind))
                 .ToList();
             products.AddRange(CompanionEconomyRules.EggTiers.Select(tier => new ShopProduct(
                 tier is null ? "egg.basic" : $"egg.{tier.Value.ToString().ToLowerInvariant()}",
                 ShopProductKind.Egg,
-                CompanionEconomyRules.EggPrice(tier),
+                PokemonBalance.Scale(CompanionEconomyRules.EggPrice(tier), ShopDifficulty),
                 GuaranteedRarity: tier)));
 
             return products
@@ -614,7 +664,7 @@ public sealed class CompanionStore
         if (State.Active is null)
         {
             DisplayState = CompanionStateKind.Egg;
-            if (!State.InstallBaselineSet || State.EggUsage < PokemonBalance.EggHatchThreshold)
+            if (!State.InstallBaselineSet || State.EggUsage < EggHatchThreshold)
             {
                 return;
             }
@@ -699,10 +749,7 @@ public sealed class CompanionStore
 
         for (var guard = 0; State.Active is MonState current && guard < 50; guard++)
         {
-            var threshold = PokemonBalance.PhaseThreshold(
-                current.Rarity,
-                current.TotalForms,
-                current.StageIndex);
+            var threshold = StageThreshold(current);
             if (current.UsedAtStage < threshold)
             {
                 break;
@@ -1012,7 +1059,7 @@ public sealed class CompanionStore
             return false;
         }
 
-        var overflow = Math.Max(0, State.EggUsage - PokemonBalance.EggHatchThreshold);
+        var overflow = Math.Max(0, State.EggUsage - EggHatchThreshold);
         var natures = Enum.GetValues<PokemonNature>();
         var isShiny = CompanionEconomyRules.RollsShiny(
             _random.Next(OwnsShinyCharm

@@ -61,7 +61,9 @@ public sealed record AppSettings(
     string? SelectedProviderId = null,
     bool UpdateNotificationsEnabled = true,
     string? SkippedUpdateVersion = null,
-    bool CredentialAccessEnabled = true)
+    bool CredentialAccessEnabled = true,
+    double GrowthDifficulty = 1.0,
+    double ShopDifficulty = 1.0)
 {
     public static AppSettings Default { get; } = new();
 }

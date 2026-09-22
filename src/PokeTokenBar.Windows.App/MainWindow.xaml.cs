@@ -14,6 +14,7 @@ public partial class MainWindow : Window, IDisposable
         _viewModel = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
         DataContext = viewModel;
         Activated += OnActivated;
+        IsVisibleChanged += OnVisibilityChanged;
     }
 
     public void Dispose()
@@ -25,6 +26,7 @@ public partial class MainWindow : Window, IDisposable
 
         _disposed = true;
         Activated -= OnActivated;
+        IsVisibleChanged -= OnVisibilityChanged;
         CompanionSprite.Dispose();
     }
 
@@ -32,6 +34,15 @@ public partial class MainWindow : Window, IDisposable
     {
         if (_viewModel.Support is { } support)
             AppReliability.Run(support.CheckAsync(TimeSpan.FromMinutes(30)), "window-update");
+    }
+
+    private void OnVisibilityChanged(object sender, DependencyPropertyChangedEventArgs e) =>
+        _viewModel.Settings.DiscardDifficultyDraft();
+
+    private void OnTabSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (ReferenceEquals(sender, e.OriginalSource))
+            _viewModel?.Settings.DiscardDifficultyDraft();
     }
 
     protected override void OnClosed(EventArgs e)

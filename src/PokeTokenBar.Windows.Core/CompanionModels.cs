@@ -170,6 +170,20 @@ public static class PokemonBalance
 {
     public const long EggHatchThreshold = 5_000_000;
 
+    public static double ClampDifficulty(double value) =>
+        double.IsFinite(value) ? Math.Clamp(value, 0.1, 2.0) : 1.0;
+
+    public static long Scale(long value, double difficulty) =>
+        Math.Max(1, (long)Math.Round(value * ClampDifficulty(difficulty), MidpointRounding.AwayFromZero));
+
+    // Decimal arithmetic keeps whole-token credits stable at threshold boundaries.
+    public static long RescaleProgress(long credits, long oldThreshold, long newThreshold)
+    {
+        var scaled = decimal.Floor((decimal)Math.Max(0, credits) / oldThreshold * newThreshold);
+        var result = (long)Math.Min(1_000_000_000_000_000m, scaled);
+        return credits < oldThreshold ? Math.Min(newThreshold - 1, result) : result;
+    }
+
     public static long GraduationTotal(PokemonRarity rarity) =>
         rarity switch
         {

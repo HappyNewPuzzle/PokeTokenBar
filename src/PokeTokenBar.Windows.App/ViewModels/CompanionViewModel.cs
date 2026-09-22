@@ -149,15 +149,12 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
             if (_store.State.Active is not MonState active)
             {
                 return Math.Clamp(
-                    (double)_store.State.EggUsage / PokemonBalance.EggHatchThreshold,
+                    (double)_store.State.EggUsage / _store.EggHatchThreshold,
                     0,
                     1);
             }
 
-            var threshold = PokemonBalance.PhaseThreshold(
-                active.Rarity,
-                active.TotalForms,
-                active.StageIndex);
+            var threshold = _store.StageThreshold(active);
             return threshold == 0
                 ? 0
                 : Math.Clamp((double)active.UsedAtStage / threshold, 0, 1);
@@ -170,13 +167,10 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
         {
             var active = _store.State.Active;
             var remaining = active is null
-                ? Math.Max(0, PokemonBalance.EggHatchThreshold - _store.State.EggUsage)
+                ? Math.Max(0, _store.EggHatchThreshold - _store.State.EggUsage)
                 : Math.Max(
                     0,
-                    PokemonBalance.PhaseThreshold(
-                        active.Rarity,
-                        active.TotalForms,
-                        active.StageIndex) - active.UsedAtStage);
+                    _store.StageThreshold(active) - active.UsedAtStage);
             return CompanionDisplayTexts.Progress(
                 active is null,
                 IsFinalStage,
@@ -266,6 +260,8 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
         await EnsureSpriteAsync(cancellationToken);
         await EnsureCompanionSpriteAsync(cancellationToken);
     }
+
+    public void RefreshPresentation() => ApplyStoreState();
 
     public async Task<bool> HatchRandomAsync(CancellationToken cancellationToken = default) =>
         await HatchAsync(

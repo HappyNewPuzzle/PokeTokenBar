@@ -77,7 +77,11 @@ public sealed class StateTransferService
         var currentSettings = _settings.Load() ?? AppSettings.Default;
         var importedState = Rebase(candidate.State, currentState, todayTokensByProvider,
             todayDate ?? DateTimeOffset.Now.ToString("yyyy-MM-dd"), hasUsageData);
-        var importedSettings = candidate.Settings ?? currentSettings;
+        var importedSettings = (candidate.Settings ?? currentSettings) with
+        {
+            GrowthDifficulty = currentSettings.GrowthDifficulty,
+            ShopDifficulty = currentSettings.ShopDifficulty,
+        };
 
         var settingsBytes = JsonSerializer.SerializeToUtf8Bytes(
             importedSettings, JsonAppSettingsPersistence.SerializerOptions);

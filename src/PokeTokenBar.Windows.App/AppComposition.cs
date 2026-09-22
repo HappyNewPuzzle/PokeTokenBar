@@ -47,9 +47,10 @@ public static class AppComposition
         var companionStore = new CompanionStore(
             api,
             persistence,
-            dittoDisguiseRollingEnabled: true);
+            dittoDisguiseRollingEnabled: true,
+            settingsPersistence: settingsPersistence);
         var settings = new SettingsViewModel(
-            settingsPersistence, autoStartService, companionStore.State.Language);
+            settingsPersistence, autoStartService, companionStore.State.Language, companionStore);
         var usage = CreateUsageViewModel(
             httpClient,
             settings.CustomRoots,
@@ -76,6 +77,11 @@ public static class AppComposition
             new WpfPokemonSpriteDecoder());
         var economy = new EconomyViewModel(
             companionStore, companion.RefreshAsync, settings.Localization);
+        settings.DifficultySaved += (_, _) =>
+        {
+            companion.RefreshPresentation();
+            economy.Refresh();
+        };
         var usageCompanion = new UsageCompanionController(
             usage,
             companionStore,

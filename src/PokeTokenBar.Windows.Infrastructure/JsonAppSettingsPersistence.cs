@@ -80,6 +80,8 @@ public sealed class JsonAppSettingsPersistence : IAppSettingsPersistence
         (settings.Language is null || Enum.IsDefined(settings.Language.Value)) &&
         Enum.IsDefined(settings.LimitDisplayMode) &&
         Enum.IsDefined(settings.AnimationQuality) &&
+        double.IsFinite(settings.GrowthDifficulty) && settings.GrowthDifficulty is >= 0.1 and <= 2.0 &&
+        double.IsFinite(settings.ShopDifficulty) && settings.ShopDifficulty is >= 0.1 and <= 2.0 &&
         double.IsFinite(settings.WarningThreshold) &&
         double.IsFinite(settings.CriticalThreshold) &&
         settings.WarningThreshold is >= 50 and <= 95 &&
@@ -113,6 +115,8 @@ public sealed class JsonAppSettingsPersistence : IAppSettingsPersistence
             UpdateNotificationsEnabled = Read(root, "updateNotificationsEnabled", defaults.UpdateNotificationsEnabled, ref recovered),
             SkippedUpdateVersion = Read(root, "skippedUpdateVersion", defaults.SkippedUpdateVersion, ref recovered),
             CredentialAccessEnabled = Read(root, "credentialAccessEnabled", defaults.CredentialAccessEnabled, ref recovered),
+            GrowthDifficulty = Read(root, "growthDifficulty", defaults.GrowthDifficulty, ref recovered),
+            ShopDifficulty = Read(root, "shopDifficulty", defaults.ShopDifficulty, ref recovered),
         };
     }
 
@@ -131,6 +135,8 @@ public sealed class JsonAppSettingsPersistence : IAppSettingsPersistence
 
         return settings with
         {
+            GrowthDifficulty = PokemonBalance.ClampDifficulty(settings.GrowthDifficulty),
+            ShopDifficulty = PokemonBalance.ClampDifficulty(settings.ShopDifficulty),
             RefreshInterval = Enum.IsDefined(settings.RefreshInterval) ? settings.RefreshInterval : defaults.RefreshInterval,
             Language = settings.Language is null || Enum.IsDefined(settings.Language.Value) ? settings.Language : defaults.Language,
             WarningThreshold = warning,

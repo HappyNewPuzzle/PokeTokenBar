@@ -15,6 +15,9 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
 
     private readonly IAppSettingsPersistence _persistence;
     private readonly IAutoStartService _autoStart;
+    private readonly CompanionStore? _companion;
+    private double _draftGrowthDifficulty;
+    private double _draftShopDifficulty;
     private AppSettings _settings;
     private bool _isFloatingPetEnabled;
     private bool _isLaunchAtStartupEnabled;
@@ -40,11 +43,21 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
     public SettingsViewModel(
         IAppSettingsPersistence persistence,
         IAutoStartService autoStartService,
-        AppLanguage? fallbackLanguage = null)
+        AppLanguage? fallbackLanguage = null,
+        CompanionStore? companion = null)
     {
         _persistence = persistence ?? throw new ArgumentNullException(nameof(persistence));
         _autoStart = autoStartService ?? throw new ArgumentNullException(nameof(autoStartService));
+        _companion = companion;
         _settings = LoadSettings();
+        _settings = _settings with
+        {
+            GrowthDifficulty = companion?.GrowthDifficulty ?? PokemonBalance.ClampDifficulty(_settings.GrowthDifficulty),
+            ShopDifficulty = companion?.ShopDifficulty ?? PokemonBalance.ClampDifficulty(_settings.ShopDifficulty),
+        };
+        _draftGrowthDifficulty = _settings.GrowthDifficulty;
+        _draftShopDifficulty = _settings.ShopDifficulty;
+        SaveDifficultyCommand = new AsyncCommand(SaveDifficultyAsync, () => HasDifficultyChanges && _companion is not null);
         _isFloatingPetEnabled = _settings.FloatingPetEnabled;
         _selectedRefreshInterval = _settings.RefreshInterval;
         _selectedLanguage = _settings.Language ?? fallbackLanguage ?? AppLanguageRules.SystemDefault;
@@ -71,6 +84,70 @@ public sealed class SettingsViewModel : INotifyPropertyChanged
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    internal event EventHandler? DifficultySaved;
+
+    public double GrowthDifficulty => _settings.GrowthDifficulty;
+    public double ShopDifficulty => _settings.ShopDifficulty;
+    public double DraftGrowthDifficulty
+    {
+        get => _draftGrowthDifficulty;
+        set { if (SetField(ref _draftGrowthDifficulty, SnapDifficulty(value))) DifficultyDraftChanged(); }
+    }
+    public double DraftShopDifficulty
+    {
+        get => _draftShopDifficulty;
+        set { if (SetField(ref _draftShopDifficulty, SnapDifficulty(value))) DifficultyDraftChanged(); }
+    }
+    public bool HasDifficultyChanges => DraftGrowthDifficulty != GrowthDifficulty || DraftShopDifficulty != ShopDifficulty;
+    public AsyncCommand SaveDifficultyCommand { get; }
+
+    // A five-percent linear step makes 10%, 25%, 50%, 100%, 150% and 200% reachable by keyboard.
+    private static double SnapDifficulty(double value) =>
+        Math.Round(PokemonBalance.ClampDifficulty(value) * 20, MidpointRounding.AwayFromZero) / 20;
+
+    public void DiscardDifficultyDraft()
+    {
+        // Keep arbitrary valid persisted values intact until the user actually moves a slider.
+        _draftGrowthDifficulty = GrowthDifficulty;
+        _draftShopDifficulty = ShopDifficulty;
+        OnPropertyChanged(nameof(DraftGrowthDifficulty));
+        OnPropertyChanged(nameof(DraftShopDifficulty));
+        DifficultyDraftChanged();
+    }
+
+    private void DifficultyDraftChanged()
+    {
+        OnPropertyChanged(nameof(HasDifficultyChanges));
+        SaveDifficultyCommand.RaiseCanExecuteChanged();
+    }
+
+    private async Task SaveDifficultyAsync(CancellationToken cancellationToken)
+    {
+        if (_companion is null) return;
+        var growth = DraftGrowthDifficulty;
+        var shop = DraftShopDifficulty;
+        try
+        {
+            await _companion.SaveDifficultyAsync(growth, shop, () =>
+            {
+                var next = _settings with { GrowthDifficulty = growth, ShopDifficulty = shop };
+                _persistence.Save(next);
+                _settings = next;
+            }, cancellationToken);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception)
+        {
+            ErrorMessage = Localization.DifficultySaveFailed;
+            return;
+        }
+        ErrorMessage = null;
+        OnPropertyChanged(nameof(GrowthDifficulty));
+        OnPropertyChanged(nameof(ShopDifficulty));
+        DiscardDifficultyDraft();
+        DifficultySaved?.Invoke(this, EventArgs.Empty);
+    }
 
     internal event EventHandler? FloatingPetPositionResetRequested;
 

@@ -14,7 +14,7 @@
         ResizeMode="NoResize"
         WindowStyle="ToolWindow"
         Topmost="True">
-    <TabControl>
+    <TabControl SelectionChanged="OnTabSelectionChanged">
         <TabItem Header="{Binding Texts.Home, Mode=OneWay}">
             <ScrollViewer HorizontalScrollBarVisibility="Auto"
                           VerticalScrollBarVisibility="Auto">
@@ -377,6 +377,41 @@
                     CornerRadius="8">
                 <StackPanel>
                     <TextBlock Text="{Binding Texts.Settings, Mode=OneWay}" FontSize="14" FontWeight="SemiBold" />
+                    <StackPanel Margin="0,12,0,8">
+                        <TextBlock Text="{Binding Texts.Difficulty, Mode=OneWay}" FontWeight="SemiBold" />
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /><ColumnDefinition Width="52" /></Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding Texts.Growth, Mode=OneWay}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                            <Slider Grid.Column="1" Minimum="0.1" Maximum="2" TickFrequency="0.05"
+                                    SmallChange="0.05" LargeChange="0.25" IsSnapToTickEnabled="True"
+                                    AutomationProperties.Name="{Binding Texts.Growth, Mode=OneWay}"
+                                    Value="{Binding Settings.DraftGrowthDifficulty, Mode=TwoWay}" />
+                            <TextBlock Grid.Column="2" Text="{Binding Settings.DraftGrowthDifficulty, Mode=OneWay, StringFormat={}{0:P0}}" HorizontalAlignment="Right" />
+                        </Grid>
+                        <Grid Margin="0,6,0,0">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /><ColumnDefinition Width="52" /></Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding Texts.Shop, Mode=OneWay}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                            <Slider Grid.Column="1" Minimum="0.1" Maximum="2" TickFrequency="0.05"
+                                    SmallChange="0.05" LargeChange="0.25" IsSnapToTickEnabled="True"
+                                    AutomationProperties.Name="{Binding Texts.Shop, Mode=OneWay}"
+                                    Value="{Binding Settings.DraftShopDifficulty, Mode=TwoWay}" />
+                            <TextBlock Grid.Column="2" Text="{Binding Settings.DraftShopDifficulty, Mode=OneWay, StringFormat={}{0:P0}}" HorizontalAlignment="Right" />
+                        </Grid>
+                        <TextBlock Margin="0,6,0,0" Text="{Binding Texts.DifficultyHint, Mode=OneWay}" FontSize="11" TextWrapping="Wrap" />
+                        <Button Margin="0,8,0,0" Padding="12,5" HorizontalAlignment="Right"
+                                Content="{Binding Texts.Save, Mode=OneWay}" Command="{Binding Settings.SaveDifficultyCommand, Mode=OneWay}">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Settings.HasDifficultyChanges, Mode=OneWay}" Value="False">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
                     <CheckBox Margin="0,14,0,0"
                               Content="{Binding Texts.ShowFloating, Mode=OneWay}"
                               IsChecked="{Binding Settings.IsFloatingPetEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />

@@ -345,6 +345,13 @@ public sealed partial class AppCompositionTests
         Assert.All(bindings, match =>
         {
             var path = match.Groups[1].Value;
+            if (path is "Settings.DraftGrowthDifficulty" or "Settings.DraftShopDifficulty")
+            {
+                // Sliders edit drafts; their adjacent percentage labels remain read-only.
+                Assert.Contains(match.Value.Contains("StringFormat", StringComparison.Ordinal)
+                    ? "Mode=OneWay" : "Mode=TwoWay", match.Value, StringComparison.Ordinal);
+                return;
+            }
             if (path is "Usage.SelectedProviderId" or
                 "Usage.RefreshCommand" or
                 "Settings.IsFloatingPetEnabled" or
