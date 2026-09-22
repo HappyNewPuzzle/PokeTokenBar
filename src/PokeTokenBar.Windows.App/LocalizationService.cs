@@ -30,6 +30,7 @@ public sealed class LocalizationService : INotifyPropertyChanged
     public string Settings => T("설정", "Settings", "設定", "Ajustes", "Réglages", "Configurações", "Einstellungen");
     public string Difficulty => T("난이도", "Difficulty", "難易度", "Dificultad", "Difficulté", "Dificuldade", "Schwierigkeit");
     public string Growth => T("성장", "Growth", "成長", "Crecimiento", "Croissance", "Crescimento", "Wachstum");
+    public string GrowthBoost => T("2× 성장", "2× growth", "成長2倍", "Crecimiento ×2", "Croissance ×2", "Crescimento ×2", "2× Wachstum");
     public string Save => T("저장", "Save", "保存", "Guardar", "Enregistrer", "Salvar", "Speichern");
     public string DifficultyHint => T(
         "10%–200% · 낮을수록 빠른 성장 / 저렴한 상점. 저장할 때 적용되며 현재 진행률은 유지됩니다.",

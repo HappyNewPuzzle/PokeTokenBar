@@ -176,6 +176,11 @@ public static class PokemonBalance
     public static long Scale(long value, double difficulty) =>
         Math.Max(1, (long)Math.Round(value * ClampDifficulty(difficulty), MidpointRounding.AwayFromZero));
 
+    public static long RepeatAdjustedThreshold(long standardThreshold, bool hasGrowthBoost) =>
+        Math.Max(1, hasGrowthBoost
+            ? (long)Math.Round(standardThreshold / 2d, MidpointRounding.AwayFromZero)
+            : standardThreshold);
+
     // Decimal arithmetic keeps whole-token credits stable at threshold boundaries.
     public static long RescaleProgress(long credits, long oldThreshold, long newThreshold)
     {
@@ -297,6 +302,7 @@ public sealed record MonState
     public int TotalForms { get; init; }
     public bool IsShiny { get; init; }
     public PokemonNature? Nature { get; init; }
+    public bool HasGrowthBoost { get; init; }
     public int? DittoDisguise { get; init; }
     public bool DittoRevealed { get; init; }
 
@@ -353,6 +359,9 @@ public sealed record CompanionState
     public IReadOnlyDictionary<string, int> Inventory { get; init; } = new Dictionary<string, int>();
     public IReadOnlyDictionary<string, int> CandyGrantTier { get; init; } = new Dictionary<string, int>();
     public bool CandyFeatureSeeded { get; init; }
+
+    public bool HasCollectedFinalForBase(int baseId) =>
+        CollectedFinals.Any(value => value.StartsWith($"{baseId}:", StringComparison.Ordinal));
 
     public bool OwnsSpecies(int speciesId)
     {

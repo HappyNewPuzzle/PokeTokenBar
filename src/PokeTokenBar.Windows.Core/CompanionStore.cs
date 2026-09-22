@@ -41,8 +41,10 @@ public sealed class CompanionStore
     public double GrowthDifficulty { get; private set; }
     public double ShopDifficulty { get; private set; }
     public long EggHatchThreshold => PokemonBalance.Scale(PokemonBalance.EggHatchThreshold, GrowthDifficulty);
-    public long StageThreshold(MonState mon) => PokemonBalance.Scale(
-        PokemonBalance.PhaseThreshold(mon.Rarity, mon.TotalForms, mon.StageIndex), GrowthDifficulty);
+    public long StageThreshold(MonState mon, double? difficulty = null) => PokemonBalance.Scale(
+        PokemonBalance.RepeatAdjustedThreshold(
+            PokemonBalance.PhaseThreshold(mon.Rarity, mon.TotalForms, mon.StageIndex), mon.HasGrowthBoost),
+        difficulty ?? GrowthDifficulty);
 
     /// <summary>Save both preferences and repriced credits before publishing either live multiplier.</summary>
     public async Task SaveDifficultyAsync(
@@ -60,8 +62,7 @@ public sealed class CompanionStore
             {
                 next = previous.Active is { } active
                     ? previous with { Active = active with { UsedAtStage = PokemonBalance.RescaleProgress(
-                        active.UsedAtStage, StageThreshold(active), PokemonBalance.Scale(
-                            PokemonBalance.PhaseThreshold(active.Rarity, active.TotalForms, active.StageIndex), growth)) } }
+                        active.UsedAtStage, StageThreshold(active), StageThreshold(active, growth)) } }
                     : previous with { EggUsage = PokemonBalance.RescaleProgress(
                         previous.EggUsage, EggHatchThreshold, PokemonBalance.Scale(PokemonBalance.EggHatchThreshold, growth)) };
                 _persistence.Save(next);
@@ -620,8 +621,7 @@ public sealed class CompanionStore
             }
 
             var weights = candidates
-                .Select(candidate => State.CollectedFinals.Any(value =>
-                        value.StartsWith($"{candidate.Id}:", StringComparison.Ordinal))
+                .Select(candidate => State.HasCollectedFinalForBase(candidate.Id)
                     ? Math.Max(1, candidate.CaptureRate / 2)
                     : Math.Max(1, candidate.CaptureRate))
                 .ToArray();
@@ -1086,6 +1086,7 @@ public sealed class CompanionStore
             TotalForms = plan.Count,
             IsShiny = isShiny,
             Nature = nature,
+            HasGrowthBoost = State.HasCollectedFinalForBase(line.BaseId),
             DittoDisguise = dittoDisguise,
         };
 

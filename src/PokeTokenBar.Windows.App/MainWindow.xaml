@@ -96,6 +96,21 @@
                                    Text="{Binding Companion.StageText, Mode=OneWay}"
                                    FontSize="11"
                                    Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                        <Border Margin="0,4,0,0" Padding="5,1" CornerRadius="3"
+                                HorizontalAlignment="Left" BorderThickness="1"
+                                BorderBrush="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Companion.HasGrowthBoost, Mode=OneWay}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <TextBlock Text="{Binding Texts.GrowthBoost, Mode=OneWay}" FontSize="11" />
+                        </Border>
                         <ProgressBar Margin="0,6,0,0"
                                      Height="5"
                                      Minimum="0"

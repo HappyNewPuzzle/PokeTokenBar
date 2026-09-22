@@ -142,6 +142,8 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
         ? CompanionDisplayTexts.Stage(stageIndex + 1, totalForms, IsFinalStage, Language)
         : null;
 
+    public bool HasGrowthBoost => _store.State.Active?.HasGrowthBoost == true;
+
     public double Progress
     {
         get
@@ -524,6 +526,7 @@ public sealed class CompanionViewModel : INotifyPropertyChanged, IDisposable
 
         OnPropertyChanged(nameof(RarityText));
         OnPropertyChanged(nameof(StageText));
+        OnPropertyChanged(nameof(HasGrowthBoost));
         OnPropertyChanged(nameof(Progress));
         OnPropertyChanged(nameof(ProgressText));
         OnPropertyChanged(nameof(StatusText));
