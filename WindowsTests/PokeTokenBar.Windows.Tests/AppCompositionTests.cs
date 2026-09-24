@@ -69,6 +69,8 @@ public sealed partial class AppCompositionTests
         Assert.NotNull(composition.ViewModel.Usage);
         Assert.NotNull(composition.ViewModel.Companion);
         Assert.NotNull(composition.ViewModel.Settings);
+        Assert.NotNull(composition.ViewModel.Economy.Detail);
+        Assert.False(composition.ViewModel.Economy.Detail.IsOpen);
         Assert.NotNull(composition.FloatingPet);
         var companionStore = GetPrivateField<CompanionStore>(
             composition.ViewModel.Companion,
@@ -222,11 +224,48 @@ public sealed partial class AppCompositionTests
                     typeof(ShopProductViewModel),
                     typeof(BagItemViewModel),
                     typeof(CollectionEntryViewModel),
+                    typeof(PokemonDetailStatRow),
+                    typeof(PokemonDetailMoveRow),
                 }.All(type => type.GetProperty(path) is null))
             {
                 AssertBindingPath(typeof(MainViewModel), path);
             }
         });
+    }
+
+    [Fact]
+    public void CollectionDetailBindingsKeepNavigationAndReadOnlyPresentationInsideFixedWindow()
+    {
+        var source = ReadRepositoryFile("src", "PokeTokenBar.Windows.App", "MainWindow.xaml");
+        var window = XDocument.Parse(source).Root!;
+        Assert.Equal("520", window.Attribute("Width")!.Value);
+        Assert.Equal("760", window.Attribute("Height")!.Value);
+        Assert.Equal("NoResize", window.Attribute("ResizeMode")!.Value);
+        var collection = window.Descendants().Single(e => e.Name.LocalName == "TabItem" &&
+            e.Attribute("Header")?.Value == "{Binding Texts.Collection, Mode=OneWay}");
+        var scrolls = collection.Descendants().Where(e => e.Name.LocalName == "ScrollViewer").ToArray();
+        Assert.Equal(2, scrolls.Length);
+        Assert.Contains("Economy.Detail.IsCollectionVisible", scrolls[0].Attribute("Visibility")!.Value);
+        Assert.Contains("Economy.Detail.IsOpen", scrolls[1].Attribute("Visibility")!.Value);
+        Assert.Equal("Auto", scrolls[1].Attribute("VerticalScrollBarVisibility")!.Value);
+        Assert.Equal("Disabled", scrolls[1].Attribute("HorizontalScrollBarVisibility")!.Value);
+        foreach (var command in new[] { "DetailsCommand", "SelectRepresentativeCommand", "Economy.ClearRepresentativeCommand",
+            "Economy.Detail.BackCommand", "Economy.Detail.RetryCommand", "Economy.Detail.RepresentCommand" })
+            Assert.Contains(collection.Descendants(), e => e.Attribute("Command")?.Value == $"{{Binding {command}, Mode=OneWay}}");
+        var selector = Assert.Single(collection.Descendants(), e => e.Name.LocalName == "ComboBox");
+        Assert.Equal("{Binding Economy.Detail.SelectedIndividual, Mode=TwoWay}", selector.Attribute("SelectedItem")!.Value);
+        Assert.NotNull(typeof(PokemonIndividualOption).GetProperty(selector.Attribute("DisplayMemberPath")!.Value));
+        foreach (var items in new[] { "Stats", "KnownMoves", "CompleteMoves" })
+            Assert.Contains(scrolls[1].Descendants(), e => e.Attribute("ItemsSource")?.Value == $"{{Binding Economy.Detail.{items}, Mode=OneWay}}");
+        Assert.Contains(scrolls[1].Descendants(), e =>
+            e.Attribute("Text")?.Value == "{Binding Economy.Detail.CompleteMovesTitle, Mode=OneWay}");
+        Assert.DoesNotContain("Binding Texts.CompleteMoveList", source);
+        Assert.Contains(scrolls[1].Descendants(), e => e.Name.LocalName == "AnimatedSpritePresenter" &&
+            e.Attribute("Presentation")?.Value == "{Binding Economy.Detail.Sprite, Mode=OneWay}");
+        Assert.Contains(scrolls[1].Descendants(), e => e.Name.LocalName == "ProgressBar" &&
+            e.Attribute("Value")?.Value == "{Binding StatValue, Mode=OneWay}" &&
+            e.Attribute("Maximum")?.Value == "{Binding ScaleMaximum, Mode=OneWay}");
+        Assert.Contains("DetailSprite.Dispose()", ReadRepositoryFile("src", "PokeTokenBar.Windows.App", "MainWindow.xaml.cs"));
     }
 
     [Fact]
@@ -345,6 +384,11 @@ public sealed partial class AppCompositionTests
         Assert.All(bindings, match =>
         {
             var path = match.Groups[1].Value;
+            if (path == "Economy.Detail.SelectedIndividual")
+            {
+                Assert.Contains("Mode=TwoWay", match.Value, StringComparison.Ordinal);
+                return;
+            }
             if (path is "Settings.DraftGrowthDifficulty" or "Settings.DraftShopDifficulty")
             {
                 // Sliders edit drafts; their adjacent percentage labels remain read-only.

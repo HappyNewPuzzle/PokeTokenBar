@@ -1,7 +1,25 @@
 namespace PokeTokenBar.Windows.Core;
 
+// Read-only presentation snapshot; active individuals are never inserted into Dex.
+public sealed record PokemonIndividual(PokemonProfile Profile, PokemonRarity Rarity,
+    PokemonNature? Nature, bool IsShiny, bool IsCurrent, bool IsReleased);
+
 public sealed partial class CompanionStore
 {
+    public IReadOnlyList<PokemonIndividual> GetPokemonIndividuals(int speciesId)
+    {
+        var state = State;
+        var individuals = new List<PokemonIndividual>();
+        if (state.Active is { Profile: { } profile } active && active.CurrentId == speciesId)
+            individuals.Add(new(profile, active.Rarity, active.Nature,
+                active.IsShiny && (active.DittoDisguise is null || active.DittoRevealed), true, false));
+        individuals.AddRange(state.Dex.Where(entry => entry.FinalId == speciesId && entry.Profile is not null)
+            .OrderByDescending(entry => entry.CaughtAt ?? entry.ReleasedAt)
+            .Select(entry => new PokemonIndividual(entry.Profile!, entry.Rarity, entry.Nature,
+                entry.IsShiny, false, entry.IsReleased)));
+        return individuals;
+    }
+
     private readonly IPokemonDetailProvider? _detailProvider;
     private readonly object _detailsLock = new();
     private readonly Dictionary<int, PokemonDetails> _details = [];

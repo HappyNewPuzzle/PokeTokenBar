@@ -28,6 +28,7 @@ public partial class MainWindow : Window, IDisposable
         Activated -= OnActivated;
         IsVisibleChanged -= OnVisibilityChanged;
         CompanionSprite.Dispose();
+        DetailSprite.Dispose();
     }
 
     private void OnActivated(object? sender, EventArgs e)

@@ -737,7 +737,19 @@
         </TabItem>
 
         <TabItem Header="{Binding Texts.Collection, Mode=OneWay}">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <TabItem.Resources>
+                <BooleanToVisibilityConverter x:Key="DetailVisibility" />
+                <DataTemplate x:Key="DetailMoveTemplate">
+                    <Grid Margin="0,3">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding MoveName, Mode=OneWay}" TextWrapping="Wrap" Margin="0,0,8,0" />
+                        <TextBlock Grid.Column="1" Text="{Binding MethodText, Mode=OneWay}" TextWrapping="Wrap" TextAlignment="Right" />
+                    </Grid>
+                </DataTemplate>
+            </TabItem.Resources>
+            <Grid>
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          Visibility="{Binding Economy.Detail.IsCollectionVisible, Mode=OneWay, Converter={StaticResource DetailVisibility}}">
                 <StackPanel Margin="28">
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -773,8 +785,12 @@
                                             <TextBlock Text="{Binding CaughtText, Mode=OneWay}"
                                                        Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
                                         </StackPanel>
-                                        <Button Grid.Column="1" Padding="10,4" Content="{Binding RepresentText, Mode=OneWay}"
-                                                Command="{Binding SelectRepresentativeCommand, Mode=OneWay}" />
+                                        <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                            <Button Padding="10,4" Content="{Binding RepresentText, Mode=OneWay}"
+                                                    Command="{Binding SelectRepresentativeCommand, Mode=OneWay}" />
+                                            <Button Margin="0,6,0,0" Padding="10,4" Content="{Binding DetailsText, Mode=OneWay}"
+                                                    Command="{Binding DetailsCommand, Mode=OneWay}" />
+                                        </StackPanel>
                                     </Grid>
                                 </Border>
                             </DataTemplate>
@@ -783,6 +799,87 @@
                     <TextBlock Text="{Binding Economy.ResultMessage, Mode=OneWay}" TextWrapping="Wrap" />
                 </StackPanel>
             </ScrollViewer>
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                          Visibility="{Binding Economy.Detail.IsOpen, Mode=OneWay, Converter={StaticResource DetailVisibility}}">
+                <StackPanel Margin="28">
+                    <Button Content="{Binding Texts.Back, Mode=OneWay}" Command="{Binding Economy.Detail.BackCommand, Mode=OneWay}"
+                            HorizontalAlignment="Left" Padding="12,5" />
+                    <Grid Margin="0,12">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="96" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <sprites:AnimatedSpritePresenter x:Name="DetailSprite" Width="82" Height="82" VerticalAlignment="Top"
+                            Presentation="{Binding Economy.Detail.Sprite, Mode=OneWay}" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="{Binding Economy.Detail.Name, Mode=OneWay}" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" />
+                            <TextBlock><Run Text="#" /><Run Text="{Binding Economy.Detail.SpeciesId, Mode=OneWay}" /></TextBlock>
+                            <TextBlock Text="{Binding Economy.Detail.RarityText, Mode=OneWay}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding Economy.Detail.ShinyText, Mode=OneWay}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding Economy.Detail.RoleText, Mode=OneWay}" TextWrapping="Wrap" />
+                            <Button Content="{Binding Economy.Detail.RepresentText, Mode=OneWay}" Command="{Binding Economy.Detail.RepresentCommand, Mode=OneWay}"
+                                    Margin="0,6,0,0" Padding="10,4" HorizontalAlignment="Left" />
+                        </StackPanel>
+                    </Grid>
+                    <StackPanel Visibility="{Binding Economy.Detail.HasMultipleIndividuals, Mode=OneWay, Converter={StaticResource DetailVisibility}}">
+                        <TextBlock Text="{Binding Texts.Individual, Mode=OneWay}" />
+                        <ComboBox ItemsSource="{Binding Economy.Detail.Individuals, Mode=OneWay}" DisplayMemberPath="Label"
+                                  SelectedItem="{Binding Economy.Detail.SelectedIndividual, Mode=TwoWay}" Margin="0,4,0,12" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding Texts.LoadingPokemonDetails, Mode=OneWay}" TextWrapping="Wrap" Margin="0,12"
+                               Visibility="{Binding Economy.Detail.IsLoading, Mode=OneWay, Converter={StaticResource DetailVisibility}}" />
+                    <StackPanel Margin="0,12" Visibility="{Binding Economy.Detail.HasError, Mode=OneWay, Converter={StaticResource DetailVisibility}}">
+                        <TextBlock Text="{Binding Texts.PokemonDetailsUnavailable, Mode=OneWay}" TextWrapping="Wrap" />
+                        <Button Content="{Binding Texts.Retry, Mode=OneWay}" Command="{Binding Economy.Detail.RetryCommand, Mode=OneWay}"
+                                Padding="12,5" Margin="0,8,0,0" HorizontalAlignment="Left" />
+                    </StackPanel>
+                    <StackPanel Visibility="{Binding Economy.Detail.HasIndividual, Mode=OneWay, Converter={StaticResource DetailVisibility}}">
+                        <WrapPanel>
+                            <StackPanel Margin="0,0,20,8"><TextBlock Text="{Binding Texts.Level, Mode=OneWay}" /><TextBlock Text="{Binding Economy.Detail.LevelText, Mode=OneWay}" FontWeight="SemiBold" /></StackPanel>
+                            <StackPanel Margin="0,0,20,8"><TextBlock Text="{Binding Texts.Gender, Mode=OneWay}" /><TextBlock Text="{Binding Economy.Detail.GenderText, Mode=OneWay}" FontWeight="SemiBold" /></StackPanel>
+                            <StackPanel Margin="0,0,0,8"><TextBlock Text="{Binding Texts.Nature, Mode=OneWay}" /><TextBlock Text="{Binding Economy.Detail.NatureText, Mode=OneWay}" FontWeight="SemiBold" /></StackPanel>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding Texts.Ability, Mode=OneWay}" />
+                        <TextBlock Text="{Binding Economy.Detail.AbilityText, Mode=OneWay}" TextWrapping="Wrap" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding Texts.HiddenAbility, Mode=OneWay}" TextWrapping="Wrap"
+                                   Visibility="{Binding Economy.Detail.HasHiddenAbility, Mode=OneWay, Converter={StaticResource DetailVisibility}}" />
+                    </StackPanel>
+                    <StackPanel Margin="0,14,0,0" Visibility="{Binding Economy.Detail.HasDetails, Mode=OneWay, Converter={StaticResource DetailVisibility}}">
+                        <TextBlock Text="{Binding Economy.Detail.StatsTitle, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <ItemsControl ItemsSource="{Binding Economy.Detail.Stats, Mode=OneWay}">
+                            <ItemsControl.ItemTemplate><DataTemplate>
+                                <StackPanel Margin="0,5">
+                                    <TextBlock Text="{Binding StatName, Mode=OneWay}" TextWrapping="Wrap" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="48" /><ColumnDefinition Width="48" /></Grid.ColumnDefinitions>
+                                        <ProgressBar Minimum="0" Maximum="{Binding ScaleMaximum, Mode=OneWay}" Value="{Binding StatValue, Mode=OneWay}" Height="8" />
+                                        <TextBlock Grid.Column="1" Text="{Binding StatValue, Mode=OneWay}" TextAlignment="Right" />
+                                        <TextBlock Grid.Column="2" Text="{Binding IvText, Mode=OneWay}" TextAlignment="Right" />
+                                    </Grid>
+                                </StackPanel>
+                            </DataTemplate></ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                    <StackPanel Margin="0,14,0,0" Visibility="{Binding Economy.Detail.HasIndividual, Mode=OneWay, Converter={StaticResource DetailVisibility}}">
+                        <TextBlock Text="{Binding Texts.KnownMoves, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <ItemsControl ItemsSource="{Binding Economy.Detail.KnownMoves, Mode=OneWay}" ItemTemplate="{StaticResource DetailMoveTemplate}" />
+                        <TextBlock Text="{Binding Texts.NoLevelMoves, Mode=OneWay}" TextWrapping="Wrap"
+                                   Visibility="{Binding Economy.Detail.HasNoKnownMoves, Mode=OneWay, Converter={StaticResource DetailVisibility}}" />
+                    </StackPanel>
+                    <StackPanel Margin="0,14,0,0" Visibility="{Binding Economy.Detail.HasDetails, Mode=OneWay, Converter={StaticResource DetailVisibility}}">
+                        <TextBlock Text="{Binding Texts.SpeciesData, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Texts.Types, Mode=OneWay}" Margin="0,8,0,0" />
+                        <TextBlock Text="{Binding Economy.Detail.TypesText, Mode=OneWay}" TextWrapping="Wrap" />
+                        <WrapPanel Margin="0,8">
+                            <StackPanel Margin="0,0,20,8"><TextBlock Text="{Binding Texts.Height, Mode=OneWay}" /><TextBlock Text="{Binding Economy.Detail.HeightText, Mode=OneWay}" /></StackPanel>
+                            <StackPanel Margin="0,0,20,8"><TextBlock Text="{Binding Texts.Weight, Mode=OneWay}" /><TextBlock Text="{Binding Economy.Detail.WeightText, Mode=OneWay}" /></StackPanel>
+                            <StackPanel Margin="0,0,0,8"><TextBlock Text="{Binding Texts.BaseTotal, Mode=OneWay}" /><TextBlock Text="{Binding Economy.Detail.BaseStatTotal, Mode=OneWay}" /></StackPanel>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding Texts.PossibleAbilities, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Economy.Detail.PossibleAbilitiesText, Mode=OneWay}" TextWrapping="Wrap" Margin="0,4,0,14" />
+                        <TextBlock Text="{Binding Economy.Detail.CompleteMovesTitle, Mode=OneWay}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <ItemsControl ItemsSource="{Binding Economy.Detail.CompleteMoves, Mode=OneWay}" ItemTemplate="{StaticResource DetailMoveTemplate}" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+            </Grid>
         </TabItem>
     </TabControl>
 </Window>

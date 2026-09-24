@@ -39,6 +39,7 @@ public sealed class MainViewModel : IDisposable
 
         _disposed = true;
         Support?.Dispose();
+        Economy.Detail.Dispose();
         Companion.Dispose();
     }
 }

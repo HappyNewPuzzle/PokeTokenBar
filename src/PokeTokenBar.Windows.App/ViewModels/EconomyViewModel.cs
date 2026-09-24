@@ -2,7 +2,9 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using PokeTokenBar.Windows.App.Commands;
+using PokeTokenBar.Windows.App.Sprites;
 using PokeTokenBar.Windows.Core;
+using PokeTokenBar.Windows.Infrastructure;
 
 namespace PokeTokenBar.Windows.App.ViewModels;
 
@@ -20,12 +22,17 @@ public sealed class EconomyViewModel : INotifyPropertyChanged
     public EconomyViewModel(
         CompanionStore store,
         Func<CancellationToken, Task> refreshCompanion,
-        LocalizationService? localization = null)
+        LocalizationService? localization = null,
+        PokemonSpriteLoader? spriteLoader = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _refreshCompanion = refreshCompanion ?? throw new ArgumentNullException(nameof(refreshCompanion));
         _localization = localization ?? new LocalizationService(AppLanguage.En);
         ClearRepresentativeCommand = new AsyncCommand(ClearRepresentativeAsync);
+        Detail = new PokemonDetailViewModel(_store, _localization,
+            (id, shiny, token) => spriteLoader?.LoadAsync(id, preferAnimated: true, shiny, token)
+                ?? Task.FromResult<PokemonSpriteAsset?>(null),
+            new WpfPokemonSpriteDecoder(), SelectRepresentativeAsync);
         Refresh();
     }
 
@@ -58,6 +65,7 @@ public sealed class EconomyViewModel : INotifyPropertyChanged
     }
 
     public AsyncCommand ClearRepresentativeCommand { get; }
+    public PokemonDetailViewModel Detail { get; }
 
     public void Refresh()
     {
@@ -83,6 +91,7 @@ public sealed class EconomyViewModel : INotifyPropertyChanged
                 _localization.Use,
                 token => UseAsync(item.Kind, token))).ToArray());
         CollectionEntries = new ReadOnlyCollection<CollectionEntryViewModel>(BuildCollection().ToArray());
+        Detail.RefreshPresentation(CollectionEntries.FirstOrDefault(entry => entry.SpeciesId == Detail.SpeciesId)?.Name);
         OnPropertyChanged(nameof(BalanceText));
         if (_resultText is not null) ResultMessage = _resultText(_localization);
         ClearRepresentativeCommand.RaiseCanExecuteChanged();
@@ -178,7 +187,8 @@ public sealed class EconomyViewModel : INotifyPropertyChanged
                     active.Nature,
                     speciesId == active.CurrentId,
                     null,
-                    false);
+                    false,
+                    speciesId == active.CurrentId ? active.Profile?.InstanceId : null);
             }
         }
 
@@ -191,7 +201,8 @@ public sealed class EconomyViewModel : INotifyPropertyChanged
                     : $"#{speciesId}";
                 yield return Collection(
                     speciesId, name, entry.Rarity, entry.IsShiny, entry.Nature, false, entry.CaughtAt,
-                    entry.IsReleased);
+                    entry.IsReleased,
+                    speciesId == entry.FinalId ? entry.Profile?.InstanceId : null);
             }
         }
     }
@@ -204,7 +215,8 @@ public sealed class EconomyViewModel : INotifyPropertyChanged
         PokemonNature? nature,
         bool current,
         DateTimeOffset? caughtAt,
-        bool released) => new(
+        bool released,
+        string? preferredInstanceId) => new(
             speciesId,
             name,
             CompanionDisplayTexts.Rarity(rarity, _localization.Language),
@@ -221,7 +233,9 @@ public sealed class EconomyViewModel : INotifyPropertyChanged
                     ? _localization.Representative : _localization.Caught,
             caughtAt is DateTimeOffset caught ? _localization.LocalDate(caught) : null,
             _localization.Represent,
-            token => SelectRepresentativeAsync(speciesId, token));
+            token => SelectRepresentativeAsync(speciesId, token),
+            _localization.Details,
+            _ => Detail.OpenAsync(speciesId, name, rarity, shiny, preferredInstanceId));
 
     private string ProductName(ShopProduct product) => product.ProductKind switch
     {
@@ -336,7 +350,9 @@ public sealed class CollectionEntryViewModel
         string roleText,
         string? caughtText,
         string representText,
-        Func<CancellationToken, Task> selectRepresentative)
+        Func<CancellationToken, Task> selectRepresentative,
+        string detailsText,
+        Func<CancellationToken, Task> openDetails)
     {
         SpeciesId = speciesId;
         Name = name;
@@ -351,6 +367,8 @@ public sealed class CollectionEntryViewModel
         CaughtText = caughtText;
         RepresentText = representText;
         SelectRepresentativeCommand = new AsyncCommand(selectRepresentative);
+        DetailsText = detailsText;
+        DetailsCommand = new AsyncCommand(openDetails);
     }
 
     public int SpeciesId { get; }
@@ -366,4 +384,6 @@ public sealed class CollectionEntryViewModel
     public string RoleText { get; }
     public string? CaughtText { get; }
     public AsyncCommand SelectRepresentativeCommand { get; }
+    public string DetailsText { get; }
+    public AsyncCommand DetailsCommand { get; }
 }

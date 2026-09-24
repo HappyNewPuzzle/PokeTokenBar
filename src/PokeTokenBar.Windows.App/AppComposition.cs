@@ -76,7 +76,7 @@ public static class AppComposition
             spriteLoader,
             new WpfPokemonSpriteDecoder());
         var economy = new EconomyViewModel(
-            companionStore, companion.RefreshAsync, settings.Localization);
+            companionStore, companion.RefreshAsync, settings.Localization, spriteLoader);
         settings.DifficultySaved += (_, _) =>
         {
             companion.RefreshPresentation();
