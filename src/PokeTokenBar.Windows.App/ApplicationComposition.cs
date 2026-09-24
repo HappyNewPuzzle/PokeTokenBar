@@ -48,6 +48,7 @@ public sealed class ApplicationComposition : IDisposable
         UsageCompanion.Dispose();
         FloatingPet.Dispose();
         ViewModel.Dispose();
+        CompanionStore.Dispose();
         _httpClient.Dispose();
     }
 }

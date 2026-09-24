@@ -1,6 +1,6 @@
 namespace PokeTokenBar.Windows.Core;
 
-public sealed class CompanionStore
+public sealed partial class CompanionStore : IDisposable
 {
     private readonly IPokeApiClient _provider;
     private readonly ICompanionPersistence _persistence;
@@ -17,9 +17,11 @@ public sealed class CompanionStore
         Random? random = null,
         TimeProvider? timeProvider = null,
         bool dittoDisguiseRollingEnabled = false,
-        IAppSettingsPersistence? settingsPersistence = null)
+        IAppSettingsPersistence? settingsPersistence = null,
+        IPokemonDetailProvider? detailProvider = null)
     {
         _provider = provider ?? throw new ArgumentNullException(nameof(provider));
+        _detailProvider = detailProvider ?? provider as IPokemonDetailProvider;
         _persistence = persistence ?? throw new ArgumentNullException(nameof(persistence));
         _random = random ?? Random.Shared;
         _timeProvider = timeProvider ?? TimeProvider.System;
@@ -30,6 +32,13 @@ public sealed class CompanionStore
         GrowthDifficulty = PokemonBalance.ClampDifficulty(settings?.GrowthDifficulty ?? 1.0);
         ShopDifficulty = PokemonBalance.ClampDifficulty(settings?.ShopDifficulty ?? 1.0);
         State = NormalizeState(TryLoad() ?? new CompanionState());
+        var migrated = PokemonProfileMigration.Migrate(State, GrowthDifficulty);
+        if (!ReferenceEquals(migrated, State))
+        {
+            State = migrated;
+            try { _persistence.SaveProfileMigration(State); }
+            catch (Exception) { /* Keep deterministic in-memory profiles; persistence retains the original. */ }
+        }
         DisplayState = State.Active is null
             ? CompanionStateKind.Egg
             : CompanionStateKind.Idle;
@@ -41,10 +50,8 @@ public sealed class CompanionStore
     public double GrowthDifficulty { get; private set; }
     public double ShopDifficulty { get; private set; }
     public long EggHatchThreshold => PokemonBalance.Scale(PokemonBalance.EggHatchThreshold, GrowthDifficulty);
-    public long StageThreshold(MonState mon, double? difficulty = null) => PokemonBalance.Scale(
-        PokemonBalance.RepeatAdjustedThreshold(
-            PokemonBalance.PhaseThreshold(mon.Rarity, mon.TotalForms, mon.StageIndex), mon.HasGrowthBoost),
-        difficulty ?? GrowthDifficulty);
+    public long StageThreshold(MonState mon, double? difficulty = null) =>
+        PokemonBalance.StageThreshold(mon, difficulty ?? GrowthDifficulty);
 
     /// <summary>Save both preferences and repriced credits before publishing either live multiplier.</summary>
     public async Task SaveDifficultyAsync(
@@ -128,6 +135,7 @@ public sealed class CompanionStore
         {
             IsHatching = false;
             _mutationGate.Release();
+            QueueActiveDetails();
         }
     }
 
@@ -151,6 +159,7 @@ public sealed class CompanionStore
         {
             IsHatching = false;
             _mutationGate.Release();
+            QueueActiveDetails();
         }
     }
 
@@ -177,6 +186,7 @@ public sealed class CompanionStore
         finally
         {
             _mutationGate.Release();
+            QueueActiveDetails();
         }
     }
 
@@ -362,6 +372,7 @@ public sealed class CompanionStore
         finally
         {
             _mutationGate.Release();
+            QueueActiveDetails();
         }
     }
 
@@ -558,41 +569,51 @@ public sealed class CompanionStore
         finally
         {
             _mutationGate.Release();
+            QueueActiveDetails();
         }
     }
 
     public bool SetRepresentativeSpeciesId(int? speciesId)
     {
-        if (speciesId is int selected && !State.OwnsSpecies(selected))
+        lock (_detailsLock)
         {
-            return false;
-        }
+            if (speciesId is int selected && !State.OwnsSpecies(selected))
+            {
+                return false;
+            }
 
-        State = State with { RepresentativeSpeciesId = speciesId };
-        RefreshRepresentativeSubject();
-        TrySave();
-        return true;
+            State = State with { RepresentativeSpeciesId = speciesId };
+            RefreshRepresentativeSubject();
+            TrySave();
+            return true;
+        }
     }
 
     public void SetLanguage(AppLanguage language)
     {
-        State = State with { Language = language };
-        TrySave();
+        lock (_detailsLock)
+        {
+            State = State with { Language = language };
+            TrySave();
+        }
     }
 
     public void Reset()
     {
-        State = new CompanionState();
-        CurrentLine = null;
-        DisplayState = CompanionStateKind.Egg;
-        RefreshRepresentativeSubject();
-        try
+        lock (_detailsLock)
         {
-            _persistence.Delete();
-        }
-        catch (Exception)
-        {
-            // Swift's save/delete boundary is best effort; memory state remains usable.
+            State = new CompanionState();
+            CurrentLine = null;
+            DisplayState = CompanionStateKind.Egg;
+            RefreshRepresentativeSubject();
+            try
+            {
+                _persistence.Delete();
+            }
+            catch (Exception)
+            {
+                // Swift's save/delete boundary is best effort; memory state remains usable.
+            }
         }
     }
 
@@ -741,6 +762,7 @@ public sealed class CompanionStore
 
         active = active with { UsedAtStage = AddClamped(active.UsedAtStage, delta) };
         State = State with { Active = active };
+        ReconcileProfileGrowth();
         if (CurrentLine is null)
         {
             TrySave();
@@ -806,11 +828,13 @@ public sealed class CompanionStore
                     StageIndex = nextIndex,
                     UsedAtStage = current.UsedAtStage - threshold,
                     TotalForms = planned.Count,
+                    Profile = current.Profile is { } profile ? profile with { AbilityName = null, Moves = [] } : null,
                 },
             };
             DisplayState = CompanionStateKind.LevelUp;
         }
 
+        ReconcileProfileGrowth();
         if (save)
         {
             TrySave();
@@ -864,6 +888,7 @@ public sealed class CompanionStore
                 Rarity = dittoLine.Rarity,
                 TotalForms = plan.Count,
                 DittoRevealed = true,
+                Profile = disguise.Profile?.RebaseSpecies(disguise.Rarity, dittoLine.Rarity),
             },
         };
         ReconcileRepresentativeSelection();
@@ -963,6 +988,8 @@ public sealed class CompanionStore
 
     private void GraduateCore(MonState active)
     {
+        active = active with { Profile = EnrichCached(active.CurrentId,
+            active.Profile?.AdvanceGrowth(PokemonBalance.GraduationTotal(active.Rarity), active.Rarity)) };
         var finalId = active.CurrentId;
         var collected = new HashSet<string>(State.CollectedFinals, StringComparer.Ordinal)
         {
@@ -975,6 +1002,7 @@ public sealed class CompanionStore
                 .ToDictionary(id => id, id => CurrentLine.Names[id]);
         var dex = State.Dex.Append(new DexEntry
         {
+            Profile = active.Profile,
             BaseId = active.BaseId,
             FinalId = finalId,
             ChainOrder = active.PathIds,
@@ -1012,6 +1040,7 @@ public sealed class CompanionStore
         var now = _timeProvider.GetUtcNow();
         return new DexEntry
         {
+            Profile = active.Profile,
             BaseId = active.BaseId,
             FinalId = chain[^1],
             ChainOrder = chain,
@@ -1087,6 +1116,7 @@ public sealed class CompanionStore
             IsShiny = isShiny,
             Nature = nature,
             HasGrowthBoost = State.HasCollectedFinalForBase(line.BaseId),
+            Profile = EnrichCached(line.BaseId, PokemonProfile.Create()),
             DittoDisguise = dittoDisguise,
         };
 

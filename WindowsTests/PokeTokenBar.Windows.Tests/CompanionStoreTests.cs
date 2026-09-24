@@ -53,12 +53,14 @@ public sealed class CompanionStoreTests
         var store = new CompanionStore(
             new FakeApi { Error = new HttpRequestException("offline") },
             persistence);
+        var before = store.State.Active;
+        var savesBefore = persistence.SaveCount;
 
         Assert.False(await store.HatchAsync(1));
 
-        Assert.Equal(original.Active, store.State.Active);
+        Assert.Same(before, store.State.Active);
         Assert.Equal(4, store.CurrentSpeciesId);
-        Assert.Null(persistence.Saved);
+        Assert.Equal(savesBefore, persistence.SaveCount);
     }
 
     [Fact]
@@ -158,12 +160,14 @@ public sealed class CompanionStoreTests
     {
         var persistence = new FakePersistence { Loaded = StateWithActive(1) };
         var store = new CompanionStore(new FakeApi(), persistence);
+        var savesBefore = persistence.SaveCount;
 
         Assert.False(store.SetRepresentativeSpeciesId(999));
+        Assert.Equal(savesBefore, persistence.SaveCount);
         Assert.True(store.SetRepresentativeSpeciesId(1));
 
         Assert.Equal(1, store.RepresentativeSubject.SpeciesId);
-        Assert.Equal(1, persistence.SaveCount);
+        Assert.Equal(savesBefore + 1, persistence.SaveCount);
     }
 
     [Fact]

@@ -6,7 +6,7 @@ namespace PokeTokenBar.Windows.Infrastructure;
 public sealed class StateTransferService
 {
     public const string FormatId = "poketokenbar.save";
-    public const int FormatVersion = 1;
+    public const int FormatVersion = 2;
     public const int MaxFileBytes = 8 * 1024 * 1024;
     public const long MaxTokenValue = 1_000_000_000_000_000;
 
@@ -46,6 +46,7 @@ public sealed class StateTransferService
     {
         var state = _companion.Load() ?? new CompanionState();
         var settings = _settings.Load() ?? AppSettings.Default;
+        state = PokemonProfileMigration.Migrate(state, settings.GrowthDifficulty);
         return JsonSerializer.SerializeToUtf8Bytes(new Envelope(
             FormatId,
             FormatVersion,
@@ -75,7 +76,8 @@ public sealed class StateTransferService
         var candidate = Decode(data);
         var currentState = _companion.Load() ?? new CompanionState();
         var currentSettings = _settings.Load() ?? AppSettings.Default;
-        var importedState = Rebase(candidate.State, currentState, todayTokensByProvider,
+        var migrated = PokemonProfileMigration.Migrate(candidate.State, candidate.Settings?.GrowthDifficulty ?? currentSettings.GrowthDifficulty);
+        var importedState = Rebase(migrated, currentState, todayTokensByProvider,
             todayDate ?? DateTimeOffset.Now.ToString("yyyy-MM-dd"), hasUsageData);
         var importedSettings = (candidate.Settings ?? currentSettings) with
         {
@@ -93,6 +95,11 @@ public sealed class StateTransferService
         try
         {
             WriteBackup(Export());
+            if (!ReferenceEquals(migrated, candidate.State))
+            {
+                using var original = JsonDocument.Parse(data.ToArray());
+                _companion.BackupPreProfiles(System.Text.Encoding.UTF8.GetBytes(original.RootElement.GetProperty("state").GetRawText()));
+            }
         }
         catch (Exception exception)
         {
@@ -139,6 +146,7 @@ public sealed class StateTransferService
                 !root.TryGetProperty("schema", out version))
                 throw Invalid();
             var formatVersion = version.GetInt32();
+            if (formatVersion < 1) throw Invalid();
             if (formatVersion > FormatVersion)
                 throw new StateTransferException(StateTransferError.NewerFormat,
                     $"Save format {formatVersion} requires a newer PokeTokenBar.");

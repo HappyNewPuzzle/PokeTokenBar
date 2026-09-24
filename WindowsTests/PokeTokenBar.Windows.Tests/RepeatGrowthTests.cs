@@ -259,7 +259,7 @@ public sealed class RepeatGrowthTests : IDisposable
             envelope["state"]!["active"]!.AsObject().Remove("hasGrowthBoost");
             data = Encoding.UTF8.GetBytes(envelope.ToJsonString());
         }
-        Assert.Equal(1, transfer.Preview(data).FormatVersion);
+        Assert.Equal(2, transfer.Preview(data).FormatVersion);
         persistence.Save(Seed());
         transfer.Import(data, new Dictionary<string, long> { ["test"] = 0 }, Date, hasUsageData: true);
         var imported = new CompanionStore(new Api(), new JsonCompanionPersistence(persistence.FilePath));

@@ -511,8 +511,9 @@ public sealed class CompanionEconomyTests
     [Fact]
     public async Task PremiumEgg_PersistenceFailureRollsBackThenRetryCreatesOneRelease()
     {
-        var persistence = new MemoryPersistence(ActiveState(used: 5_000_000_000)) { FailNextSave = true };
+        var persistence = new MemoryPersistence(ActiveState(used: 5_000_000_000));
         var store = Create(persistence: persistence);
+        persistence.FailNextSave = true; // Fail the purchase, not the one-time legacy profile migration.
         var before = store.State;
         Assert.Equal(PurchaseResult.PersistenceFailed, await store.PurchaseAsync("egg.rare"));
         Assert.Same(before, store.State);

@@ -181,6 +181,9 @@ public static class PokemonBalance
             ? (long)Math.Round(standardThreshold / 2d, MidpointRounding.AwayFromZero)
             : standardThreshold);
 
+    public static long StageThreshold(MonState mon, double difficulty) => Scale(
+        RepeatAdjustedThreshold(PhaseThreshold(mon.Rarity, mon.TotalForms, mon.StageIndex), mon.HasGrowthBoost), difficulty);
+
     // Decimal arithmetic keeps whole-token credits stable at threshold boundaries.
     public static long RescaleProgress(long credits, long oldThreshold, long newThreshold)
     {
@@ -303,6 +306,7 @@ public sealed record MonState
     public bool IsShiny { get; init; }
     public PokemonNature? Nature { get; init; }
     public bool HasGrowthBoost { get; init; }
+    public PokemonProfile? Profile { get; init; }
     public int? DittoDisguise { get; init; }
     public bool DittoRevealed { get; init; }
 
@@ -315,6 +319,7 @@ public sealed record MonState
 
 public sealed record DexEntry
 {
+    public PokemonProfile? Profile { get; init; }
     public string Id { get; init; } = Guid.NewGuid().ToString();
 
     [JsonPropertyName("baseID")]

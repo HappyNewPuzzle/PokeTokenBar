@@ -75,7 +75,7 @@ public sealed class Phase6ProductionizationTests : IDisposable
         companion.Save(State(42, 7));
         var data = service.Export();
         var json = Encoding.UTF8.GetString(data);
-        Assert.Contains("\"schema\": 1", json);
+        Assert.Contains("\"schema\": 2", json);
         Assert.Contains("\"exportedAt\"", json);
         settings.Save(AppSettings.Default);
         companion.Save(new CompanionState());
@@ -121,8 +121,9 @@ public sealed class Phase6ProductionizationTests : IDisposable
     public void StateTransfer_RejectsFutureFormat()
     {
         var service = Transfer(out _, out _);
-        var data = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(service.Export()).Replace(
-            "\"schema\": 1", "\"schema\": 99"));
+        var envelope = JsonNode.Parse(service.Export())!;
+        envelope["schema"] = 99;
+        var data = Encoding.UTF8.GetBytes(envelope.ToJsonString());
         Assert.Equal(StateTransferError.NewerFormat,
             Assert.Throws<StateTransferException>(() => service.Preview(data)).Reason);
     }

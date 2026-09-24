@@ -6,7 +6,7 @@ using PokeTokenBar.Windows.Core;
 
 namespace PokeTokenBar.Windows.Infrastructure;
 
-public sealed class PokeApiClient : IPokeApiClient
+public sealed partial class PokeApiClient : IPokeApiClient, IPokemonDetailProvider
 {
     private static readonly Uri RestBaseUri = new("https://pokeapi.co/api/v2/");
     private static readonly Uri GraphQlUri = new("https://graphql.pokeapi.co/v1beta2");
@@ -30,12 +30,15 @@ public sealed class PokeApiClient : IPokeApiClient
         HttpClient httpClient,
         TimeSpan? requestTimeout = null,
         string? baseIndexCachePath = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        string? detailsCacheDirectory = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _requestTimeout = requestTimeout ?? TimeSpan.FromSeconds(15);
         _baseIndexCachePath = baseIndexCachePath ?? GetDefaultBaseIndexCachePath();
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _detailsCacheDirectory = detailsCacheDirectory ?? Path.Combine(
+            baseIndexCachePath is null ? PokeTokenBarDataPaths.Root : Path.GetDirectoryName(Path.GetFullPath(baseIndexCachePath))!, "pokemon-details-v1");
         if (_requestTimeout <= TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(nameof(requestTimeout));

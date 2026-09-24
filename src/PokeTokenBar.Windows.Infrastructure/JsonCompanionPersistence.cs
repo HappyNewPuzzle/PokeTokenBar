@@ -22,6 +22,36 @@ public sealed class JsonCompanionPersistence : ICompanionPersistence
 
     internal void BlockWritesUntilRestart() => _writeBlocked = true;
 
+    public string PreProfilesBackupPath => Path.Combine(Path.GetDirectoryName(FilePath)!, "companion-state.pre-profiles-v1.json");
+
+    internal void BackupPreProfiles(byte[] original)
+    {
+        if (File.Exists(PreProfilesBackupPath)) return;
+        var temporary = PreProfilesBackupPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            AtomicFile.WriteBytes(temporary, original);
+            File.Move(temporary, PreProfilesBackupPath, overwrite: false);
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+
+    public void SaveProfileMigration(CompanionState state)
+    {
+        if (_writeBlocked) throw new IOException("Companion migration is blocked until restart.");
+        try
+        {
+            if (File.Exists(FilePath) && !File.Exists(PreProfilesBackupPath))
+                BackupPreProfiles(File.ReadAllBytes(FilePath));
+        }
+        catch (Exception)
+        {
+            _writeBlocked = true; // Never overwrite the original after a failed safety backup.
+            throw;
+        }
+        Save(state);
+    }
+
     public static string GetDefaultFilePath()
     {
         return Path.Combine(PokeTokenBarDataPaths.Root, "companion-state.json");
@@ -232,6 +262,8 @@ public sealed class JsonCompanionPersistence : ICompanionPersistence
                 var entry = element.Deserialize<DexEntry>(SerializerOptions);
                 if (entry?.ChainOrder is { Count: > 0 })
                 {
+                    if (!element.TryGetProperty("id", out _) || string.IsNullOrWhiteSpace(entry.Id))
+                        entry = entry with { Id = PokemonProfileMigration.FromKey($"dex:{entries.Count}:{element.GetRawText()}").InstanceId };
                     entries.Add(entry);
                 }
             }
@@ -306,7 +338,29 @@ public sealed class JsonCompanionPersistence : ICompanionPersistence
         };
         options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
         options.Converters.Add(new AppleReferenceDateTimeOffsetConverter());
+        options.Converters.Add(new ProfileConverter(new JsonSerializerOptions(options)));
         return options;
+    }
+
+    private sealed class ProfileConverter(JsonSerializerOptions rawOptions) : JsonConverter<PokemonProfile>
+    {
+        public override PokemonProfile? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            // Consume the complete nested value before attempting a typed decode. Failure stays profile-local.
+            using var document = JsonDocument.ParseValue(ref reader);
+            try
+            {
+                if (document.RootElement.ValueKind != JsonValueKind.Object ||
+                    !document.RootElement.TryGetProperty("seed", out _) ||
+                    !document.RootElement.TryGetProperty("ivs", out _)) return null;
+                var profile = document.RootElement.Deserialize<PokemonProfile>(rawOptions);
+                return profile?.IVs is null || profile.Moves is null ? null : profile.Sanitize();
+            }
+            catch (JsonException) { return null; }
+        }
+
+        public override void Write(Utf8JsonWriter writer, PokemonProfile value, JsonSerializerOptions options) =>
+            JsonSerializer.Serialize(writer, value, rawOptions);
     }
 
     private sealed class AppleReferenceDateTimeOffsetConverter : JsonConverter<DateTimeOffset>
