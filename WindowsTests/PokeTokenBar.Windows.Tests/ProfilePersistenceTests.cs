@@ -90,6 +90,88 @@ public sealed class ProfilePersistenceTests : IDisposable
     }
 
     [Fact]
+    public void MixedLegacyProfilesPreserveValidIndividualsAndRepairOnlyMissingOrMalformedProfiles()
+    {
+        var options = JsonCompanionPersistence.SerializerOptions;
+        var activeProfile = new PokemonProfile
+        {
+            InstanceId = "active-individual", Seed = 123456, IVs = new(1, 7, 13, 19, 25, 31),
+            Level = 36, GrowthTokens = 250_000_000, Gender = PokemonGender.Female,
+            AbilitySlot = 1, AbilityName = "overgrow", Moves = [new("tackle", 1), new("vine-whip", 7)],
+        };
+        var dexProfile = activeProfile with
+        {
+            InstanceId = "dex-individual", Seed = 987654, IVs = new(31, 25, 19, 13, 7, 1),
+            Level = 100, GrowthTokens = 750_000_000, Gender = PokemonGender.Male,
+            AbilitySlot = 3, AbilityName = "chlorophyll", AbilityIsHidden = true,
+        };
+        var legacy = State(Mon(stage: 1) with { Profile = activeProfile }) with
+        {
+            Dex = [new() { Id = "valid", BaseId = 1, FinalId = 3, ChainOrder = [1, 2, 3], Profile = dexProfile },
+                new() { Id = "missing", BaseId = 10, FinalId = 12, ChainOrder = [10, 11, 12] },
+                new() { Id = "malformed", BaseId = 13, FinalId = 15, ChainOrder = [13, 14, 15] }],
+        };
+        var json = JsonSerializer.SerializeToNode(legacy, options)!;
+        var validDexJson = json["dex"]![0]!["profile"]!.AsObject();
+        validDexJson.Remove("instanceID");
+        validDexJson["instanceId"] = dexProfile.InstanceId; // Legacy Windows casing, not a new identity.
+        json["dex"]![1]!.AsObject().Remove("profile");
+        json["dex"]![2]!["profile"] = JsonNode.Parse("""{"seed":1,"ivs":{"hp":"bad"}}""");
+        var original = json.ToJsonString();
+        var persistence = new JsonCompanionPersistence(PathFor("companion-state.json"));
+        Write(persistence.FilePath, original);
+
+        var raw = persistence.Load()!;
+        AssertProfile(activeProfile, raw.Active!.Profile);
+        AssertProfile(dexProfile, raw.Dex[0].Profile);
+        Assert.Null(raw.Dex[1].Profile);
+        Assert.Null(raw.Dex[2].Profile);
+
+        using var store = new CompanionStore(new Api(), persistence, settingsPersistence: new Settings(1));
+        var migrated = store.State;
+        AssertProfile(activeProfile, migrated.Active!.Profile);
+        AssertProfile(dexProfile, migrated.Dex[0].Profile);
+        Assert.Equal(JsonSerializer.Serialize(legacy.Dex.Select(entry => entry with { Profile = null }), options),
+            JsonSerializer.Serialize(migrated.Dex.Select(entry => entry with { Profile = null }), options));
+        foreach (var entry in migrated.Dex.Skip(1))
+        {
+            var repaired = Assert.IsType<PokemonProfile>(entry.Profile);
+            Assert.False(string.IsNullOrWhiteSpace(repaired.InstanceId));
+            Assert.Equal(repaired.IVs.Sanitize(), repaired.IVs);
+            Assert.InRange(repaired.Level, 5, 100);
+        }
+        Assert.Equal(original, File.ReadAllText(persistence.PreProfilesBackupPath));
+        var saved = File.ReadAllBytes(persistence.FilePath);
+        using (var document = JsonDocument.Parse(saved))
+        {
+            var profile = document.RootElement.GetProperty("dex")[0].GetProperty("profile");
+            Assert.Equal(dexProfile.InstanceId, profile.GetProperty("instanceID").GetString());
+            Assert.False(profile.TryGetProperty("instanceId", out _));
+        }
+
+        using var restart = new CompanionStore(new Api(), new JsonCompanionPersistence(persistence.FilePath),
+            settingsPersistence: new Settings(1));
+        Assert.Equal(JsonSerializer.Serialize(migrated, options), JsonSerializer.Serialize(restart.State, options));
+        Assert.Equal(saved, File.ReadAllBytes(persistence.FilePath));
+
+        // Independently migrate the original bytes: repair must not depend on random identity generation.
+        var duplicatePath = PathFor("second.json");
+        Write(duplicatePath, original);
+        using var sameLegacy = new CompanionStore(new Api(), new JsonCompanionPersistence(duplicatePath),
+            settingsPersistence: new Settings(1));
+        Assert.Equal(JsonSerializer.Serialize(migrated, options), JsonSerializer.Serialize(sameLegacy.State, options));
+
+        void AssertProfile(PokemonProfile expected, PokemonProfile? actual)
+        {
+            Assert.NotNull(actual);
+            Assert.Equal(expected.InstanceId, actual.InstanceId);
+            Assert.Equal(expected.Seed, actual.Seed);
+            Assert.Equal(expected.IVs, actual.IVs);
+            Assert.Equal(JsonSerializer.Serialize(expected, options), JsonSerializer.Serialize(actual, options));
+        }
+    }
+
+    [Fact]
     public void FreshInstallsAndProfileAwareStatesNeedNoMigrationBackup()
     {
         var persistence = new JsonCompanionPersistence(PathFor("companion-state.json"));
